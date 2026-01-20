@@ -21,6 +21,13 @@ typedef enum {
     CMD_HELP
 } Command;
 
+#define MAX_IDS 100
+
+typedef struct {
+    int ids[MAX_IDS];
+    int count;
+} IdList;
+
 static struct option long_options[] = {
     {"add",         required_argument, 0, 'a'},
     {"list",        no_argument,       0, 'l'},
@@ -42,8 +49,9 @@ static struct option long_options[] = {
 static void cli_add(const char *title, const char *description,
                     const char *category, int priority, time_t due_date);
 static void cli_list(const char *category, int status);
-static void cli_complete(int id);
-static void cli_delete(int id);
+static void cli_complete_multiple(const IdList *ids);
+static void cli_delete_multiple(const IdList *ids);
+static int parse_ids(const char *arg, IdList *list);
 static void cli_edit(int id, const char *title, const char *description,
                      const char *category, int priority, time_t due_date);
 static void cli_show(int id);
@@ -55,8 +63,8 @@ void cli_help(const char *program_name) {
     printf("Commands:\n");
     printf("  -a, --add TITLE        Add a new todo with the given title\n");
     printf("  -l, --list             List all todos\n");
-    printf("  -C, --complete ID      Mark todo as completed\n");
-    printf("  -D, --delete ID        Delete a todo\n");
+    printf("  -C, --complete ID|[IDs]  Mark todo(s) as completed (e.g., -C 5 or -C [1,2,3])\n");
+    printf("  -D, --delete ID|[IDs]  Delete todo(s) (e.g., -D 5 or -D [1,2,3])\n");
     printf("  -e, --edit ID          Edit an existing todo\n");
     printf("  -S, --show ID          Show details of a todo\n");
     printf("  -i, --tui              Launch interactive TUI mode\n");
@@ -110,6 +118,90 @@ static time_t parse_due_date(const char *date_str) {
     return 0;  /* Parse failed */
 }
 
+static int parse_ids(const char *arg, IdList *list) {
+    list->count = 0;
+
+    if (!arg || strlen(arg) == 0) {
+        fprintf(stderr, "Error: No ID provided\n");
+        return -1;
+    }
+
+    /* Check if it's bracket syntax */
+    if (arg[0] == '[') {
+        size_t len = strlen(arg);
+
+        /* Must end with ']' */
+        if (len < 3 || arg[len - 1] != ']') {
+            fprintf(stderr, "Error: Invalid bracket syntax. Use [1,2,3]\n");
+            return -1;
+        }
+
+        /* Create a mutable copy without brackets */
+        char *copy = strndup(arg + 1, len - 2);
+        if (!copy) {
+            fprintf(stderr, "Error: Memory allocation failed\n");
+            return -1;
+        }
+
+        /* Parse comma-separated IDs */
+        char *token = strtok(copy, ",");
+        while (token != NULL) {
+            /* Skip leading whitespace */
+            while (*token == ' ') token++;
+
+            /* Trim trailing whitespace */
+            char *end = token + strlen(token) - 1;
+            while (end > token && *end == ' ') end--;
+            *(end + 1) = '\0';
+
+            if (strlen(token) == 0) {
+                fprintf(stderr, "Error: Empty ID in list\n");
+                free(copy);
+                return -1;
+            }
+
+            /* Validate that token is a valid number */
+            char *endptr;
+            long val = strtol(token, &endptr, 10);
+            if (*endptr != '\0' || val <= 0) {
+                fprintf(stderr, "Error: Invalid ID '%s'\n", token);
+                free(copy);
+                return -1;
+            }
+
+            if (list->count >= MAX_IDS) {
+                fprintf(stderr, "Error: Too many IDs (max %d)\n", MAX_IDS);
+                free(copy);
+                return -1;
+            }
+
+            list->ids[list->count++] = (int)val;
+            token = strtok(NULL, ",");
+        }
+
+        free(copy);
+
+        if (list->count == 0) {
+            fprintf(stderr, "Error: No IDs provided in brackets\n");
+            return -1;
+        }
+
+    } else {
+        /* Single ID */
+        char *endptr;
+        long val = strtol(arg, &endptr, 10);
+        if (*endptr != '\0' || val <= 0) {
+            fprintf(stderr, "Error: Invalid ID '%s'\n", arg);
+            return -1;
+        }
+
+        list->ids[0] = (int)val;
+        list->count = 1;
+    }
+
+    return 0;
+}
+
 int cli_run(int argc, char *argv[]) {
     Command cmd = CMD_NONE;
     char *add_title = NULL;
@@ -120,6 +212,10 @@ int cli_run(int argc, char *argv[]) {
     char *due_date_str = NULL;
     int priority = 0;
     int target_id = 0;
+    char *delete_arg = NULL;
+    IdList delete_ids = {0};
+    char *complete_arg = NULL;
+    IdList complete_ids = {0};
     time_t due_date = 0;
 
     int opt;
@@ -140,11 +236,11 @@ int cli_run(int argc, char *argv[]) {
                 break;
             case 'C':
                 cmd = CMD_COMPLETE;
-                target_id = atoi(optarg);
+                complete_arg = optarg;
                 break;
             case 'D':
                 cmd = CMD_DELETE;
-                target_id = atoi(optarg);
+                delete_arg = optarg;
                 break;
             case 'e':
                 cmd = CMD_EDIT;
@@ -207,10 +303,16 @@ int cli_run(int argc, char *argv[]) {
             cli_list(category, parse_status(status_str));
             break;
         case CMD_COMPLETE:
-            cli_complete(target_id);
+            if (parse_ids(complete_arg, &complete_ids) != 0) {
+                return 1;
+            }
+            cli_complete_multiple(&complete_ids);
             break;
         case CMD_DELETE:
-            cli_delete(target_id);
+            if (parse_ids(delete_arg, &delete_ids) != 0) {
+                return 1;
+            }
+            cli_delete_multiple(&delete_ids);
             break;
         case CMD_EDIT:
             cli_edit(target_id, edit_title, description, category, priority, due_date);
@@ -319,25 +421,65 @@ static void cli_list(const char *category, int status) {
     todo_list_free(&list);
 }
 
-static void cli_complete(int id) {
-    if (id <= 0) {
-        fprintf(stderr, "Error: Invalid todo ID\n");
+static void cli_complete_multiple(const IdList *ids) {
+    if (!ids || ids->count == 0) {
+        fprintf(stderr, "Error: No todo IDs provided\n");
         return;
     }
 
-    if (db_complete_todo(id) == 0) {
-        printf("Marked todo #%d as completed.\n", id);
+    int success_count = 0;
+    int fail_count = 0;
+
+    for (int i = 0; i < ids->count; i++) {
+        int id = ids->ids[i];
+
+        if (id <= 0) {
+            fprintf(stderr, "Error: Invalid todo ID %d\n", id);
+            fail_count++;
+            continue;
+        }
+
+        if (db_complete_todo(id) == 0) {
+            printf("Marked todo #%d as completed.\n", id);
+            success_count++;
+        } else {
+            fail_count++;
+        }
+    }
+
+    if (ids->count > 1) {
+        printf("\nSummary: %d completed, %d failed.\n", success_count, fail_count);
     }
 }
 
-static void cli_delete(int id) {
-    if (id <= 0) {
-        fprintf(stderr, "Error: Invalid todo ID\n");
+static void cli_delete_multiple(const IdList *ids) {
+    if (!ids || ids->count == 0) {
+        fprintf(stderr, "Error: No todo IDs provided\n");
         return;
     }
 
-    if (db_delete_todo(id) == 0) {
-        printf("Deleted todo #%d.\n", id);
+    int success_count = 0;
+    int fail_count = 0;
+
+    for (int i = 0; i < ids->count; i++) {
+        int id = ids->ids[i];
+
+        if (id <= 0) {
+            fprintf(stderr, "Error: Invalid todo ID %d\n", id);
+            fail_count++;
+            continue;
+        }
+
+        if (db_delete_todo(id) == 0) {
+            printf("Deleted todo #%d.\n", id);
+            success_count++;
+        } else {
+            fail_count++;
+        }
+    }
+
+    if (ids->count > 1) {
+        printf("\nSummary: %d deleted, %d failed.\n", success_count, fail_count);
     }
 }
 
