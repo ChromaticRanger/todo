@@ -83,14 +83,22 @@ char *todo_format_display(const Todo *todo) {
 }
 
 char *todo_format_display_no_category(const Todo *todo) {
-    /* Format: [ID] [Pri] title [status] (without category) */
+    /* Format: [ID] [Pri] title * Xd/m * [status] (without category) */
     char *buf = malloc(512);
     if (!buf) return NULL;
 
-    snprintf(buf, 512, "[%d] %s %s %s",
+    char repeat_indicator[32] = "";
+    if (todo->repeat_days > 0) {
+        snprintf(repeat_indicator, sizeof(repeat_indicator), " * %dd *", todo->repeat_days);
+    } else if (todo->repeat_months > 0) {
+        snprintf(repeat_indicator, sizeof(repeat_indicator), " * %dm *", todo->repeat_months);
+    }
+
+    snprintf(buf, 512, "[%d] %s %s%s %s",
              todo->id,
              todo_priority_indicator(todo->priority),
              todo->title,
+             repeat_indicator,
              todo_status_indicator(todo->status));
 
     return buf;

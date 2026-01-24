@@ -14,7 +14,7 @@ static const char *CREATE_TABLE_SQL =
     "    id INTEGER PRIMARY KEY AUTOINCREMENT,"
     "    title TEXT NOT NULL,"
     "    description TEXT,"
-    "    category TEXT DEFAULT 'general',"
+    "    category TEXT DEFAULT 'General',"
     "    priority INTEGER DEFAULT 2,"
     "    status INTEGER DEFAULT 0,"
     "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,"
@@ -68,6 +68,11 @@ int db_init(void) {
         return -1;
     }
 
+    /* Migration: Add repeat columns if they don't exist */
+    sqlite3_exec(db, "ALTER TABLE todos ADD COLUMN repeat_days INTEGER DEFAULT 0", NULL, NULL, NULL);
+    sqlite3_exec(db, "ALTER TABLE todos ADD COLUMN repeat_months INTEGER DEFAULT 0", NULL, NULL, NULL);
+    sqlite3_exec(db, "ALTER TABLE todos ADD COLUMN spawned_next INTEGER DEFAULT 0", NULL, NULL, NULL);
+
     return 0;
 }
 
@@ -79,10 +84,11 @@ void db_close(void) {
 }
 
 int db_add_todo(const char *title, const char *description,
-                const char *category, int priority, time_t due_date) {
+                const char *category, int priority, time_t due_date,
+                int repeat_days, int repeat_months) {
     if (!db) return -1;
 
-    const char *sql = "INSERT INTO todos (title, description, category, priority, due_date) VALUES (?, ?, ?, ?, ?)";
+    const char *sql = "INSERT INTO todos (title, description, category, priority, due_date, repeat_days, repeat_months) VALUES (?, ?, ?, ?, ?, ?, ?)";
     sqlite3_stmt *stmt;
 
     int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
@@ -93,13 +99,15 @@ int db_add_todo(const char *title, const char *description,
 
     sqlite3_bind_text(stmt, 1, title, -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 2, description ? description : "", -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 3, category ? category : "general", -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, category ? category : "General", -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 4, priority > 0 ? priority : PRIORITY_MEDIUM);
     if (due_date > 0) {
         sqlite3_bind_int64(stmt, 5, (sqlite3_int64)due_date);
     } else {
         sqlite3_bind_null(stmt, 5);
     }
+    sqlite3_bind_int(stmt, 6, repeat_days > 0 ? repeat_days : 0);
+    sqlite3_bind_int(stmt, 7, repeat_months > 0 ? repeat_months : 0);
 
     rc = sqlite3_step(stmt);
     if (rc != SQLITE_DONE) {
@@ -122,7 +130,8 @@ int db_get_todos(TodoList *list, const TodoFilter *filter) {
     int has_where = 0;
 
     strcpy(sql, "SELECT id, title, description, category, priority, status, "
-                "strftime('%s', created_at), strftime('%s', completed_at), due_date FROM todos");
+                "strftime('%s', created_at), strftime('%s', completed_at), due_date, "
+                "repeat_days, repeat_months, spawned_next FROM todos");
 
     if (filter) {
         if (filter->category && strlen(filter->category) > 0) {
@@ -173,7 +182,7 @@ int db_get_todos(TodoList *list, const TodoFilter *filter) {
             strncpy(todo.category, cat, TODO_CATEGORY_MAX - 1);
             todo.category[TODO_CATEGORY_MAX - 1] = '\0';
         } else {
-            strcpy(todo.category, "general");
+            strcpy(todo.category, "General");
         }
 
         todo.priority = sqlite3_column_int(stmt, 4);
@@ -181,6 +190,9 @@ int db_get_todos(TodoList *list, const TodoFilter *filter) {
         todo.created_at = (time_t)sqlite3_column_int64(stmt, 6);
         todo.completed_at = (time_t)sqlite3_column_int64(stmt, 7);
         todo.due_date = (time_t)sqlite3_column_int64(stmt, 8);
+        todo.repeat_days = sqlite3_column_int(stmt, 9);
+        todo.repeat_months = sqlite3_column_int(stmt, 10);
+        todo.spawned_next = sqlite3_column_int(stmt, 11);
 
         if (todo_list_add(list, &todo) != 0) {
             sqlite3_finalize(stmt);
@@ -197,7 +209,8 @@ int db_get_todo_by_id(int id, Todo *todo) {
     if (!db) return -1;
 
     const char *sql = "SELECT id, title, description, category, priority, status, "
-                      "strftime('%s', created_at), strftime('%s', completed_at), due_date FROM todos WHERE id = ?";
+                      "strftime('%s', created_at), strftime('%s', completed_at), due_date, "
+                      "repeat_days, repeat_months, spawned_next FROM todos WHERE id = ?";
 
     sqlite3_stmt *stmt;
     int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
@@ -227,7 +240,7 @@ int db_get_todo_by_id(int id, Todo *todo) {
             strncpy(todo->category, cat, TODO_CATEGORY_MAX - 1);
             todo->category[TODO_CATEGORY_MAX - 1] = '\0';
         } else {
-            strcpy(todo->category, "general");
+            strcpy(todo->category, "General");
         }
 
         todo->priority = sqlite3_column_int(stmt, 4);
@@ -235,6 +248,9 @@ int db_get_todo_by_id(int id, Todo *todo) {
         todo->created_at = (time_t)sqlite3_column_int64(stmt, 6);
         todo->completed_at = (time_t)sqlite3_column_int64(stmt, 7);
         todo->due_date = (time_t)sqlite3_column_int64(stmt, 8);
+        todo->repeat_days = sqlite3_column_int(stmt, 9);
+        todo->repeat_months = sqlite3_column_int(stmt, 10);
+        todo->spawned_next = sqlite3_column_int(stmt, 11);
 
         sqlite3_finalize(stmt);
         return 0;
@@ -428,4 +444,87 @@ int db_todo_exists(int id) {
 
     sqlite3_finalize(stmt);
     return exists;
+}
+
+int db_mark_spawned(int id) {
+    if (!db) return -1;
+
+    const char *sql = "UPDATE todos SET spawned_next = 1 WHERE id = ?";
+    sqlite3_stmt *stmt;
+
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+
+    sqlite3_bind_int(stmt, 1, id);
+
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    return (rc == SQLITE_DONE) ? 0 : -1;
+}
+
+int db_get_todos_needing_spawn(TodoList *list) {
+    if (!db) return -1;
+
+    todo_list_init(list);
+
+    /* Get repeating todos where due_date has passed, not yet spawned, and still pending */
+    const char *sql = "SELECT id, title, description, category, priority, status, "
+                      "strftime('%s', created_at), strftime('%s', completed_at), due_date, "
+                      "repeat_days, repeat_months, spawned_next FROM todos "
+                      "WHERE (repeat_days > 0 OR repeat_months > 0) AND due_date < ? "
+                      "AND spawned_next = 0 AND status = 0";
+
+    sqlite3_stmt *stmt;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+
+    sqlite3_bind_int64(stmt, 1, (sqlite3_int64)time(NULL));
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        Todo todo;
+        todo.id = sqlite3_column_int(stmt, 0);
+        strncpy(todo.title, (const char *)sqlite3_column_text(stmt, 1), TODO_TITLE_MAX - 1);
+        todo.title[TODO_TITLE_MAX - 1] = '\0';
+
+        const char *desc = (const char *)sqlite3_column_text(stmt, 2);
+        if (desc) {
+            strncpy(todo.description, desc, TODO_DESC_MAX - 1);
+            todo.description[TODO_DESC_MAX - 1] = '\0';
+        } else {
+            todo.description[0] = '\0';
+        }
+
+        const char *cat = (const char *)sqlite3_column_text(stmt, 3);
+        if (cat) {
+            strncpy(todo.category, cat, TODO_CATEGORY_MAX - 1);
+            todo.category[TODO_CATEGORY_MAX - 1] = '\0';
+        } else {
+            strcpy(todo.category, "General");
+        }
+
+        todo.priority = sqlite3_column_int(stmt, 4);
+        todo.status = sqlite3_column_int(stmt, 5);
+        todo.created_at = (time_t)sqlite3_column_int64(stmt, 6);
+        todo.completed_at = (time_t)sqlite3_column_int64(stmt, 7);
+        todo.due_date = (time_t)sqlite3_column_int64(stmt, 8);
+        todo.repeat_days = sqlite3_column_int(stmt, 9);
+        todo.repeat_months = sqlite3_column_int(stmt, 10);
+        todo.spawned_next = sqlite3_column_int(stmt, 11);
+
+        if (todo_list_add(list, &todo) != 0) {
+            sqlite3_finalize(stmt);
+            todo_list_free(list);
+            return -1;
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return list->count;
 }

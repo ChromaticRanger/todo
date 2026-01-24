@@ -8,6 +8,7 @@
 #include "cli.h"
 #include "db.h"
 #include "todo.h"
+#include "utils.h"
 
 typedef enum {
     CMD_NONE,
@@ -17,7 +18,6 @@ typedef enum {
     CMD_DELETE,
     CMD_EDIT,
     CMD_SHOW,
-    CMD_TUI,
     CMD_HELP
 } Command;
 
@@ -35,7 +35,6 @@ static struct option long_options[] = {
     {"delete",      required_argument, 0, 'D'},
     {"edit",        required_argument, 0, 'e'},
     {"show",        required_argument, 0, 'S'},
-    {"tui",         no_argument,       0, 'i'},
     {"help",        no_argument,       0, 'h'},
     {"title",       required_argument, 0, 't'},
     {"description", required_argument, 0, 'd'},
@@ -43,12 +42,15 @@ static struct option long_options[] = {
     {"priority",    required_argument, 0, 'p'},
     {"status",      required_argument, 0, 's'},
     {"due",         required_argument, 0, 'u'},
+    {"repeat",      required_argument, 0, 'r'},
     {0, 0, 0, 0}
 };
 
 static void cli_add(const char *title, const char *description,
-                    const char *category, int priority, time_t due_date);
+                    const char *category, int priority, time_t due_date,
+                    int repeat_days, int repeat_months);
 static void cli_list(const char *category, int status);
+static void spawn_repeating_todos(void);
 static void cli_complete_multiple(const IdList *ids);
 static void cli_delete_multiple(const IdList *ids);
 static int parse_ids(const char *arg, IdList *list);
@@ -59,7 +61,7 @@ static time_t parse_due_date(const char *date_str);
 
 void cli_help(const char *program_name) {
     printf("Usage: %s [COMMAND] [OPTIONS]\n\n", program_name);
-    printf("A command-line todo application with TUI support.\n\n");
+    printf("A command-line todo application.\n\n");
     printf("Commands:\n");
     printf("  -a, --add TITLE        Add a new todo with the given title\n");
     printf("  -l, --list             List all todos\n");
@@ -67,22 +69,22 @@ void cli_help(const char *program_name) {
     printf("  -D, --delete ID|[IDs]  Delete todo(s) (e.g., -D 5 or -D [1,2,3])\n");
     printf("  -e, --edit ID          Edit an existing todo\n");
     printf("  -S, --show ID          Show details of a todo\n");
-    printf("  -i, --tui              Launch interactive TUI mode\n");
     printf("  -h, --help             Show this help message\n\n");
     printf("Options:\n");
     printf("  -t, --title TITLE      Set title (for edit)\n");
     printf("  -d, --description DESC Set description\n");
-    printf("  -c, --category CAT     Set category (default: general)\n");
+    printf("  -c, --category CAT     Set category (default: General)\n");
     printf("  -p, --priority 1-3     Set priority (1=low, 2=medium, 3=high)\n");
     printf("  -s, --status STATUS    Filter by status (pending, completed, all)\n");
-    printf("  -u, --due DATE         Set due date (YYYY-MM-DD or YYYY-MM-DD HH:MM)\n\n");
+    printf("  -u, --due DATE         Set due date (YYYY-MM-DD or YYYY-MM-DD HH:MM)\n");
+    printf("  -r, --repeat INTERVAL  Set repeat interval (e.g., 7d for 7 days, 2m for 2 months)\n\n");
     printf("Examples:\n");
     printf("  %s --add \"Buy groceries\" --category shopping --priority 2\n", program_name);
     printf("  %s --add \"Submit report\" --due 2025-01-25\n", program_name);
+    printf("  %s --add \"Weekly review\" --due 2025-01-25 --repeat 7d\n", program_name);
     printf("  %s --list --category work --status pending\n", program_name);
     printf("  %s --complete 5\n", program_name);
     printf("  %s --edit 3 --title \"Updated title\" --priority 3\n", program_name);
-    printf("  %s           (launches TUI mode)\n", program_name);
 }
 
 static int parse_status(const char *status_str) {
@@ -116,6 +118,37 @@ static time_t parse_due_date(const char *date_str) {
     }
 
     return 0;  /* Parse failed */
+}
+
+static int parse_repeat_interval(const char *str, int *days, int *months) {
+    *days = 0;
+    *months = 0;
+
+    if (!str || strlen(str) < 2) return 0;
+
+    size_t len = strlen(str);
+    char unit = str[len - 1];
+
+    /* Parse the numeric portion */
+    char *endptr;
+    long value = strtol(str, &endptr, 10);
+
+    /* endptr should point to the unit character */
+    if (endptr != str + len - 1 || value <= 0) {
+        return 0;
+    }
+
+    if (unit == 'd' || unit == 'D') {
+        if (value > 365) return 0;
+        *days = (int)value;
+        return 1;
+    } else if (unit == 'm' || unit == 'M') {
+        if (value > 12) return 0;
+        *months = (int)value;
+        return 1;
+    }
+
+    return 0;
 }
 
 static int parse_ids(const char *arg, IdList *list) {
@@ -217,6 +250,8 @@ int cli_run(int argc, char *argv[]) {
     char *complete_arg = NULL;
     IdList complete_ids = {0};
     time_t due_date = 0;
+    int repeat_days = 0;
+    int repeat_months = 0;
 
     int opt;
     int option_index = 0;
@@ -224,7 +259,7 @@ int cli_run(int argc, char *argv[]) {
     /* Reset getopt */
     optind = 1;
 
-    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:iht:d:c:p:s:u:",
+    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:ht:d:c:p:s:u:r:",
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
@@ -250,9 +285,6 @@ int cli_run(int argc, char *argv[]) {
                 cmd = CMD_SHOW;
                 target_id = atoi(optarg);
                 break;
-            case 'i':
-                cmd = CMD_TUI;
-                break;
             case 'h':
                 cmd = CMD_HELP;
                 break;
@@ -264,6 +296,7 @@ int cli_run(int argc, char *argv[]) {
                 break;
             case 'c':
                 category = optarg;
+                capitalize_first(category);
                 break;
             case 'p':
                 priority = atoi(optarg);
@@ -283,6 +316,12 @@ int cli_run(int argc, char *argv[]) {
                     return 1;
                 }
                 break;
+            case 'r':
+                if (!parse_repeat_interval(optarg, &repeat_days, &repeat_months)) {
+                    fprintf(stderr, "Error: Invalid repeat format '%s'. Use format like '7d' for days or '2m' for months\n", optarg);
+                    return 1;
+                }
+                break;
             case '?':
                 return 1;
             default:
@@ -290,14 +329,15 @@ int cli_run(int argc, char *argv[]) {
         }
     }
 
-    /* If no command specified and no args, return TUI mode indicator */
+    /* If no command specified, show help */
     if (cmd == CMD_NONE) {
-        return -1; /* Signal to launch TUI */
+        cli_help(argv[0]);
+        return 1;
     }
 
     switch (cmd) {
         case CMD_ADD:
-            cli_add(add_title, description, category, priority, due_date);
+            cli_add(add_title, description, category, priority, due_date, repeat_days, repeat_months);
             break;
         case CMD_LIST:
             cli_list(category, parse_status(status_str));
@@ -320,8 +360,6 @@ int cli_run(int argc, char *argv[]) {
         case CMD_SHOW:
             cli_show(target_id);
             break;
-        case CMD_TUI:
-            return -1; /* Signal to launch TUI */
         case CMD_HELP:
             cli_help(argv[0]);
             break;
@@ -334,24 +372,98 @@ int cli_run(int argc, char *argv[]) {
 }
 
 static void cli_add(const char *title, const char *description,
-                    const char *category, int priority, time_t due_date) {
+                    const char *category, int priority, time_t due_date,
+                    int repeat_days, int repeat_months) {
     if (!title || strlen(title) == 0) {
         fprintf(stderr, "Error: Title is required\n");
         return;
     }
 
-    int id = db_add_todo(title, description, category, priority, due_date);
+    /* If repeat is set but no due date, use current time as base */
+    time_t effective_due = due_date;
+    if ((repeat_days > 0 || repeat_months > 0) && effective_due == 0) {
+        effective_due = time(NULL);
+    }
+
+    int id = db_add_todo(title, description, category, priority, effective_due, repeat_days, repeat_months);
     if (id > 0) {
-        printf("Added todo #%d: %s\n", id, title);
+        if (repeat_days > 0) {
+            printf("Added repeating todo #%d: %s (every %d day%s)\n", id, title, repeat_days, repeat_days == 1 ? "" : "s");
+        } else if (repeat_months > 0) {
+            printf("Added repeating todo #%d: %s (every %d month%s)\n", id, title, repeat_months, repeat_months == 1 ? "" : "s");
+        } else {
+            printf("Added todo #%d: %s\n", id, title);
+        }
     }
 }
 
+static time_t add_months(time_t base, int months) {
+    struct tm *tm_info = localtime(&base);
+    tm_info->tm_mon += months;
+    tm_info->tm_isdst = -1;
+    return mktime(tm_info);
+}
+
+static void spawn_repeating_todos(void) {
+    TodoList spawn_list;
+    int count = db_get_todos_needing_spawn(&spawn_list);
+
+    if (count <= 0) {
+        return;
+    }
+
+    for (int i = 0; i < spawn_list.count; i++) {
+        Todo *todo = &spawn_list.items[i];
+        time_t new_due;
+
+        if (todo->repeat_days > 0) {
+            /* Add days */
+            new_due = todo->due_date + (todo->repeat_days * 24 * 60 * 60);
+            /* If still in the past, keep adding until future */
+            time_t now = time(NULL);
+            while (new_due < now) {
+                new_due += (todo->repeat_days * 24 * 60 * 60);
+            }
+        } else {
+            /* Add months */
+            new_due = add_months(todo->due_date, todo->repeat_months);
+            /* If still in the past, keep adding until future */
+            time_t now = time(NULL);
+            while (new_due < now) {
+                new_due = add_months(new_due, todo->repeat_months);
+            }
+        }
+
+        /* Create new todo with same properties but new due date */
+        int new_id = db_add_todo(
+            todo->title,
+            todo->description,
+            todo->category,
+            todo->priority,
+            new_due,
+            todo->repeat_days,
+            todo->repeat_months
+        );
+
+        if (new_id > 0) {
+            /* Mark the original as having spawned */
+            db_mark_spawned(todo->id);
+        }
+    }
+
+    todo_list_free(&spawn_list);
+}
+
 static void cli_list(const char *category, int status) {
+    /* Check and spawn new occurrences of repeating todos */
+    spawn_repeating_todos();
+
     TodoList list;
     TodoFilter filter = {
         .category = (char *)category,
         .status = status
     };
+    char buffer[512];
 
     int count = db_get_todos(&list, &filter);
     if (count < 0) {
@@ -359,16 +471,20 @@ static void cli_list(const char *category, int status) {
         return;
     }
 
-    if (count == 0) {
-        printf("No todos found.\n");
-        return;
-    }
-
-    /* Build list of unique categories from the todos */
+    /* Build list of unique categories from the todos (excluding old completed items) */
     CategoryList categories;
     category_list_init(&categories);
+    time_t one_day_ago = time(NULL) - (24 * 60 * 60);
+    int display_count = 0;
 
     for (int i = 0; i < list.count; i++) {
+        /* Skip completed items older than 1 day */
+        if (list.items[i].status == STATUS_COMPLETED &&
+            list.items[i].completed_at > 0 &&
+            list.items[i].completed_at < one_day_ago) {
+            continue;
+        }
+        display_count++;
         const char *cat = list.items[i].category;
         int found = 0;
         for (int j = 0; j < categories.count; j++) {
@@ -382,9 +498,27 @@ static void cli_list(const char *category, int status) {
         }
     }
 
+    /* Clear terminal and add blank line */
+    printf("\033[2J\033[H\n");
+
+    /* Print underlined heading - centered */
+    print_centered("\033[4mTODO List\033[0m");
+    printf("\n");
+    snprintf(buffer, sizeof(buffer), "%d todo(s) found.", display_count);
+    print_centered(buffer);
+    printf("\n");
+
+    if (display_count == 0) {
+        category_list_free(&categories);
+        todo_list_free(&list);
+        return;
+    }
+
     /* Print todos grouped by category */
     for (int c = 0; c < categories.count; c++) {
-        printf("%s:\n\n", categories.categories[c]);
+        snprintf(buffer, sizeof(buffer), "\033[4m%s\033[0m", categories.categories[c]);
+        print_centered(buffer);
+        printf("\n");
 
         /* Print pending todos first */
         for (int i = 0; i < list.count; i++) {
@@ -393,29 +527,81 @@ static void cli_list(const char *category, int status) {
                 char *display = todo_format_display_no_category(&list.items[i]);
                 if (display) {
                     if (list.items[i].due_date > 0 && list.items[i].due_date < time(NULL)) {
-                        printf("  \033[31m%s\033[0m\n", display);  /* Red - overdue */
+                        snprintf(buffer, sizeof(buffer), "\033[31m%s\033[0m", display);
                     } else {
-                        printf("  %s\n", display);
+                        snprintf(buffer, sizeof(buffer), "%s", display);
                     }
+                    print_centered(buffer);
                     free(display);
+                    /* Print due date underneath if set */
+                    if (list.items[i].due_date > 0) {
+                        char due_buf[64];
+                        struct tm *tm_info = localtime(&list.items[i].due_date);
+                        strftime(due_buf, sizeof(due_buf), "%Y-%m-%d %H:%M", tm_info);
+                        snprintf(buffer, sizeof(buffer), "Due: %s", due_buf);
+                        print_centered(buffer);
+                        /* Add extra newline only if not last item in category */
+                        int has_more = 0;
+                        for (int j = i + 1; j < list.count && !has_more; j++) {
+                            if (strcmp(list.items[j].category, categories.categories[c]) == 0 &&
+                                list.items[j].status == STATUS_PENDING) {
+                                has_more = 1;
+                            }
+                        }
+                        if (!has_more) {
+                            for (int j = 0; j < list.count && !has_more; j++) {
+                                if (strcmp(list.items[j].category, categories.categories[c]) == 0 &&
+                                    list.items[j].status == STATUS_COMPLETED &&
+                                    !(list.items[j].completed_at > 0 && list.items[j].completed_at < one_day_ago)) {
+                                    has_more = 1;
+                                }
+                            }
+                        }
+                        if (has_more) {
+                            printf("\n");
+                        }
+                    }
                 }
             }
         }
-        /* Print completed todos at the end */
+        /* Print completed todos at the end (only if completed within last day) */
         for (int i = 0; i < list.count; i++) {
             if (strcmp(list.items[i].category, categories.categories[c]) == 0 &&
                 list.items[i].status == STATUS_COMPLETED) {
+                /* Skip if completed more than 1 day ago */
+                if (list.items[i].completed_at > 0 && list.items[i].completed_at < one_day_ago) {
+                    continue;
+                }
                 char *display = todo_format_display_no_category(&list.items[i]);
                 if (display) {
-                    printf("  \033[32m%s\033[0m\n", display);  /* Green */
+                    snprintf(buffer, sizeof(buffer), "\033[32m%s\033[0m", display);
+                    print_centered(buffer);
                     free(display);
+                    /* Print due date underneath if set */
+                    if (list.items[i].due_date > 0) {
+                        char due_buf[64];
+                        struct tm *tm_info = localtime(&list.items[i].due_date);
+                        strftime(due_buf, sizeof(due_buf), "%Y-%m-%d %H:%M", tm_info);
+                        snprintf(buffer, sizeof(buffer), "Due: %s", due_buf);
+                        print_centered(buffer);
+                        /* Add extra newline only if not last item in category */
+                        int has_more = 0;
+                        for (int j = i + 1; j < list.count && !has_more; j++) {
+                            if (strcmp(list.items[j].category, categories.categories[c]) == 0 &&
+                                list.items[j].status == STATUS_COMPLETED &&
+                                !(list.items[j].completed_at > 0 && list.items[j].completed_at < one_day_ago)) {
+                                has_more = 1;
+                            }
+                        }
+                        if (has_more) {
+                            printf("\n");
+                        }
+                    }
                 }
             }
         }
         printf("\n");
     }
-
-    printf("%d todo(s) found.\n", count);
 
     category_list_free(&categories);
     todo_list_free(&list);
@@ -540,6 +726,11 @@ static void cli_show(int id) {
     printf("  Status:      %s\n", todo_status_string(todo.status));
     if (todo.due_date > 0) {
         printf("  Due:         %s\n", due_buf);
+    }
+    if (todo.repeat_days > 0) {
+        printf("  Repeat:      Every %d day%s\n", todo.repeat_days, todo.repeat_days == 1 ? "" : "s");
+    } else if (todo.repeat_months > 0) {
+        printf("  Repeat:      Every %d month%s\n", todo.repeat_months, todo.repeat_months == 1 ? "" : "s");
     }
     printf("  Created:     %s\n", created_buf);
     if (todo.status == STATUS_COMPLETED) {

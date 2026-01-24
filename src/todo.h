@@ -25,6 +25,9 @@ typedef struct {
     time_t created_at;
     time_t completed_at;
     time_t due_date;
+    int repeat_days;     /* repeat interval in days (0 = no repeat) */
+    int repeat_months;   /* repeat interval in months (0 = no repeat) */
+    int spawned_next;    /* flag: 1 if next occurrence was already spawned */
 } Todo;
 
 typedef struct {

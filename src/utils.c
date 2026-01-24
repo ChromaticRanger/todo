@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <sys/stat.h>
+#include <sys/ioctl.h>
 #include <errno.h>
 #include <pwd.h>
 #include <unistd.h>
@@ -73,4 +75,84 @@ int ensure_directory(const char *path) {
 
 void free_db_path(char *path) {
     free(path);
+}
+
+int get_terminal_width(void) {
+    struct winsize ws;
+
+    /* Try ioctl on stdout */
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
+        return ws.ws_col;
+    }
+
+    /* Try ioctl on stderr (in case stdout is redirected) */
+    if (ioctl(STDERR_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
+        return ws.ws_col;
+    }
+
+    /* Fallback to COLUMNS environment variable */
+    const char *cols = getenv("COLUMNS");
+    if (cols) {
+        int width = atoi(cols);
+        if (width > 0) {
+            return width;
+        }
+    }
+
+    /* Default fallback */
+    return 80;
+}
+
+size_t visible_strlen(const char *str) {
+    if (!str) return 0;
+
+    size_t len = 0;
+    const char *p = str;
+
+    while (*p) {
+        /* Check for ANSI escape sequence: ESC[ ... m */
+        if (*p == '\033' && *(p + 1) == '[') {
+            p += 2;  /* Skip ESC[ */
+            /* Skip until we hit 'm' (end of SGR sequence) or end of string */
+            while (*p && *p != 'm') {
+                p++;
+            }
+            if (*p == 'm') {
+                p++;  /* Skip the 'm' */
+            }
+        } else {
+            len++;
+            p++;
+        }
+    }
+
+    return len;
+}
+
+void print_centered(const char *str) {
+    if (!str) {
+        printf("\n");
+        return;
+    }
+
+    int term_width = get_terminal_width();
+    size_t visible_len = visible_strlen(str);
+
+    /* If string is wider than terminal, just print it normally */
+    if (visible_len >= (size_t)term_width) {
+        printf("%s\n", str);
+        return;
+    }
+
+    /* Calculate left padding */
+    int padding = (term_width - (int)visible_len) / 2;
+
+    /* Print padding and string */
+    printf("%*s%s\n", padding, "", str);
+}
+
+void capitalize_first(char *str) {
+    if (str && str[0]) {
+        str[0] = toupper((unsigned char)str[0]);
+    }
 }

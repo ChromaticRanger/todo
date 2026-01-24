@@ -11,7 +11,8 @@ void db_close(void);
 
 /* Add a new todo, returns the new ID or -1 on error */
 int db_add_todo(const char *title, const char *description,
-                const char *category, int priority, time_t due_date);
+                const char *category, int priority, time_t due_date,
+                int repeat_days, int repeat_months);
 
 /* Get todos with optional filters, returns count or -1 on error */
 int db_get_todos(TodoList *list, const TodoFilter *filter);
@@ -37,5 +38,11 @@ int db_get_categories(CategoryList *list);
 
 /* Check if a todo with given ID exists */
 int db_todo_exists(int id);
+
+/* Mark a todo as having spawned its next occurrence */
+int db_mark_spawned(int id);
+
+/* Get repeating todos that need their next occurrence spawned */
+int db_get_todos_needing_spawn(TodoList *list);
 
 #endif /* DB_H */

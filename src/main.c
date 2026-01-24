@@ -4,7 +4,6 @@
 
 #include "db.h"
 #include "cli.h"
-#include "tui.h"
 
 static void cleanup(void) {
     db_close();
@@ -28,20 +27,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int result;
-
-    if (argc > 1) {
-        /* CLI mode */
-        result = cli_run(argc, argv);
-
-        /* If cli_run returns -1, launch TUI */
-        if (result == -1) {
-            result = tui_run();
-        }
-    } else {
-        /* No arguments - launch TUI */
-        result = tui_run();
+    if (argc < 2) {
+        cli_help(argv[0]);
+        return 1;
     }
 
-    return result;
+    return cli_run(argc, argv);
 }
