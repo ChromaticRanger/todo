@@ -528,3 +528,128 @@ int db_get_todos_needing_spawn(TodoList *list) {
     sqlite3_finalize(stmt);
     return list->count;
 }
+
+int db_get_completed_since(TodoList *list, time_t since_date) {
+    if (!db) return -1;
+
+    todo_list_init(list);
+
+    const char *sql = "SELECT id, title, description, category, priority, status, "
+                      "strftime('%s', created_at), strftime('%s', completed_at), due_date, "
+                      "repeat_days, repeat_months, spawned_next FROM todos "
+                      "WHERE status = 1 AND strftime('%s', completed_at) >= ? "
+                      "ORDER BY completed_at DESC";
+
+    sqlite3_stmt *stmt;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+
+    sqlite3_bind_int64(stmt, 1, (sqlite3_int64)since_date);
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        Todo todo;
+        todo.id = sqlite3_column_int(stmt, 0);
+        strncpy(todo.title, (const char *)sqlite3_column_text(stmt, 1), TODO_TITLE_MAX - 1);
+        todo.title[TODO_TITLE_MAX - 1] = '\0';
+
+        const char *desc = (const char *)sqlite3_column_text(stmt, 2);
+        if (desc) {
+            strncpy(todo.description, desc, TODO_DESC_MAX - 1);
+            todo.description[TODO_DESC_MAX - 1] = '\0';
+        } else {
+            todo.description[0] = '\0';
+        }
+
+        const char *cat = (const char *)sqlite3_column_text(stmt, 3);
+        if (cat) {
+            strncpy(todo.category, cat, TODO_CATEGORY_MAX - 1);
+            todo.category[TODO_CATEGORY_MAX - 1] = '\0';
+        } else {
+            strcpy(todo.category, "General");
+        }
+
+        todo.priority = sqlite3_column_int(stmt, 4);
+        todo.status = sqlite3_column_int(stmt, 5);
+        todo.created_at = (time_t)sqlite3_column_int64(stmt, 6);
+        todo.completed_at = (time_t)sqlite3_column_int64(stmt, 7);
+        todo.due_date = (time_t)sqlite3_column_int64(stmt, 8);
+        todo.repeat_days = sqlite3_column_int(stmt, 9);
+        todo.repeat_months = sqlite3_column_int(stmt, 10);
+        todo.spawned_next = sqlite3_column_int(stmt, 11);
+
+        if (todo_list_add(list, &todo) != 0) {
+            sqlite3_finalize(stmt);
+            todo_list_free(list);
+            return -1;
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return list->count;
+}
+
+int db_get_todos_due_range(TodoList *list, time_t start, time_t end) {
+    if (!db) return -1;
+
+    todo_list_init(list);
+
+    const char *sql = "SELECT id, title, description, category, priority, status, "
+                      "strftime('%s', created_at), strftime('%s', completed_at), due_date, "
+                      "repeat_days, repeat_months, spawned_next FROM todos "
+                      "WHERE status = 0 AND due_date >= ? AND due_date <= ? "
+                      "ORDER BY due_date ASC";
+
+    sqlite3_stmt *stmt;
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+
+    sqlite3_bind_int64(stmt, 1, (sqlite3_int64)start);
+    sqlite3_bind_int64(stmt, 2, (sqlite3_int64)end);
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        Todo todo;
+        todo.id = sqlite3_column_int(stmt, 0);
+        strncpy(todo.title, (const char *)sqlite3_column_text(stmt, 1), TODO_TITLE_MAX - 1);
+        todo.title[TODO_TITLE_MAX - 1] = '\0';
+
+        const char *desc = (const char *)sqlite3_column_text(stmt, 2);
+        if (desc) {
+            strncpy(todo.description, desc, TODO_DESC_MAX - 1);
+            todo.description[TODO_DESC_MAX - 1] = '\0';
+        } else {
+            todo.description[0] = '\0';
+        }
+
+        const char *cat = (const char *)sqlite3_column_text(stmt, 3);
+        if (cat) {
+            strncpy(todo.category, cat, TODO_CATEGORY_MAX - 1);
+            todo.category[TODO_CATEGORY_MAX - 1] = '\0';
+        } else {
+            strcpy(todo.category, "General");
+        }
+
+        todo.priority = sqlite3_column_int(stmt, 4);
+        todo.status = sqlite3_column_int(stmt, 5);
+        todo.created_at = (time_t)sqlite3_column_int64(stmt, 6);
+        todo.completed_at = (time_t)sqlite3_column_int64(stmt, 7);
+        todo.due_date = (time_t)sqlite3_column_int64(stmt, 8);
+        todo.repeat_days = sqlite3_column_int(stmt, 9);
+        todo.repeat_months = sqlite3_column_int(stmt, 10);
+        todo.spawned_next = sqlite3_column_int(stmt, 11);
+
+        if (todo_list_add(list, &todo) != 0) {
+            sqlite3_finalize(stmt);
+            todo_list_free(list);
+            return -1;
+        }
+    }
+
+    sqlite3_finalize(stmt);
+    return list->count;
+}

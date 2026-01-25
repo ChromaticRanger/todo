@@ -107,7 +107,7 @@ size_t visible_strlen(const char *str) {
     if (!str) return 0;
 
     size_t len = 0;
-    const char *p = str;
+    const unsigned char *p = (const unsigned char *)str;
 
     while (*p) {
         /* Check for ANSI escape sequence: ESC[ ... m */
@@ -120,7 +120,11 @@ size_t visible_strlen(const char *str) {
             if (*p == 'm') {
                 p++;  /* Skip the 'm' */
             }
+        } else if ((*p & 0xC0) == 0x80) {
+            /* UTF-8 continuation byte - skip without counting */
+            p++;
         } else {
+            /* ASCII or UTF-8 start byte - count as one character */
             len++;
             p++;
         }
@@ -151,8 +155,294 @@ void print_centered(const char *str) {
     printf("%*s%s\n", padding, "", str);
 }
 
+void print_centered_wrapped(const char *str, int max_width) {
+    if (!str) {
+        printf("\n");
+        return;
+    }
+
+    int term_width = get_terminal_width();
+    size_t total_visible_len = visible_strlen(str);
+
+    /* If string fits within max_width, just center it normally */
+    if (total_visible_len <= (size_t)max_width) {
+        print_centered(str);
+        return;
+    }
+
+    /* Extract any leading ANSI escape codes (e.g., color codes) */
+    const char *p = str;
+    const char *content_start = str;
+    char prefix_codes[64] = "";
+    size_t prefix_len = 0;
+
+    while (*p == '\033' && *(p + 1) == '[') {
+        const char *seq_start = p;
+        p += 2;
+        while (*p && *p != 'm') p++;
+        if (*p == 'm') p++;
+        size_t seq_len = p - seq_start;
+        if (prefix_len + seq_len < sizeof(prefix_codes) - 1) {
+            memcpy(prefix_codes + prefix_len, seq_start, seq_len);
+            prefix_len += seq_len;
+        }
+        content_start = p;
+    }
+    prefix_codes[prefix_len] = '\0';
+
+    /* Find trailing reset code if present */
+    const char *suffix_codes = "\033[0m";
+    size_t str_len = strlen(str);
+    int has_reset = (str_len >= 4 && strcmp(str + str_len - 4, "\033[0m") == 0);
+    if (!has_reset) {
+        suffix_codes = "";
+    }
+
+    /* Calculate content end (excluding trailing reset) */
+    const char *content_end = str + str_len;
+    if (has_reset) {
+        content_end -= 4;
+    }
+
+    /* Word wrap the content portion */
+    const char *line_start = content_start;
+
+    while (line_start < content_end) {
+        const char *scan = line_start;
+        const char *last_break = NULL;
+        size_t line_visible_len = 0;
+
+        /* Scan forward to find where to break */
+        while (scan < content_end && line_visible_len < (size_t)max_width) {
+            if (*scan == ' ') {
+                last_break = scan;
+            }
+            /* Skip ANSI sequences when counting visible length */
+            if (*scan == '\033' && *(scan + 1) == '[') {
+                scan += 2;
+                while (*scan && *scan != 'm') scan++;
+                if (*scan == 'm') scan++;
+            } else {
+                line_visible_len++;
+                scan++;
+            }
+        }
+
+        const char *line_end;
+        if (scan >= content_end) {
+            /* Reached end of content */
+            line_end = content_end;
+        } else if (last_break && last_break > line_start) {
+            /* Break at last space */
+            line_end = last_break;
+        } else {
+            /* No space found, hard break at max_width */
+            line_end = scan;
+        }
+
+        /* Build and print this line */
+        size_t line_len = line_end - line_start;
+        size_t buf_size = prefix_len + line_len + strlen(suffix_codes) + 1;
+        char *line_buf = malloc(buf_size);
+        if (line_buf) {
+            size_t offset = 0;
+            if (prefix_len > 0) {
+                memcpy(line_buf, prefix_codes, prefix_len);
+                offset = prefix_len;
+            }
+            memcpy(line_buf + offset, line_start, line_len);
+            offset += line_len;
+            strcpy(line_buf + offset, suffix_codes);
+
+            /* Center this line */
+            size_t vis_len = visible_strlen(line_buf);
+            int padding = 0;
+            if (vis_len < (size_t)term_width) {
+                padding = (term_width - (int)vis_len) / 2;
+            }
+            printf("%*s%s\n", padding, "", line_buf);
+            free(line_buf);
+        }
+
+        /* Move to next line, skipping the space if we broke on one */
+        line_start = line_end;
+        if (line_start < content_end && *line_start == ' ') {
+            line_start++;
+        }
+    }
+}
+
 void capitalize_first(char *str) {
     if (str && str[0]) {
         str[0] = toupper((unsigned char)str[0]);
+    }
+}
+
+#define BOX_WIDTH 80
+
+static void print_box_line_centered(void) {
+    int term_width = get_terminal_width();
+    int padding = (term_width - BOX_WIDTH) / 2;
+    if (padding < 0) padding = 0;
+    printf("%*s", padding, "");
+}
+
+void print_border_top(void) {
+    print_box_line_centered();
+    printf("╭");
+    for (int i = 0; i < BOX_WIDTH - 2; i++) {
+        printf("─");
+    }
+    printf("╮\n");
+}
+
+void print_border_bottom(void) {
+    print_box_line_centered();
+    printf("╰");
+    for (int i = 0; i < BOX_WIDTH - 2; i++) {
+        printf("─");
+    }
+    printf("╯\n");
+}
+
+void print_border_empty(void) {
+    print_box_line_centered();
+    printf("│");
+    printf("%*s", BOX_WIDTH - 2, "");
+    printf("│\n");
+}
+
+void print_bordered(const char *str) {
+    int term_width = get_terminal_width();
+    int padding = (term_width - BOX_WIDTH) / 2;
+    if (padding < 0) padding = 0;
+
+    int content_width = BOX_WIDTH - 4;  /* 2 for borders, 2 for spacing */
+    size_t visible_len = str ? visible_strlen(str) : 0;
+
+    printf("%*s│ ", padding, "");
+
+    if (!str || visible_len == 0) {
+        printf("%*s", content_width, "");
+    } else if (visible_len <= (size_t)content_width) {
+        int left_pad = (content_width - (int)visible_len) / 2;
+        int right_pad = content_width - (int)visible_len - left_pad;
+        printf("%*s%s%*s", left_pad, "", str, right_pad, "");
+    } else {
+        /* String too long, print truncated */
+        printf("%s", str);
+    }
+
+    printf(" │\n");
+}
+
+void print_bordered_wrapped(const char *str, int max_width) {
+    if (!str) {
+        print_border_empty();
+        return;
+    }
+
+    int term_width = get_terminal_width();
+    int box_padding = (term_width - BOX_WIDTH) / 2;
+    if (box_padding < 0) box_padding = 0;
+
+    int content_width = BOX_WIDTH - 4;  /* 2 for borders, 2 for spacing */
+    int wrap_width = max_width < content_width ? max_width : content_width;
+
+    size_t total_visible_len = visible_strlen(str);
+
+    /* If string fits, just use print_bordered */
+    if (total_visible_len <= (size_t)wrap_width) {
+        print_bordered(str);
+        return;
+    }
+
+    /* Extract any leading ANSI escape codes */
+    const char *p = str;
+    const char *content_start = str;
+    char prefix_codes[64] = "";
+    size_t prefix_len = 0;
+
+    while (*p == '\033' && *(p + 1) == '[') {
+        const char *seq_start = p;
+        p += 2;
+        while (*p && *p != 'm') p++;
+        if (*p == 'm') p++;
+        size_t seq_len = p - seq_start;
+        if (prefix_len + seq_len < sizeof(prefix_codes) - 1) {
+            memcpy(prefix_codes + prefix_len, seq_start, seq_len);
+            prefix_len += seq_len;
+        }
+        content_start = p;
+    }
+    prefix_codes[prefix_len] = '\0';
+
+    /* Find trailing reset code if present */
+    const char *suffix_codes = "\033[0m";
+    size_t str_len = strlen(str);
+    int has_reset = (str_len >= 4 && strcmp(str + str_len - 4, "\033[0m") == 0);
+    if (!has_reset) {
+        suffix_codes = "";
+    }
+
+    /* Calculate content end */
+    const char *content_end = str + str_len;
+    if (has_reset) {
+        content_end -= 4;
+    }
+
+    /* Word wrap the content */
+    const char *line_start = content_start;
+
+    while (line_start < content_end) {
+        const char *scan = line_start;
+        const char *last_break = NULL;
+        size_t line_visible_len = 0;
+
+        while (scan < content_end && line_visible_len < (size_t)wrap_width) {
+            if (*scan == ' ') {
+                last_break = scan;
+            }
+            if (*scan == '\033' && *(scan + 1) == '[') {
+                scan += 2;
+                while (*scan && *scan != 'm') scan++;
+                if (*scan == 'm') scan++;
+            } else {
+                line_visible_len++;
+                scan++;
+            }
+        }
+
+        const char *line_end;
+        if (scan >= content_end) {
+            line_end = content_end;
+        } else if (last_break && last_break > line_start) {
+            line_end = last_break;
+        } else {
+            line_end = scan;
+        }
+
+        /* Build this line */
+        size_t line_len = line_end - line_start;
+        size_t buf_size = prefix_len + line_len + strlen(suffix_codes) + 1;
+        char *line_buf = malloc(buf_size);
+        if (line_buf) {
+            size_t offset = 0;
+            if (prefix_len > 0) {
+                memcpy(line_buf, prefix_codes, prefix_len);
+                offset = prefix_len;
+            }
+            memcpy(line_buf + offset, line_start, line_len);
+            offset += line_len;
+            strcpy(line_buf + offset, suffix_codes);
+
+            print_bordered(line_buf);
+            free(line_buf);
+        }
+
+        line_start = line_end;
+        if (line_start < content_end && *line_start == ' ') {
+            line_start++;
+        }
     }
 }

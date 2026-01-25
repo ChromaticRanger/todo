@@ -21,6 +21,24 @@ size_t visible_strlen(const char *str);
 /* Print a string centered in the terminal. */
 void print_centered(const char *str);
 
+/* Print a string centered in the terminal with word wrapping at max_width columns. */
+void print_centered_wrapped(const char *str, int max_width);
+
+/* Print a string centered within a bordered box. */
+void print_bordered(const char *str);
+
+/* Print a string centered within a bordered box with word wrapping. */
+void print_bordered_wrapped(const char *str, int max_width);
+
+/* Print the top border of the box. */
+void print_border_top(void);
+
+/* Print the bottom border of the box. */
+void print_border_bottom(void);
+
+/* Print an empty bordered line. */
+void print_border_empty(void);
+
 /* Capitalize the first letter of a string (modifies in place). */
 void capitalize_first(char *str);
 

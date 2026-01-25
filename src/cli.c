@@ -18,8 +18,15 @@ typedef enum {
     CMD_DELETE,
     CMD_EDIT,
     CMD_SHOW,
+    CMD_COMPLETED_SINCE,
+    CMD_TODAY,
+    CMD_WEEK,
+    CMD_MONTH,
     CMD_HELP
 } Command;
+
+/* Store last command message for display in list */
+static char last_command_msg[256] = "";
 
 #define MAX_IDS 100
 
@@ -29,20 +36,24 @@ typedef struct {
 } IdList;
 
 static struct option long_options[] = {
-    {"add",         required_argument, 0, 'a'},
-    {"list",        no_argument,       0, 'l'},
-    {"complete",    required_argument, 0, 'C'},
-    {"delete",      required_argument, 0, 'D'},
-    {"edit",        required_argument, 0, 'e'},
-    {"show",        required_argument, 0, 'S'},
-    {"help",        no_argument,       0, 'h'},
-    {"title",       required_argument, 0, 't'},
-    {"description", required_argument, 0, 'd'},
-    {"category",    required_argument, 0, 'c'},
-    {"priority",    required_argument, 0, 'p'},
-    {"status",      required_argument, 0, 's'},
-    {"due",         required_argument, 0, 'u'},
-    {"repeat",      required_argument, 0, 'r'},
+    {"add",             required_argument, 0, 'a'},
+    {"list",            no_argument,       0, 'l'},
+    {"complete",        required_argument, 0, 'C'},
+    {"delete",          required_argument, 0, 'D'},
+    {"edit",            required_argument, 0, 'e'},
+    {"show",            required_argument, 0, 'S'},
+    {"completed-since", required_argument, 0, 'R'},
+    {"today",           no_argument,       0, 'T'},
+    {"week",            no_argument,       0, 'W'},
+    {"month",           no_argument,       0, 'M'},
+    {"help",            no_argument,       0, 'h'},
+    {"title",           required_argument, 0, 't'},
+    {"description",     required_argument, 0, 'd'},
+    {"category",        required_argument, 0, 'c'},
+    {"priority",        required_argument, 0, 'p'},
+    {"status",          required_argument, 0, 's'},
+    {"due",             required_argument, 0, 'u'},
+    {"repeat",          required_argument, 0, 'r'},
     {0, 0, 0, 0}
 };
 
@@ -57,6 +68,8 @@ static int parse_ids(const char *arg, IdList *list);
 static void cli_edit(int id, const char *title, const char *description,
                      const char *category, int priority, time_t due_date);
 static void cli_show(int id);
+static void cli_completed_since(time_t since_date);
+static void cli_due_range(int days);
 static time_t parse_due_date(const char *date_str);
 
 void cli_help(const char *program_name) {
@@ -69,6 +82,10 @@ void cli_help(const char *program_name) {
     printf("  -D, --delete ID|[IDs]  Delete todo(s) (e.g., -D 5 or -D [1,2,3])\n");
     printf("  -e, --edit ID          Edit an existing todo\n");
     printf("  -S, --show ID          Show details of a todo\n");
+    printf("  -R, --completed-since DATE  List todos completed since DATE (YYYY-MM-DD)\n");
+    printf("  -T, --today            List todos due today\n");
+    printf("  -W, --week             List todos due within the next 7 days\n");
+    printf("  -M, --month            List todos due within the next 31 days\n");
     printf("  -h, --help             Show this help message\n\n");
     printf("Options:\n");
     printf("  -t, --title TITLE      Set title (for edit)\n");
@@ -85,6 +102,7 @@ void cli_help(const char *program_name) {
     printf("  %s --list --category work --status pending\n", program_name);
     printf("  %s --complete 5\n", program_name);
     printf("  %s --edit 3 --title \"Updated title\" --priority 3\n", program_name);
+    printf("  %s --completed-since 2025-01-01\n", program_name);
 }
 
 static int parse_status(const char *status_str) {
@@ -252,6 +270,7 @@ int cli_run(int argc, char *argv[]) {
     time_t due_date = 0;
     int repeat_days = 0;
     int repeat_months = 0;
+    time_t since_date = 0;
 
     int opt;
     int option_index = 0;
@@ -259,7 +278,7 @@ int cli_run(int argc, char *argv[]) {
     /* Reset getopt */
     optind = 1;
 
-    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:ht:d:c:p:s:u:r:",
+    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMht:d:c:p:s:u:r:",
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
@@ -284,6 +303,29 @@ int cli_run(int argc, char *argv[]) {
             case 'S':
                 cmd = CMD_SHOW;
                 target_id = atoi(optarg);
+                break;
+            case 'R':
+                cmd = CMD_COMPLETED_SINCE;
+                since_date = parse_due_date(optarg);
+                if (since_date == 0) {
+                    fprintf(stderr, "Error: Invalid date format '%s'. Use YYYY-MM-DD\n", optarg);
+                    return 1;
+                }
+                /* Set to start of day */
+                struct tm *tm_since = localtime(&since_date);
+                tm_since->tm_hour = 0;
+                tm_since->tm_min = 0;
+                tm_since->tm_sec = 0;
+                since_date = mktime(tm_since);
+                break;
+            case 'T':
+                cmd = CMD_TODAY;
+                break;
+            case 'W':
+                cmd = CMD_WEEK;
+                break;
+            case 'M':
+                cmd = CMD_MONTH;
                 break;
             case 'h':
                 cmd = CMD_HELP;
@@ -360,12 +402,29 @@ int cli_run(int argc, char *argv[]) {
         case CMD_SHOW:
             cli_show(target_id);
             break;
+        case CMD_COMPLETED_SINCE:
+            cli_completed_since(since_date);
+            break;
+        case CMD_TODAY:
+            cli_due_range(0);
+            break;
+        case CMD_WEEK:
+            cli_due_range(7);
+            break;
+        case CMD_MONTH:
+            cli_due_range(31);
+            break;
         case CMD_HELP:
             cli_help(argv[0]);
             break;
         default:
             cli_help(argv[0]);
             return 1;
+    }
+
+    /* Show updated list after modifying commands */
+    if (cmd == CMD_ADD || cmd == CMD_COMPLETE || cmd == CMD_DELETE || cmd == CMD_EDIT) {
+        cli_list(NULL, STATUS_ALL);
     }
 
     return 0;
@@ -388,11 +447,13 @@ static void cli_add(const char *title, const char *description,
     int id = db_add_todo(title, description, category, priority, effective_due, repeat_days, repeat_months);
     if (id > 0) {
         if (repeat_days > 0) {
-            printf("Added repeating todo #%d: %s (every %d day%s)\n", id, title, repeat_days, repeat_days == 1 ? "" : "s");
+            snprintf(last_command_msg, sizeof(last_command_msg),
+                     "Added repeating todo #%d (every %d day%s)", id, repeat_days, repeat_days == 1 ? "" : "s");
         } else if (repeat_months > 0) {
-            printf("Added repeating todo #%d: %s (every %d month%s)\n", id, title, repeat_months, repeat_months == 1 ? "" : "s");
+            snprintf(last_command_msg, sizeof(last_command_msg),
+                     "Added repeating todo #%d (every %d month%s)", id, repeat_months, repeat_months == 1 ? "" : "s");
         } else {
-            printf("Added todo #%d: %s\n", id, title);
+            snprintf(last_command_msg, sizeof(last_command_msg), "Added todo #%d", id);
         }
     }
 }
@@ -499,26 +560,91 @@ static void cli_list(const char *category, int status) {
     }
 
     /* Clear terminal and add blank line */
-    printf("\033[2J\033[H\n");
+    printf("\033[2J\033[3J\033[H\n");
 
-    /* Print underlined heading - centered */
-    print_centered("\033[4mTODO List\033[0m");
-    printf("\n");
+    /* Print top border */
+    print_border_top();
+    print_border_empty();
+
+    /* Print underlined heading */
+    print_bordered("\033[4mTODO List\033[0m");
+    print_border_empty();
+
+    /* Show last command if set */
+    if (last_command_msg[0] != '\0') {
+        print_bordered(last_command_msg);
+        print_border_empty();
+        last_command_msg[0] = '\0';  /* Clear after displaying */
+    }
+
     snprintf(buffer, sizeof(buffer), "%d todo(s) found.", display_count);
-    print_centered(buffer);
-    printf("\n");
+    print_bordered(buffer);
+    print_border_empty();
 
     if (display_count == 0) {
+        print_border_bottom();
         category_list_free(&categories);
         todo_list_free(&list);
         return;
     }
 
+    /* Print "Upcoming" section for items due within 3 days */
+    time_t now = time(NULL);
+    time_t three_days = now + (3 * 24 * 60 * 60);
+    int has_upcoming = 0;
+
+    /* Check if there are any upcoming items */
+    for (int i = 0; i < list.count; i++) {
+        if (list.items[i].status == STATUS_PENDING &&
+            list.items[i].due_date > now &&
+            list.items[i].due_date <= three_days) {
+            has_upcoming = 1;
+            break;
+        }
+    }
+
+    if (has_upcoming) {
+        print_bordered("\033[4mUpcoming\033[0m");
+        print_border_empty();
+
+        for (int i = 0; i < list.count; i++) {
+            if (list.items[i].status == STATUS_PENDING &&
+                list.items[i].due_date > now &&
+                list.items[i].due_date <= three_days) {
+                char *display = todo_format_display_no_category(&list.items[i]);
+                if (display) {
+                    snprintf(buffer, sizeof(buffer), "\033[34m%s\033[0m", display);
+                    print_bordered_wrapped(buffer, 76);
+                    free(display);
+                    /* Print due date underneath */
+                    char due_buf[64];
+                    struct tm *tm_info = localtime(&list.items[i].due_date);
+                    strftime(due_buf, sizeof(due_buf), "%Y-%m-%d %H:%M", tm_info);
+                    snprintf(buffer, sizeof(buffer), "\033[34mDue: %s\033[0m", due_buf);
+                    print_bordered(buffer);
+                    /* Check if more upcoming items follow */
+                    int has_more = 0;
+                    for (int j = i + 1; j < list.count && !has_more; j++) {
+                        if (list.items[j].status == STATUS_PENDING &&
+                            list.items[j].due_date > now &&
+                            list.items[j].due_date <= three_days) {
+                            has_more = 1;
+                        }
+                    }
+                    if (has_more) {
+                        print_border_empty();
+                    }
+                }
+            }
+        }
+        print_border_empty();
+    }
+
     /* Print todos grouped by category */
     for (int c = 0; c < categories.count; c++) {
-        snprintf(buffer, sizeof(buffer), "\033[4m%s\033[0m", categories.categories[c]);
-        print_centered(buffer);
-        printf("\n");
+        snprintf(buffer, sizeof(buffer), "\033[7m %s \033[0m", categories.categories[c]);
+        print_bordered(buffer);
+        print_border_empty();
 
         /* Print pending todos first */
         for (int i = 0; i < list.count; i++) {
@@ -531,7 +657,7 @@ static void cli_list(const char *category, int status) {
                     } else {
                         snprintf(buffer, sizeof(buffer), "%s", display);
                     }
-                    print_centered(buffer);
+                    print_bordered_wrapped(buffer, 76);
                     free(display);
                     /* Print due date underneath if set */
                     if (list.items[i].due_date > 0) {
@@ -539,7 +665,7 @@ static void cli_list(const char *category, int status) {
                         struct tm *tm_info = localtime(&list.items[i].due_date);
                         strftime(due_buf, sizeof(due_buf), "%Y-%m-%d %H:%M", tm_info);
                         snprintf(buffer, sizeof(buffer), "Due: %s", due_buf);
-                        print_centered(buffer);
+                        print_bordered(buffer);
                         /* Add extra newline only if not last item in category */
                         int has_more = 0;
                         for (int j = i + 1; j < list.count && !has_more; j++) {
@@ -558,7 +684,7 @@ static void cli_list(const char *category, int status) {
                             }
                         }
                         if (has_more) {
-                            printf("\n");
+                            print_border_empty();
                         }
                     }
                 }
@@ -575,7 +701,7 @@ static void cli_list(const char *category, int status) {
                 char *display = todo_format_display_no_category(&list.items[i]);
                 if (display) {
                     snprintf(buffer, sizeof(buffer), "\033[32m%s\033[0m", display);
-                    print_centered(buffer);
+                    print_bordered_wrapped(buffer, 76);
                     free(display);
                     /* Print due date underneath if set */
                     if (list.items[i].due_date > 0) {
@@ -583,7 +709,7 @@ static void cli_list(const char *category, int status) {
                         struct tm *tm_info = localtime(&list.items[i].due_date);
                         strftime(due_buf, sizeof(due_buf), "%Y-%m-%d %H:%M", tm_info);
                         snprintf(buffer, sizeof(buffer), "Due: %s", due_buf);
-                        print_centered(buffer);
+                        print_bordered(buffer);
                         /* Add extra newline only if not last item in category */
                         int has_more = 0;
                         for (int j = i + 1; j < list.count && !has_more; j++) {
@@ -594,15 +720,16 @@ static void cli_list(const char *category, int status) {
                             }
                         }
                         if (has_more) {
-                            printf("\n");
+                            print_border_empty();
                         }
                     }
                 }
             }
         }
-        printf("\n");
+        print_border_empty();
     }
 
+    print_border_bottom();
     category_list_free(&categories);
     todo_list_free(&list);
 }
@@ -626,15 +753,16 @@ static void cli_complete_multiple(const IdList *ids) {
         }
 
         if (db_complete_todo(id) == 0) {
-            printf("Marked todo #%d as completed.\n", id);
             success_count++;
         } else {
             fail_count++;
         }
     }
 
-    if (ids->count > 1) {
-        printf("\nSummary: %d completed, %d failed.\n", success_count, fail_count);
+    if (ids->count == 1 && success_count == 1) {
+        snprintf(last_command_msg, sizeof(last_command_msg), "Completed todo #%d", ids->ids[0]);
+    } else if (success_count > 0) {
+        snprintf(last_command_msg, sizeof(last_command_msg), "Completed %d todo(s)", success_count);
     }
 }
 
@@ -657,15 +785,16 @@ static void cli_delete_multiple(const IdList *ids) {
         }
 
         if (db_delete_todo(id) == 0) {
-            printf("Deleted todo #%d.\n", id);
             success_count++;
         } else {
             fail_count++;
         }
     }
 
-    if (ids->count > 1) {
-        printf("\nSummary: %d deleted, %d failed.\n", success_count, fail_count);
+    if (ids->count == 1 && success_count == 1) {
+        snprintf(last_command_msg, sizeof(last_command_msg), "Deleted todo #%d", ids->ids[0]);
+    } else if (success_count > 0) {
+        snprintf(last_command_msg, sizeof(last_command_msg), "Deleted %d todo(s)", success_count);
     }
 }
 
@@ -682,7 +811,7 @@ static void cli_edit(int id, const char *title, const char *description,
     }
 
     if (db_update_todo(id, title, description, category, priority, due_date) == 0) {
-        printf("Updated todo #%d.\n", id);
+        snprintf(last_command_msg, sizeof(last_command_msg), "Updated todo #%d", id);
     }
 }
 
@@ -737,4 +866,217 @@ static void cli_show(int id) {
         printf("  Completed:   %s\n", completed_buf);
     }
     printf("\n");
+}
+
+static void cli_completed_since(time_t since_date) {
+    TodoList list;
+    char buffer[512];
+    char date_buf[32];
+
+    int count = db_get_completed_since(&list, since_date);
+    if (count < 0) {
+        fprintf(stderr, "Error: Failed to retrieve completed todos\n");
+        return;
+    }
+
+    /* Format the since date for display */
+    struct tm *tm_info = localtime(&since_date);
+    strftime(date_buf, sizeof(date_buf), "%Y-%m-%d", tm_info);
+
+    /* Clear terminal */
+    printf("\033[2J\033[3J\033[H\n");
+
+    /* Print bordered output */
+    print_border_top();
+    print_border_empty();
+
+    snprintf(buffer, sizeof(buffer), "\033[4mCompleted Since %s\033[0m", date_buf);
+    print_bordered(buffer);
+    print_border_empty();
+
+    snprintf(buffer, sizeof(buffer), "%d task(s) completed.", count);
+    print_bordered(buffer);
+    print_border_empty();
+
+    if (count == 0) {
+        print_border_bottom();
+        todo_list_free(&list);
+        return;
+    }
+
+    /* Group by category */
+    CategoryList categories;
+    category_list_init(&categories);
+
+    for (int i = 0; i < list.count; i++) {
+        const char *cat = list.items[i].category;
+        int found = 0;
+        for (int j = 0; j < categories.count; j++) {
+            if (strcmp(categories.categories[j], cat) == 0) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            category_list_add(&categories, cat);
+        }
+    }
+
+    /* Print todos grouped by category */
+    for (int c = 0; c < categories.count; c++) {
+        snprintf(buffer, sizeof(buffer), "\033[7m %s \033[0m", categories.categories[c]);
+        print_bordered(buffer);
+        print_border_empty();
+
+        for (int i = 0; i < list.count; i++) {
+            if (strcmp(list.items[i].category, categories.categories[c]) == 0) {
+                char *display = todo_format_display_no_category(&list.items[i]);
+                if (display) {
+                    snprintf(buffer, sizeof(buffer), "\033[32m%s\033[0m", display);
+                    print_bordered_wrapped(buffer, 76);
+                    free(display);
+
+                    /* Print completed date */
+                    if (list.items[i].completed_at > 0) {
+                        char completed_buf[64];
+                        struct tm *tm_completed = localtime(&list.items[i].completed_at);
+                        strftime(completed_buf, sizeof(completed_buf), "%Y-%m-%d %H:%M", tm_completed);
+                        snprintf(buffer, sizeof(buffer), "Completed: %s", completed_buf);
+                        print_bordered(buffer);
+                    }
+
+                    /* Add spacing if not last in category */
+                    int has_more = 0;
+                    for (int j = i + 1; j < list.count && !has_more; j++) {
+                        if (strcmp(list.items[j].category, categories.categories[c]) == 0) {
+                            has_more = 1;
+                        }
+                    }
+                    if (has_more) {
+                        print_border_empty();
+                    }
+                }
+            }
+        }
+        print_border_empty();
+    }
+
+    print_border_bottom();
+    category_list_free(&categories);
+    todo_list_free(&list);
+}
+
+static void cli_due_range(int days) {
+    spawn_repeating_todos();
+
+    char buffer[512];
+    char date_buf[64];
+    TodoList list;
+
+    /* Calculate date range */
+    time_t now = time(NULL);
+    struct tm *tm_start = localtime(&now);
+    tm_start->tm_hour = 0;
+    tm_start->tm_min = 0;
+    tm_start->tm_sec = 0;
+    time_t start = mktime(tm_start);
+
+    /* End of the range (end of day for 'days' days from now) */
+    time_t end = start + ((days + 1) * 24 * 60 * 60) - 1;
+
+    int count = db_get_todos_due_range(&list, start, end);
+    if (count < 0) {
+        fprintf(stderr, "Error: Failed to retrieve todos\n");
+        return;
+    }
+
+    /* Determine title based on days */
+    const char *title;
+    if (days == 0) {
+        title = "Due Today";
+    } else if (days == 7) {
+        title = "Due This Week";
+    } else {
+        title = "Due This Month";
+    }
+
+    /* Clear terminal */
+    printf("\033[2J\033[3J\033[H\n");
+
+    /* Print bordered output */
+    print_border_top();
+    print_border_empty();
+
+    snprintf(buffer, sizeof(buffer), "\033[4m%s\033[0m", title);
+    print_bordered(buffer);
+    print_border_empty();
+
+    snprintf(buffer, sizeof(buffer), "%d task(s) due.", count);
+    print_bordered(buffer);
+    print_border_empty();
+
+    if (count == 0) {
+        print_border_bottom();
+        todo_list_free(&list);
+        return;
+    }
+
+    /* Group by category */
+    CategoryList categories;
+    category_list_init(&categories);
+
+    for (int i = 0; i < list.count; i++) {
+        const char *cat = list.items[i].category;
+        int found = 0;
+        for (int j = 0; j < categories.count; j++) {
+            if (strcmp(categories.categories[j], cat) == 0) {
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            category_list_add(&categories, cat);
+        }
+    }
+
+    /* Print todos grouped by category */
+    for (int c = 0; c < categories.count; c++) {
+        snprintf(buffer, sizeof(buffer), "\033[7m %s \033[0m", categories.categories[c]);
+        print_bordered(buffer);
+        print_border_empty();
+
+        for (int i = 0; i < list.count; i++) {
+            if (strcmp(list.items[i].category, categories.categories[c]) == 0) {
+                char *display = todo_format_display_no_category(&list.items[i]);
+                if (display) {
+                    print_bordered_wrapped(display, 76);
+                    free(display);
+
+                    /* Print due date */
+                    if (list.items[i].due_date > 0) {
+                        struct tm *tm_due = localtime(&list.items[i].due_date);
+                        strftime(date_buf, sizeof(date_buf), "%Y-%m-%d %H:%M", tm_due);
+                        snprintf(buffer, sizeof(buffer), "Due: %s", date_buf);
+                        print_bordered(buffer);
+                    }
+
+                    /* Add spacing if not last in category */
+                    int has_more = 0;
+                    for (int j = i + 1; j < list.count && !has_more; j++) {
+                        if (strcmp(list.items[j].category, categories.categories[c]) == 0) {
+                            has_more = 1;
+                        }
+                    }
+                    if (has_more) {
+                        print_border_empty();
+                    }
+                }
+            }
+        }
+        print_border_empty();
+    }
+
+    print_border_bottom();
+    category_list_free(&categories);
+    todo_list_free(&list);
 }

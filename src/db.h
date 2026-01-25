@@ -45,4 +45,10 @@ int db_mark_spawned(int id);
 /* Get repeating todos that need their next occurrence spawned */
 int db_get_todos_needing_spawn(TodoList *list);
 
+/* Get todos completed since a given date */
+int db_get_completed_since(TodoList *list, time_t since_date);
+
+/* Get pending todos with due dates in a given range */
+int db_get_todos_due_range(TodoList *list, time_t start, time_t end);
+
 #endif /* DB_H */
