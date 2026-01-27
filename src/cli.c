@@ -22,7 +22,9 @@ typedef enum {
     CMD_TODAY,
     CMD_WEEK,
     CMD_MONTH,
-    CMD_HELP
+    CMD_SCHEDULE,
+    CMD_HELP,
+    CMD_CATEGORIES
 } Command;
 
 /* Store last command message for display in list */
@@ -46,6 +48,7 @@ static struct option long_options[] = {
     {"today",           no_argument,       0, 'T'},
     {"week",            no_argument,       0, 'W'},
     {"month",           no_argument,       0, 'M'},
+    {"schedule",        no_argument,       0, 'E'},
     {"help",            no_argument,       0, 'h'},
     {"title",           required_argument, 0, 't'},
     {"description",     required_argument, 0, 'd'},
@@ -54,6 +57,7 @@ static struct option long_options[] = {
     {"status",          required_argument, 0, 's'},
     {"due",             required_argument, 0, 'u'},
     {"repeat",          required_argument, 0, 'r'},
+    {"cat",             no_argument,       0, 'A'},
     {0, 0, 0, 0}
 };
 
@@ -70,7 +74,9 @@ static void cli_edit(int id, const char *title, const char *description,
 static void cli_show(int id);
 static void cli_completed_since(time_t since_date);
 static void cli_due_range(int days);
+static void cli_schedule(void);
 static time_t parse_due_date(const char *date_str);
+static void cli_categories(void);
 
 void cli_help(const char *program_name) {
     printf("Usage: %s [COMMAND] [OPTIONS]\n\n", program_name);
@@ -86,6 +92,8 @@ void cli_help(const char *program_name) {
     printf("  -T, --today            List todos due today\n");
     printf("  -W, --week             List todos due within the next 7 days\n");
     printf("  -M, --month            List todos due within the next 31 days\n");
+    printf("  -E, --schedule         List all scheduled todos by due date\n");
+    printf("  -A, --cat              List all categories\n");
     printf("  -h, --help             Show this help message\n\n");
     printf("Options:\n");
     printf("  -t, --title TITLE      Set title (for edit)\n");
@@ -103,6 +111,28 @@ void cli_help(const char *program_name) {
     printf("  %s --complete 5\n", program_name);
     printf("  %s --edit 3 --title \"Updated title\" --priority 3\n", program_name);
     printf("  %s --completed-since 2025-01-01\n", program_name);
+}
+
+static void cli_categories(void) {
+    CategoryList categories;
+    int count = db_get_categories(&categories);
+
+    if (count < 0) {
+        fprintf(stderr, "Error: Failed to retrieve categories\n");
+        return;
+    }
+
+    if (count == 0) {
+        printf("No categories found.\n");
+        return;
+    }
+
+    printf("Categories:\n");
+    for (int i = 0; i < categories.count; i++) {
+        printf("  %s\n", categories.categories[i]);
+    }
+
+    category_list_free(&categories);
 }
 
 static int parse_status(const char *status_str) {
@@ -278,7 +308,7 @@ int cli_run(int argc, char *argv[]) {
     /* Reset getopt */
     optind = 1;
 
-    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMht:d:c:p:s:u:r:",
+    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhAt:d:c:p:s:u:r:",
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
@@ -327,8 +357,14 @@ int cli_run(int argc, char *argv[]) {
             case 'M':
                 cmd = CMD_MONTH;
                 break;
+            case 'E':
+                cmd = CMD_SCHEDULE;
+                break;
             case 'h':
                 cmd = CMD_HELP;
+                break;
+            case 'A':
+                cmd = CMD_CATEGORIES;
                 break;
             case 't':
                 edit_title = optarg;
@@ -414,8 +450,14 @@ int cli_run(int argc, char *argv[]) {
         case CMD_MONTH:
             cli_due_range(31);
             break;
+        case CMD_SCHEDULE:
+            cli_schedule();
+            break;
         case CMD_HELP:
             cli_help(argv[0]);
+            break;
+        case CMD_CATEGORIES:
+            cli_categories();
             break;
         default:
             cli_help(argv[0]);
@@ -1078,5 +1120,70 @@ static void cli_due_range(int days) {
 
     print_border_bottom();
     category_list_free(&categories);
+    todo_list_free(&list);
+}
+
+static void cli_schedule(void) {
+    spawn_repeating_todos();
+
+    char buffer[512];
+    char date_buf[64];
+    TodoList list;
+
+    int count = db_get_todos_with_due_date(&list);
+    if (count < 0) {
+        fprintf(stderr, "Error: Failed to retrieve todos\n");
+        return;
+    }
+
+    /* Clear terminal */
+    printf("\033[2J\033[3J\033[H\n");
+
+    /* Print bordered output */
+    print_border_top();
+    print_border_empty();
+
+    print_bordered("\033[4mSchedule\033[0m");
+    print_border_empty();
+
+    snprintf(buffer, sizeof(buffer), "%d scheduled task(s).", count);
+    print_bordered(buffer);
+    print_border_empty();
+
+    if (count == 0) {
+        print_border_bottom();
+        todo_list_free(&list);
+        return;
+    }
+
+    /* Display items in chronological order */
+    time_t now = time(NULL);
+    for (int i = 0; i < list.count; i++) {
+        char *display = todo_format_display_no_category(&list.items[i]);
+        if (display) {
+            /* Color red if overdue */
+            if (list.items[i].due_date < now) {
+                snprintf(buffer, sizeof(buffer), "\033[31m%s\033[0m", display);
+                print_bordered_wrapped(buffer, 76);
+            } else {
+                print_bordered_wrapped(display, 76);
+            }
+            free(display);
+
+            /* Print due date */
+            struct tm *tm_due = localtime(&list.items[i].due_date);
+            strftime(date_buf, sizeof(date_buf), "%Y-%m-%d %H:%M", tm_due);
+            snprintf(buffer, sizeof(buffer), "Due: %s", date_buf);
+            print_bordered(buffer);
+
+            /* Add spacing if not last item */
+            if (i < list.count - 1) {
+                print_border_empty();
+            }
+        }
+    }
+
+    print_border_empty();
+    print_border_bottom();
     todo_list_free(&list);
 }

@@ -51,4 +51,7 @@ int db_get_completed_since(TodoList *list, time_t since_date);
 /* Get pending todos with due dates in a given range */
 int db_get_todos_due_range(TodoList *list, time_t start, time_t end);
 
+/* Get all pending todos with due dates, sorted by due date ascending */
+int db_get_todos_with_due_date(TodoList *list);
+
 #endif /* DB_H */
