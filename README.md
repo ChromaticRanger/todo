@@ -25,6 +25,7 @@ The screenshot above shows a named list (`todo demo -l`) demonstrating:
 - Batch operations (complete or delete multiple todos at once)
 - View recently completed todos
 - Named lists to keep separate sets of todos (e.g. `work`, `personal`)
+- Move todos between lists (single or batch)
 
 ## Dependencies
 
@@ -126,9 +127,12 @@ todo work --add "Finish report" --priority 3   # adds to the 'work' list
 todo work --list                               # lists only the 'work' list
 todo --list                                    # default list (unchanged)
 todo --lists                                   # show all available lists
+todo --move 7 projects                         # move #7 from default to 'projects'
+todo work --move 3 personal                    # move #3 from 'work' to 'personal'
+todo demo --move '[7,8,9]' work                # batch move from 'demo' to 'work'
 ```
 
-List names may contain letters, numbers, hyphens and underscores.
+List names may contain letters, numbers, hyphens and underscores. Target lists are created automatically if they don't exist.
 
 ## Data storage
 
