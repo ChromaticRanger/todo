@@ -2,6 +2,18 @@
 
 A command-line todo application written in C, backed by SQLite3.
 
+![Demo screenshot showing the todo application with multiple categories, priorities, due dates, repeating tasks, and a completed item](assets/demo.png)
+
+The screenshot above shows a named list (`todo demo -l`) demonstrating:
+
+- **Categories** — tasks grouped under Learning, Health, Work and Personal
+- **Priorities** — high `[H]`, medium `[M]` and low `[L]`
+- **Upcoming section** — items due within 3 days highlighted at the top
+- **Due dates** — absolute and relative dates displayed beneath each task
+- **Repeating tasks** — marked with intervals like `* 7d *` (weekly) and `* 1m *` (monthly)
+- **Completed task** — shown in green with a `[✓]` checkmark
+- **Named list** — heading shows "TODO List: demo", stored separately from the default list
+
 ## Features
 
 - Add, edit, delete and complete todos
@@ -12,6 +24,7 @@ A command-line todo application written in C, backed by SQLite3.
 - Filter by category and status
 - Batch operations (complete or delete multiple todos at once)
 - View recently completed todos
+- Named lists to keep separate sets of todos (e.g. `work`, `personal`)
 
 ## Dependencies
 
@@ -106,9 +119,20 @@ todo --add "Review" --due 2025-06-15 --repeat 7d    # weekly
 todo --add "Report" --due 2025-06-15 --repeat 2m    # every 2 months
 ```
 
+### Named lists
+
+```sh
+todo work --add "Finish report" --priority 3   # adds to the 'work' list
+todo work --list                               # lists only the 'work' list
+todo --list                                    # default list (unchanged)
+todo --lists                                   # show all available lists
+```
+
+List names may contain letters, numbers, hyphens and underscores.
+
 ## Data storage
 
-The database is stored at `~/.local/share/todo/todos.db`.
+The default database is stored at `~/.local/share/todo/todos.db`. Named lists are stored alongside it as `~/.local/share/todo/<name>.db`.
 
 ## License
 

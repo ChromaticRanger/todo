@@ -3,14 +3,23 @@
 
 #include <stddef.h>
 
-/* Get the path to the database file (~/.local/share/todo/todos.db) */
-char *get_db_path(void);
+/* Get the path to the database file.
+ * If list_name is NULL or empty, returns ~/.local/share/todo/todos.db (default).
+ * Otherwise returns ~/.local/share/todo/<list_name>.db */
+char *get_db_path(const char *list_name);
 
 /* Ensure a directory exists, creating it and parents if necessary */
 int ensure_directory(const char *path);
 
 /* Free a string allocated by get_db_path */
 void free_db_path(char *path);
+
+/* Get list of available todo list names (scans *.db in data directory).
+ * Returns an array of strings terminated by NULL. Caller must free with free_list_names(). */
+char **get_available_lists(int *count);
+
+/* Free list returned by get_available_lists */
+void free_list_names(char **names, int count);
 
 /* Get terminal width in columns. Returns 80 if unable to determine. */
 int get_terminal_width(void);

@@ -49,8 +49,8 @@ uninstall:
 	rm -f /usr/local/bin/$(TARGET)
 
 # Dependencies
-$(OBJDIR)/main.o: $(SRCDIR)/main.c $(SRCDIR)/db.h $(SRCDIR)/cli.h
+$(OBJDIR)/main.o: $(SRCDIR)/main.c $(SRCDIR)/db.h $(SRCDIR)/cli.h $(SRCDIR)/utils.h
 $(OBJDIR)/db.o: $(SRCDIR)/db.c $(SRCDIR)/db.h $(SRCDIR)/todo.h $(SRCDIR)/utils.h
 $(OBJDIR)/todo.o: $(SRCDIR)/todo.c $(SRCDIR)/todo.h
-$(OBJDIR)/cli.o: $(SRCDIR)/cli.c $(SRCDIR)/cli.h $(SRCDIR)/db.h $(SRCDIR)/todo.h
+$(OBJDIR)/cli.o: $(SRCDIR)/cli.c $(SRCDIR)/cli.h $(SRCDIR)/db.h $(SRCDIR)/todo.h $(SRCDIR)/utils.h
 $(OBJDIR)/utils.o: $(SRCDIR)/utils.c $(SRCDIR)/utils.h

@@ -24,11 +24,19 @@ typedef enum {
     CMD_MONTH,
     CMD_SCHEDULE,
     CMD_HELP,
-    CMD_CATEGORIES
+    CMD_CATEGORIES,
+    CMD_LISTS
 } Command;
 
 /* Store last command message for display in list */
 static char last_command_msg[256] = "";
+
+/* Active list name (NULL = default) */
+static const char *active_list_name = NULL;
+
+void cli_set_list_name(const char *name) {
+    active_list_name = name;
+}
 
 #define MAX_IDS 100
 
@@ -58,6 +66,7 @@ static struct option long_options[] = {
     {"due",             required_argument, 0, 'u'},
     {"repeat",          required_argument, 0, 'r'},
     {"cat",             no_argument,       0, 'A'},
+    {"lists",           no_argument,       0, 'L'},
     {0, 0, 0, 0}
 };
 
@@ -77,9 +86,10 @@ static void cli_due_range(int days);
 static void cli_schedule(void);
 static time_t parse_due_date(const char *date_str);
 static void cli_categories(void);
+static void cli_lists(void);
 
 void cli_help(const char *program_name) {
-    printf("Usage: %s [COMMAND] [OPTIONS]\n\n", program_name);
+    printf("Usage: %s [listname] [COMMAND] [OPTIONS]\n\n", program_name);
     printf("A command-line todo application.\n\n");
     printf("Commands:\n");
     printf("  -a, --add TITLE        Add a new todo with the given title\n");
@@ -94,6 +104,7 @@ void cli_help(const char *program_name) {
     printf("  -M, --month            List todos due within the next 31 days\n");
     printf("  -E, --schedule         List all scheduled todos by due date\n");
     printf("  -A, --cat              List all categories\n");
+    printf("  -L, --lists            Show all available todo lists\n");
     printf("  -h, --help             Show this help message\n\n");
     printf("Options:\n");
     printf("  -t, --title TITLE      Set title (for edit)\n");
@@ -103,6 +114,9 @@ void cli_help(const char *program_name) {
     printf("  -s, --status STATUS    Filter by status (pending, completed, all)\n");
     printf("  -u, --due DATE         Set due date (YYYY-MM-DD, YYYY-MM-DD HH:MM, or Nd/Nw/Nm/Ny)\n");
     printf("  -r, --repeat INTERVAL  Set repeat interval (e.g., 7d for 7 days, 2m for 2 months)\n\n");
+    printf("Named Lists:\n");
+    printf("  Prefix any command with a list name to use a separate todo list.\n");
+    printf("  List names may contain letters, numbers, hyphens, and underscores.\n\n");
     printf("Examples:\n");
     printf("  %s --add \"Buy groceries\" --category shopping --priority 2\n", program_name);
     printf("  %s --add \"Submit report\" --due 2025-01-25\n", program_name);
@@ -111,6 +125,9 @@ void cli_help(const char *program_name) {
     printf("  %s --complete 5\n", program_name);
     printf("  %s --edit 3 --title \"Updated title\" --priority 3\n", program_name);
     printf("  %s --completed-since 2025-01-01\n", program_name);
+    printf("  %s work --add \"Finish report\" --priority 3\n", program_name);
+    printf("  %s work --list\n", program_name);
+    printf("  %s --lists\n", program_name);
 }
 
 static void cli_categories(void) {
@@ -133,6 +150,28 @@ static void cli_categories(void) {
     }
 
     category_list_free(&categories);
+}
+
+static void cli_lists(void) {
+    int count = 0;
+    char **names = get_available_lists(&count);
+
+    if (count == 0) {
+        printf("No todo lists found.\n");
+        free_list_names(names, count);
+        return;
+    }
+
+    printf("Available lists:\n");
+    for (int i = 0; i < count; i++) {
+        if (strcmp(names[i], "todos") == 0) {
+            printf("  %s (default)\n", names[i]);
+        } else {
+            printf("  %s\n", names[i]);
+        }
+    }
+
+    free_list_names(names, count);
 }
 
 static int parse_status(const char *status_str) {
@@ -339,7 +378,7 @@ int cli_run(int argc, char *argv[]) {
     /* Reset getopt */
     optind = 1;
 
-    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhAt:d:c:p:s:u:r:",
+    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhALt:d:c:p:s:u:r:",
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
@@ -396,6 +435,9 @@ int cli_run(int argc, char *argv[]) {
                 break;
             case 'A':
                 cmd = CMD_CATEGORIES;
+                break;
+            case 'L':
+                cmd = CMD_LISTS;
                 break;
             case 't':
                 edit_title = optarg;
@@ -489,6 +531,9 @@ int cli_run(int argc, char *argv[]) {
             break;
         case CMD_CATEGORIES:
             cli_categories();
+            break;
+        case CMD_LISTS:
+            cli_lists();
             break;
         default:
             cli_help(argv[0]);
@@ -640,7 +685,13 @@ static void cli_list(const char *category, int status) {
     print_border_empty();
 
     /* Print underlined heading */
-    print_bordered("\033[4mTODO List\033[0m");
+    if (active_list_name) {
+        char heading[128];
+        snprintf(heading, sizeof(heading), "\033[4mTODO List: %s\033[0m", active_list_name);
+        print_bordered(heading);
+    } else {
+        print_bordered("\033[4mTODO List\033[0m");
+    }
     print_border_empty();
 
     /* Show last command if set */

@@ -7,13 +7,14 @@
 #include <errno.h>
 #include <pwd.h>
 #include <unistd.h>
+#include <dirent.h>
 
 #include "utils.h"
 
 #define DB_SUBPATH "/.local/share/todo"
 #define DB_FILENAME "/todos.db"
 
-char *get_db_path(void) {
+static const char *get_home_dir(void) {
     const char *home = getenv("HOME");
     if (!home) {
         struct passwd *pw = getpwuid(getuid());
@@ -21,21 +22,96 @@ char *get_db_path(void) {
             home = pw->pw_dir;
         }
     }
+    return home;
+}
+
+char *get_db_path(const char *list_name) {
+    const char *home = get_home_dir();
 
     if (!home) {
         fprintf(stderr, "Error: Could not determine home directory\n");
         return NULL;
     }
 
-    size_t len = strlen(home) + strlen(DB_SUBPATH) + strlen(DB_FILENAME) + 1;
+    if (!list_name || list_name[0] == '\0') {
+        /* Default: todos.db */
+        size_t len = strlen(home) + strlen(DB_SUBPATH) + strlen(DB_FILENAME) + 1;
+        char *path = malloc(len);
+        if (!path) {
+            fprintf(stderr, "Error: Memory allocation failed\n");
+            return NULL;
+        }
+        snprintf(path, len, "%s%s%s", home, DB_SUBPATH, DB_FILENAME);
+        return path;
+    }
+
+    /* Named list: <list_name>.db */
+    size_t len = strlen(home) + strlen(DB_SUBPATH) + 1 + strlen(list_name) + 3 + 1;
     char *path = malloc(len);
     if (!path) {
         fprintf(stderr, "Error: Memory allocation failed\n");
         return NULL;
     }
-
-    snprintf(path, len, "%s%s%s", home, DB_SUBPATH, DB_FILENAME);
+    snprintf(path, len, "%s%s/%s.db", home, DB_SUBPATH, list_name);
     return path;
+}
+
+char **get_available_lists(int *count) {
+    *count = 0;
+
+    const char *home = get_home_dir();
+    if (!home) return NULL;
+
+    size_t dir_len = strlen(home) + strlen(DB_SUBPATH) + 1;
+    char *dir_path = malloc(dir_len);
+    if (!dir_path) return NULL;
+    snprintf(dir_path, dir_len, "%s%s", home, DB_SUBPATH);
+
+    DIR *dir = opendir(dir_path);
+    free(dir_path);
+    if (!dir) return NULL;
+
+    /* First pass: count .db files */
+    int capacity = 8;
+    char **names = malloc(sizeof(char *) * capacity);
+    if (!names) {
+        closedir(dir);
+        return NULL;
+    }
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        const char *name = entry->d_name;
+        size_t nlen = strlen(name);
+        if (nlen > 3 && strcmp(name + nlen - 3, ".db") == 0) {
+            /* Extract list name (strip .db) */
+            char *list = strndup(name, nlen - 3);
+            if (!list) continue;
+
+            if (*count >= capacity) {
+                capacity *= 2;
+                char **tmp = realloc(names, sizeof(char *) * capacity);
+                if (!tmp) {
+                    free(list);
+                    break;
+                }
+                names = tmp;
+            }
+            names[*count] = list;
+            (*count)++;
+        }
+    }
+
+    closedir(dir);
+    return names;
+}
+
+void free_list_names(char **names, int count) {
+    if (!names) return;
+    for (int i = 0; i < count; i++) {
+        free(names[i]);
+    }
+    free(names);
 }
 
 int ensure_directory(const char *path) {
