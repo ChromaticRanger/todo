@@ -54,4 +54,7 @@ void capitalize_first(char *str);
 /* Validate a list name: alphanumeric, hyphens, underscores, max 63 chars. */
 int is_valid_list_name(const char *name);
 
+/* Escape a string for JSON output. Writes to dst (including NUL terminator). */
+void json_escape(const char *src, char *dst, size_t dst_size);
+
 #endif /* UTILS_H */
