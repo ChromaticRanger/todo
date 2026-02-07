@@ -4,6 +4,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "cli.h"
 #include "db.h"
@@ -499,6 +500,34 @@ int cli_run(int argc, char *argv[]) {
         return 1;
     }
 
+    /* Initialize database — commands that don't need it exit early above or below */
+    if (cmd == CMD_HELP) {
+        cli_help(argv[0]);
+        return 0;
+    }
+    if (cmd == CMD_LISTS) {
+        cli_lists();
+        return 0;
+    }
+
+    /* For named lists, only --add may create a new database file.
+     * All other commands require the list to already exist.
+     * (--move creates the *target* list inside cli_move_multiple.) */
+    if (active_list_name && cmd != CMD_ADD) {
+        char *db_path = get_db_path(active_list_name);
+        if (db_path && access(db_path, F_OK) != 0) {
+            fprintf(stderr, "Error: List '%s' does not exist. Use --add to create a new list.\n", active_list_name);
+            free_db_path(db_path);
+            return 1;
+        }
+        free_db_path(db_path);
+    }
+
+    if (db_init(active_list_name) != 0) {
+        fprintf(stderr, "Error: Failed to initialize database\n");
+        return 1;
+    }
+
     switch (cmd) {
         case CMD_ADD:
             cli_add(add_title, description, category, priority, due_date, repeat_days, repeat_months);
@@ -539,14 +568,8 @@ int cli_run(int argc, char *argv[]) {
         case CMD_SCHEDULE:
             cli_schedule();
             break;
-        case CMD_HELP:
-            cli_help(argv[0]);
-            break;
         case CMD_CATEGORIES:
             cli_categories();
-            break;
-        case CMD_LISTS:
-            cli_lists();
             break;
         case CMD_MOVE:
             if (parse_ids(move_arg, &move_ids) != 0) {

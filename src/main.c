@@ -40,12 +40,6 @@ int main(int argc, char *argv[]) {
         cli_argc = argc - 1;
     }
 
-    /* Initialize database with list name */
-    if (db_init(list_name) != 0) {
-        fprintf(stderr, "Error: Failed to initialize database\n");
-        return 1;
-    }
-
     /* Set list name for CLI display */
     if (list_name) {
         cli_set_list_name(list_name);
