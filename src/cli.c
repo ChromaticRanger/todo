@@ -4,6 +4,7 @@
 #include <string.h>
 #include <getopt.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "cli.h"
 #include "db.h"
@@ -25,7 +26,9 @@ typedef enum {
     CMD_SCHEDULE,
     CMD_HELP,
     CMD_CATEGORIES,
-    CMD_LISTS
+    CMD_LISTS,
+    CMD_MOVE,
+    CMD_DELETE_LIST
 } Command;
 
 /* Store last command message for display in list */
@@ -67,6 +70,8 @@ static struct option long_options[] = {
     {"repeat",          required_argument, 0, 'r'},
     {"cat",             no_argument,       0, 'A'},
     {"lists",           no_argument,       0, 'L'},
+    {"move",            required_argument, 0, 'm'},
+    {"delete-list",     required_argument, 0, 256},
     {0, 0, 0, 0}
 };
 
@@ -87,6 +92,8 @@ static void cli_schedule(void);
 static time_t parse_due_date(const char *date_str);
 static void cli_categories(void);
 static void cli_lists(void);
+static void cli_move_multiple(const IdList *ids, const char *target_list);
+static int cli_delete_list(const char *name);
 
 void cli_help(const char *program_name) {
     printf("Usage: %s [listname] [COMMAND] [OPTIONS]\n\n", program_name);
@@ -103,8 +110,10 @@ void cli_help(const char *program_name) {
     printf("  -W, --week             List todos due within the next 7 days\n");
     printf("  -M, --month            List todos due within the next 31 days\n");
     printf("  -E, --schedule         List all scheduled todos by due date\n");
+    printf("  -m, --move ID|[IDs] LIST  Move todo(s) to another list\n");
     printf("  -A, --cat              List all categories\n");
     printf("  -L, --lists            Show all available todo lists\n");
+    printf("      --delete-list NAME Delete an empty named list\n");
     printf("  -h, --help             Show this help message\n\n");
     printf("Options:\n");
     printf("  -t, --title TITLE      Set title (for edit)\n");
@@ -128,6 +137,9 @@ void cli_help(const char *program_name) {
     printf("  %s work --add \"Finish report\" --priority 3\n", program_name);
     printf("  %s work --list\n", program_name);
     printf("  %s --lists\n", program_name);
+    printf("  %s --move 7 projects\n", program_name);
+    printf("  %s work --move 3 personal\n", program_name);
+    printf("  %s demo --move [7,8,9] work\n", program_name);
 }
 
 static void cli_categories(void) {
@@ -172,6 +184,56 @@ static void cli_lists(void) {
     }
 
     free_list_names(names, count);
+}
+
+static int cli_delete_list(const char *name) {
+    if (!name || !is_valid_list_name(name)) {
+        fprintf(stderr, "Error: Invalid list name '%s'\n", name ? name : "");
+        return 1;
+    }
+
+    if (strcmp(name, "todos") == 0) {
+        fprintf(stderr, "Error: Cannot delete the default list\n");
+        return 1;
+    }
+
+    char *db_path = get_db_path(name);
+    if (!db_path) return 1;
+
+    if (access(db_path, F_OK) != 0) {
+        fprintf(stderr, "Error: List '%s' does not exist\n", name);
+        free_db_path(db_path);
+        return 1;
+    }
+
+    /* Open the list and check if it's empty */
+    if (db_init(name) != 0) {
+        fprintf(stderr, "Error: Failed to open list '%s'\n", name);
+        free_db_path(db_path);
+        return 1;
+    }
+
+    TodoList list;
+    TodoFilter filter = { .category = NULL, .status = STATUS_ALL };
+    int count = db_get_todos(&list, &filter);
+    todo_list_free(&list);
+    db_close();
+
+    if (count > 0) {
+        fprintf(stderr, "Error: List '%s' has %d todo(s). Delete or move them first.\n", name, count);
+        free_db_path(db_path);
+        return 1;
+    }
+
+    if (remove(db_path) != 0) {
+        fprintf(stderr, "Error: Failed to delete list file\n");
+        free_db_path(db_path);
+        return 1;
+    }
+
+    printf("Deleted list '%s'\n", name);
+    free_db_path(db_path);
+    return 0;
 }
 
 static int parse_status(const char *status_str) {
@@ -371,6 +433,8 @@ int cli_run(int argc, char *argv[]) {
     int repeat_days = 0;
     int repeat_months = 0;
     time_t since_date = 0;
+    char *move_arg = NULL;
+    IdList move_ids = {0};
 
     int opt;
     int option_index = 0;
@@ -378,7 +442,7 @@ int cli_run(int argc, char *argv[]) {
     /* Reset getopt */
     optind = 1;
 
-    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhALt:d:c:p:s:u:r:",
+    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhALm:t:d:c:p:s:u:r:",
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
@@ -430,6 +494,10 @@ int cli_run(int argc, char *argv[]) {
             case 'E':
                 cmd = CMD_SCHEDULE;
                 break;
+            case 'm':
+                cmd = CMD_MOVE;
+                move_arg = optarg;
+                break;
             case 'h':
                 cmd = CMD_HELP;
                 break;
@@ -438,6 +506,10 @@ int cli_run(int argc, char *argv[]) {
                 break;
             case 'L':
                 cmd = CMD_LISTS;
+                break;
+            case 256:
+                cmd = CMD_DELETE_LIST;
+                move_arg = optarg; /* reuse move_arg to hold list name */
                 break;
             case 't':
                 edit_title = optarg;
@@ -486,6 +558,37 @@ int cli_run(int argc, char *argv[]) {
         return 1;
     }
 
+    /* Initialize database — commands that don't need it exit early above or below */
+    if (cmd == CMD_HELP) {
+        cli_help(argv[0]);
+        return 0;
+    }
+    if (cmd == CMD_LISTS) {
+        cli_lists();
+        return 0;
+    }
+    if (cmd == CMD_DELETE_LIST) {
+        return cli_delete_list(move_arg);
+    }
+
+    /* For named lists, only --add may create a new database file.
+     * All other commands require the list to already exist.
+     * (--move creates the *target* list inside cli_move_multiple.) */
+    if (active_list_name && cmd != CMD_ADD) {
+        char *db_path = get_db_path(active_list_name);
+        if (db_path && access(db_path, F_OK) != 0) {
+            fprintf(stderr, "Error: List '%s' does not exist. Use --add to create a new list.\n", active_list_name);
+            free_db_path(db_path);
+            return 1;
+        }
+        free_db_path(db_path);
+    }
+
+    if (db_init(active_list_name) != 0) {
+        fprintf(stderr, "Error: Failed to initialize database\n");
+        return 1;
+    }
+
     switch (cmd) {
         case CMD_ADD:
             cli_add(add_title, description, category, priority, due_date, repeat_days, repeat_months);
@@ -526,14 +629,18 @@ int cli_run(int argc, char *argv[]) {
         case CMD_SCHEDULE:
             cli_schedule();
             break;
-        case CMD_HELP:
-            cli_help(argv[0]);
-            break;
         case CMD_CATEGORIES:
             cli_categories();
             break;
-        case CMD_LISTS:
-            cli_lists();
+        case CMD_MOVE:
+            if (parse_ids(move_arg, &move_ids) != 0) {
+                return 1;
+            }
+            if (optind >= argc) {
+                fprintf(stderr, "Error: Target list name required. Usage: --move ID|[IDs] <target-list>\n");
+                return 1;
+            }
+            cli_move_multiple(&move_ids, argv[optind]);
             break;
         default:
             cli_help(argv[0]);
@@ -541,7 +648,7 @@ int cli_run(int argc, char *argv[]) {
     }
 
     /* Show updated list after modifying commands */
-    if (cmd == CMD_ADD || cmd == CMD_COMPLETE || cmd == CMD_DELETE || cmd == CMD_EDIT) {
+    if (cmd == CMD_ADD || cmd == CMD_COMPLETE || cmd == CMD_DELETE || cmd == CMD_EDIT || cmd == CMD_MOVE) {
         cli_list(NULL, STATUS_ALL);
     }
 
@@ -919,6 +1026,98 @@ static void cli_delete_multiple(const IdList *ids) {
         snprintf(last_command_msg, sizeof(last_command_msg), "Deleted todo #%d", ids->ids[0]);
     } else if (success_count > 0) {
         snprintf(last_command_msg, sizeof(last_command_msg), "Deleted %d todo(s)", success_count);
+    }
+}
+
+static void cli_move_multiple(const IdList *ids, const char *target_list) {
+    if (!ids || ids->count == 0) {
+        fprintf(stderr, "Error: No todo IDs provided\n");
+        return;
+    }
+
+    if (!target_list || !is_valid_list_name(target_list)) {
+        fprintf(stderr, "Error: Invalid target list name '%s'. Use alphanumeric characters, hyphens, and underscores only (max 63 chars).\n",
+                target_list ? target_list : "");
+        return;
+    }
+
+    /* Prevent moving to the same list */
+    if (active_list_name && strcmp(active_list_name, target_list) == 0) {
+        fprintf(stderr, "Error: Source and target list are the same ('%s')\n", target_list);
+        return;
+    }
+    if (!active_list_name && strcmp(target_list, "todos") == 0) {
+        fprintf(stderr, "Error: Source and target list are the same (default list)\n");
+        return;
+    }
+
+    int success_count = 0;
+    int fail_count = 0;
+
+    for (int i = 0; i < ids->count; i++) {
+        int id = ids->ids[i];
+
+        if (id <= 0) {
+            fprintf(stderr, "Error: Invalid todo ID %d\n", id);
+            fail_count++;
+            continue;
+        }
+
+        /* 1. Read todo from source */
+        Todo todo;
+        if (db_get_todo_by_id(id, &todo) != 0) {
+            fprintf(stderr, "Error: Todo #%d not found\n", id);
+            fail_count++;
+            continue;
+        }
+
+        /* 2. Close source db */
+        db_close();
+
+        /* 3. Open target db */
+        if (db_init(target_list) != 0) {
+            fprintf(stderr, "Error: Failed to open target list '%s'\n", target_list);
+            /* Reopen source */
+            db_init(active_list_name);
+            fail_count++;
+            continue;
+        }
+
+        /* 4. Insert into target */
+        int new_id = db_add_todo_full(&todo);
+
+        /* 5. Close target */
+        db_close();
+
+        /* 6. Reopen source */
+        if (db_init(active_list_name) != 0) {
+            fprintf(stderr, "Error: Failed to reopen source list\n");
+            fail_count++;
+            continue;
+        }
+
+        if (new_id < 0) {
+            fprintf(stderr, "Error: Failed to move todo #%d to '%s'\n", id, target_list);
+            fail_count++;
+            continue;
+        }
+
+        /* 7. Delete from source */
+        if (db_delete_todo(id) != 0) {
+            fprintf(stderr, "Error: Moved todo #%d but failed to delete from source\n", id);
+            fail_count++;
+            continue;
+        }
+
+        success_count++;
+    }
+
+    if (ids->count == 1 && success_count == 1) {
+        snprintf(last_command_msg, sizeof(last_command_msg),
+                 "Moved todo #%d to %s", ids->ids[0], target_list);
+    } else if (success_count > 0) {
+        snprintf(last_command_msg, sizeof(last_command_msg),
+                 "Moved %d todo(s) to %s", success_count, target_list);
     }
 }
 

@@ -15,6 +15,10 @@ int db_add_todo(const char *title, const char *description,
                 const char *category, int priority, time_t due_date,
                 int repeat_days, int repeat_months);
 
+/* Add a todo preserving all fields (for moving between lists).
+ * Returns the new ID or -1 on error. */
+int db_add_todo_full(const Todo *todo);
+
 /* Get todos with optional filters, returns count or -1 on error */
 int db_get_todos(TodoList *list, const TodoFilter *filter);
 

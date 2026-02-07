@@ -121,6 +121,52 @@ int db_add_todo(const char *title, const char *description,
     return new_id;
 }
 
+int db_add_todo_full(const Todo *todo) {
+    if (!db || !todo) return -1;
+
+    const char *sql = "INSERT INTO todos (title, description, category, priority, "
+                      "status, created_at, completed_at, due_date, repeat_days, "
+                      "repeat_months, spawned_next) "
+                      "VALUES (?, ?, ?, ?, ?, datetime(?, 'unixepoch'), "
+                      "CASE WHEN ? > 0 THEN datetime(?, 'unixepoch') ELSE NULL END, "
+                      "?, ?, ?, ?)";
+    sqlite3_stmt *stmt;
+
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Error: Failed to prepare statement: %s\n", sqlite3_errmsg(db));
+        return -1;
+    }
+
+    sqlite3_bind_text(stmt, 1, todo->title, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, todo->description, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, todo->category, -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 4, todo->priority);
+    sqlite3_bind_int(stmt, 5, todo->status);
+    sqlite3_bind_int64(stmt, 6, (sqlite3_int64)todo->created_at);
+    sqlite3_bind_int64(stmt, 7, (sqlite3_int64)todo->completed_at);
+    sqlite3_bind_int64(stmt, 8, (sqlite3_int64)todo->completed_at);
+    if (todo->due_date > 0) {
+        sqlite3_bind_int64(stmt, 9, (sqlite3_int64)todo->due_date);
+    } else {
+        sqlite3_bind_null(stmt, 9);
+    }
+    sqlite3_bind_int(stmt, 10, todo->repeat_days);
+    sqlite3_bind_int(stmt, 11, todo->repeat_months);
+    sqlite3_bind_int(stmt, 12, todo->spawned_next);
+
+    rc = sqlite3_step(stmt);
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "Error: Failed to insert todo: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    int new_id = (int)sqlite3_last_insert_rowid(db);
+    sqlite3_finalize(stmt);
+    return new_id;
+}
+
 int db_get_todos(TodoList *list, const TodoFilter *filter) {
     if (!db) return -1;
 
