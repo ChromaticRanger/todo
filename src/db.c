@@ -24,12 +24,12 @@ static const char *CREATE_TABLE_SQL =
     "CREATE INDEX IF NOT EXISTS idx_category ON todos(category);"
     "CREATE INDEX IF NOT EXISTS idx_status ON todos(status);";
 
-int db_init(void) {
+int db_init(const char *list_name) {
     if (db) {
         return 0; /* Already initialized */
     }
 
-    char *db_path = get_db_path();
+    char *db_path = get_db_path(list_name);
     if (!db_path) {
         return -1;
     }

@@ -3,8 +3,9 @@
 
 #include "todo.h"
 
-/* Initialize the database connection and create tables if needed */
-int db_init(void);
+/* Initialize the database connection and create tables if needed.
+ * If list_name is NULL, uses the default database (todos.db). */
+int db_init(const char *list_name);
 
 /* Close the database connection */
 void db_close(void);
