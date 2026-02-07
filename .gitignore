@@ -1,0 +1,21 @@
+# Build artifacts
+*.o
+*.so
+*.a
+obj/
+
+# Binary
+todo
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Debug
+*.dSYM/
+*.d
+
+# OS files
+.DS_Store
+Thumbs.db

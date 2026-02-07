@@ -101,7 +101,7 @@ void cli_help(const char *program_name) {
     printf("  -c, --category CAT     Set category (default: General)\n");
     printf("  -p, --priority 1-3     Set priority (1=low, 2=medium, 3=high)\n");
     printf("  -s, --status STATUS    Filter by status (pending, completed, all)\n");
-    printf("  -u, --due DATE         Set due date (YYYY-MM-DD or YYYY-MM-DD HH:MM)\n");
+    printf("  -u, --due DATE         Set due date (YYYY-MM-DD, YYYY-MM-DD HH:MM, or Nd/Nw/Nm/Ny)\n");
     printf("  -r, --repeat INTERVAL  Set repeat interval (e.g., 7d for 7 days, 2m for 2 months)\n\n");
     printf("Examples:\n");
     printf("  %s --add \"Buy groceries\" --category shopping --priority 2\n", program_name);
@@ -146,6 +146,37 @@ static int parse_status(const char *status_str) {
 
 static time_t parse_due_date(const char *date_str) {
     if (!date_str) return 0;
+
+    /* Try relative format: Nd, Nw, Nm, Ny */
+    size_t len = strlen(date_str);
+    if (len >= 2) {
+        char unit = date_str[len - 1];
+        if (unit == 'd' || unit == 'D' || unit == 'w' || unit == 'W' ||
+            unit == 'm' || unit == 'M' || unit == 'y' || unit == 'Y') {
+            char *endptr;
+            long value = strtol(date_str, &endptr, 10);
+            if (endptr == date_str + len - 1 && value > 0) {
+                time_t now = time(NULL);
+                struct tm *tm_info = localtime(&now);
+                tm_info->tm_hour = 23;
+                tm_info->tm_min = 59;
+                tm_info->tm_sec = 59;
+                tm_info->tm_isdst = -1;
+
+                if (unit == 'd' || unit == 'D') {
+                    tm_info->tm_mday += (int)value;
+                } else if (unit == 'w' || unit == 'W') {
+                    tm_info->tm_mday += (int)value * 7;
+                } else if (unit == 'm' || unit == 'M') {
+                    tm_info->tm_mon += (int)value;
+                } else if (unit == 'y' || unit == 'Y') {
+                    tm_info->tm_year += (int)value;
+                }
+
+                return mktime(tm_info);
+            }
+        }
+    }
 
     struct tm tm_info = {0};
     tm_info.tm_isdst = -1;  /* Let system determine DST */
@@ -390,7 +421,7 @@ int cli_run(int argc, char *argv[]) {
                 due_date_str = optarg;
                 due_date = parse_due_date(due_date_str);
                 if (due_date == 0) {
-                    fprintf(stderr, "Error: Invalid date format '%s'. Use YYYY-MM-DD or YYYY-MM-DD HH:MM\n", due_date_str);
+                    fprintf(stderr, "Error: Invalid date format '%s'. Use YYYY-MM-DD, YYYY-MM-DD HH:MM, or relative (e.g., 3d, 2w, 1m, 1y)\n", due_date_str);
                     return 1;
                 }
                 break;
