@@ -130,6 +130,7 @@ todo --lists                                   # show all available lists
 todo --move 7 projects                         # move #7 from default to 'projects'
 todo work --move 3 personal                    # move #3 from 'work' to 'personal'
 todo demo --move '[7,8,9]' work                # batch move from 'demo' to 'work'
+todo --delete-list work                        # delete an empty named list
 ```
 
 List names may contain letters, numbers, hyphens and underscores. Target lists are created automatically if they don't exist.
