@@ -27,7 +27,8 @@ typedef enum {
     CMD_HELP,
     CMD_CATEGORIES,
     CMD_LISTS,
-    CMD_MOVE
+    CMD_MOVE,
+    CMD_DELETE_LIST
 } Command;
 
 /* Store last command message for display in list */
@@ -70,6 +71,7 @@ static struct option long_options[] = {
     {"cat",             no_argument,       0, 'A'},
     {"lists",           no_argument,       0, 'L'},
     {"move",            required_argument, 0, 'm'},
+    {"delete-list",     required_argument, 0, 256},
     {0, 0, 0, 0}
 };
 
@@ -91,6 +93,7 @@ static time_t parse_due_date(const char *date_str);
 static void cli_categories(void);
 static void cli_lists(void);
 static void cli_move_multiple(const IdList *ids, const char *target_list);
+static int cli_delete_list(const char *name);
 
 void cli_help(const char *program_name) {
     printf("Usage: %s [listname] [COMMAND] [OPTIONS]\n\n", program_name);
@@ -110,6 +113,7 @@ void cli_help(const char *program_name) {
     printf("  -m, --move ID|[IDs] LIST  Move todo(s) to another list\n");
     printf("  -A, --cat              List all categories\n");
     printf("  -L, --lists            Show all available todo lists\n");
+    printf("      --delete-list NAME Delete an empty named list\n");
     printf("  -h, --help             Show this help message\n\n");
     printf("Options:\n");
     printf("  -t, --title TITLE      Set title (for edit)\n");
@@ -180,6 +184,56 @@ static void cli_lists(void) {
     }
 
     free_list_names(names, count);
+}
+
+static int cli_delete_list(const char *name) {
+    if (!name || !is_valid_list_name(name)) {
+        fprintf(stderr, "Error: Invalid list name '%s'\n", name ? name : "");
+        return 1;
+    }
+
+    if (strcmp(name, "todos") == 0) {
+        fprintf(stderr, "Error: Cannot delete the default list\n");
+        return 1;
+    }
+
+    char *db_path = get_db_path(name);
+    if (!db_path) return 1;
+
+    if (access(db_path, F_OK) != 0) {
+        fprintf(stderr, "Error: List '%s' does not exist\n", name);
+        free_db_path(db_path);
+        return 1;
+    }
+
+    /* Open the list and check if it's empty */
+    if (db_init(name) != 0) {
+        fprintf(stderr, "Error: Failed to open list '%s'\n", name);
+        free_db_path(db_path);
+        return 1;
+    }
+
+    TodoList list;
+    TodoFilter filter = { .category = NULL, .status = STATUS_ALL };
+    int count = db_get_todos(&list, &filter);
+    todo_list_free(&list);
+    db_close();
+
+    if (count > 0) {
+        fprintf(stderr, "Error: List '%s' has %d todo(s). Delete or move them first.\n", name, count);
+        free_db_path(db_path);
+        return 1;
+    }
+
+    if (remove(db_path) != 0) {
+        fprintf(stderr, "Error: Failed to delete list file\n");
+        free_db_path(db_path);
+        return 1;
+    }
+
+    printf("Deleted list '%s'\n", name);
+    free_db_path(db_path);
+    return 0;
 }
 
 static int parse_status(const char *status_str) {
@@ -453,6 +507,10 @@ int cli_run(int argc, char *argv[]) {
             case 'L':
                 cmd = CMD_LISTS;
                 break;
+            case 256:
+                cmd = CMD_DELETE_LIST;
+                move_arg = optarg; /* reuse move_arg to hold list name */
+                break;
             case 't':
                 edit_title = optarg;
                 break;
@@ -508,6 +566,9 @@ int cli_run(int argc, char *argv[]) {
     if (cmd == CMD_LISTS) {
         cli_lists();
         return 0;
+    }
+    if (cmd == CMD_DELETE_LIST) {
+        return cli_delete_list(move_arg);
     }
 
     /* For named lists, only --add may create a new database file.
