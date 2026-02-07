@@ -51,4 +51,7 @@ void print_border_empty(void);
 /* Capitalize the first letter of a string (modifies in place). */
 void capitalize_first(char *str);
 
+/* Validate a list name: alphanumeric, hyphens, underscores, max 63 chars. */
+int is_valid_list_name(const char *name);
+
 #endif /* UTILS_H */

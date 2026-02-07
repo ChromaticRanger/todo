@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <signal.h>
 
 #include "db.h"
@@ -16,23 +15,6 @@ static void signal_handler(int sig) {
     (void)sig;
     cleanup();
     exit(1);
-}
-
-static int is_valid_list_name(const char *name) {
-    if (!name || name[0] == '\0') return 0;
-
-    size_t len = strlen(name);
-    if (len > 63) return 0;
-
-    /* Reject . and .. */
-    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return 0;
-
-    /* Only allow alphanumeric, hyphens, underscores */
-    for (size_t i = 0; i < len; i++) {
-        char c = name[i];
-        if (!isalnum((unsigned char)c) && c != '-' && c != '_') return 0;
-    }
-    return 1;
 }
 
 int main(int argc, char *argv[]) {
