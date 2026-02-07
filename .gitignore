@@ -16,6 +16,9 @@ todo
 *.dSYM/
 *.d
 
+# Python virtual environment
+mcp/.venv/
+
 # OS files
 .DS_Store
 Thumbs.db

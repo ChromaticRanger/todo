@@ -37,8 +37,50 @@ static char last_command_msg[256] = "";
 /* Active list name (NULL = default) */
 static const char *active_list_name = NULL;
 
+/* JSON output mode */
+static int json_output = 0;
+
 void cli_set_list_name(const char *name) {
     active_list_name = name;
+}
+
+/* JSON output helpers */
+
+static void json_print_success(const char *message) {
+    char escaped[512];
+    json_escape(message, escaped, sizeof(escaped));
+    printf("{\"success\":true,\"message\":\"%s\"}\n", escaped);
+}
+
+static void json_print_error(const char *message) {
+    char escaped[512];
+    json_escape(message, escaped, sizeof(escaped));
+    printf("{\"success\":false,\"error\":\"%s\"}\n", escaped);
+}
+
+static void json_print_todo(const Todo *todo) {
+    char title_esc[512], desc_esc[2048], cat_esc[128];
+    json_escape(todo->title, title_esc, sizeof(title_esc));
+    json_escape(todo->description, desc_esc, sizeof(desc_esc));
+    json_escape(todo->category, cat_esc, sizeof(cat_esc));
+    printf("{\"id\":%d,\"title\":\"%s\",\"description\":\"%s\","
+           "\"category\":\"%s\",\"priority\":%d,\"status\":%d,"
+           "\"created_at\":%ld,\"completed_at\":%ld,\"due_date\":%ld,"
+           "\"repeat_days\":%d,\"repeat_months\":%d,\"spawned_next\":%d}",
+           todo->id, title_esc, desc_esc, cat_esc,
+           todo->priority, todo->status,
+           (long)todo->created_at, (long)todo->completed_at,
+           (long)todo->due_date,
+           todo->repeat_days, todo->repeat_months, todo->spawned_next);
+}
+
+static void json_print_todo_list(const TodoList *list) {
+    printf("{\"success\":true,\"count\":%d,\"todos\":[", list->count);
+    for (int i = 0; i < list->count; i++) {
+        if (i > 0) printf(",");
+        json_print_todo(&list->items[i]);
+    }
+    printf("]}\n");
 }
 
 #define MAX_IDS 100
@@ -72,6 +114,7 @@ static struct option long_options[] = {
     {"lists",           no_argument,       0, 'L'},
     {"move",            required_argument, 0, 'm'},
     {"delete-list",     required_argument, 0, 256},
+    {"json",            no_argument,       0, 'j'},
     {0, 0, 0, 0}
 };
 
@@ -147,7 +190,20 @@ static void cli_categories(void) {
     int count = db_get_categories(&categories);
 
     if (count < 0) {
-        fprintf(stderr, "Error: Failed to retrieve categories\n");
+        if (json_output) { json_print_error("Failed to retrieve categories"); } else { fprintf(stderr, "Error: Failed to retrieve categories\n"); }
+        return;
+    }
+
+    if (json_output) {
+        printf("{\"success\":true,\"categories\":[");
+        for (int i = 0; i < categories.count; i++) {
+            char escaped[128];
+            json_escape(categories.categories[i], escaped, sizeof(escaped));
+            if (i > 0) printf(",");
+            printf("\"%s\"", escaped);
+        }
+        printf("]}\n");
+        category_list_free(&categories);
         return;
     }
 
@@ -167,6 +223,19 @@ static void cli_categories(void) {
 static void cli_lists(void) {
     int count = 0;
     char **names = get_available_lists(&count);
+
+    if (json_output) {
+        printf("{\"success\":true,\"lists\":[");
+        for (int i = 0; i < count; i++) {
+            char escaped[128];
+            json_escape(names[i], escaped, sizeof(escaped));
+            if (i > 0) printf(",");
+            printf("\"%s\"", escaped);
+        }
+        printf("]}\n");
+        free_list_names(names, count);
+        return;
+    }
 
     if (count == 0) {
         printf("No todo lists found.\n");
@@ -188,12 +257,14 @@ static void cli_lists(void) {
 
 static int cli_delete_list(const char *name) {
     if (!name || !is_valid_list_name(name)) {
-        fprintf(stderr, "Error: Invalid list name '%s'\n", name ? name : "");
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "Invalid list name '%s'", name ? name : "");
+        if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
         return 1;
     }
 
     if (strcmp(name, "todos") == 0) {
-        fprintf(stderr, "Error: Cannot delete the default list\n");
+        if (json_output) { json_print_error("Cannot delete the default list"); } else { fprintf(stderr, "Error: Cannot delete the default list\n"); }
         return 1;
     }
 
@@ -201,14 +272,18 @@ static int cli_delete_list(const char *name) {
     if (!db_path) return 1;
 
     if (access(db_path, F_OK) != 0) {
-        fprintf(stderr, "Error: List '%s' does not exist\n", name);
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "List '%s' does not exist", name);
+        if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
         free_db_path(db_path);
         return 1;
     }
 
     /* Open the list and check if it's empty */
     if (db_init(name) != 0) {
-        fprintf(stderr, "Error: Failed to open list '%s'\n", name);
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "Failed to open list '%s'", name);
+        if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
         free_db_path(db_path);
         return 1;
     }
@@ -220,18 +295,26 @@ static int cli_delete_list(const char *name) {
     db_close();
 
     if (count > 0) {
-        fprintf(stderr, "Error: List '%s' has %d todo(s). Delete or move them first.\n", name, count);
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "List '%s' has %d todo(s). Delete or move them first.", name, count);
+        if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
         free_db_path(db_path);
         return 1;
     }
 
     if (remove(db_path) != 0) {
-        fprintf(stderr, "Error: Failed to delete list file\n");
+        if (json_output) { json_print_error("Failed to delete list file"); } else { fprintf(stderr, "Error: Failed to delete list file\n"); }
         free_db_path(db_path);
         return 1;
     }
 
-    printf("Deleted list '%s'\n", name);
+    if (json_output) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Deleted list '%s'", name);
+        json_print_success(msg);
+    } else {
+        printf("Deleted list '%s'\n", name);
+    }
     free_db_path(db_path);
     return 0;
 }
@@ -442,7 +525,7 @@ int cli_run(int argc, char *argv[]) {
     /* Reset getopt */
     optind = 1;
 
-    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhALm:t:d:c:p:s:u:r:",
+    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhALm:jt:d:c:p:s:u:r:",
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
@@ -511,6 +594,9 @@ int cli_run(int argc, char *argv[]) {
                 cmd = CMD_DELETE_LIST;
                 move_arg = optarg; /* reuse move_arg to hold list name */
                 break;
+            case 'j':
+                json_output = 1;
+                break;
             case 't':
                 edit_title = optarg;
                 break;
@@ -577,7 +663,9 @@ int cli_run(int argc, char *argv[]) {
     if (active_list_name && cmd != CMD_ADD) {
         char *db_path = get_db_path(active_list_name);
         if (db_path && access(db_path, F_OK) != 0) {
-            fprintf(stderr, "Error: List '%s' does not exist. Use --add to create a new list.\n", active_list_name);
+            char errbuf[256];
+            snprintf(errbuf, sizeof(errbuf), "List '%s' does not exist. Use --add to create a new list.", active_list_name);
+            if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
             free_db_path(db_path);
             return 1;
         }
@@ -585,7 +673,7 @@ int cli_run(int argc, char *argv[]) {
     }
 
     if (db_init(active_list_name) != 0) {
-        fprintf(stderr, "Error: Failed to initialize database\n");
+        if (json_output) { json_print_error("Failed to initialize database"); } else { fprintf(stderr, "Error: Failed to initialize database\n"); }
         return 1;
     }
 
@@ -648,7 +736,7 @@ int cli_run(int argc, char *argv[]) {
     }
 
     /* Show updated list after modifying commands */
-    if (cmd == CMD_ADD || cmd == CMD_COMPLETE || cmd == CMD_DELETE || cmd == CMD_EDIT || cmd == CMD_MOVE) {
+    if (!json_output && (cmd == CMD_ADD || cmd == CMD_COMPLETE || cmd == CMD_DELETE || cmd == CMD_EDIT || cmd == CMD_MOVE)) {
         cli_list(NULL, STATUS_ALL);
     }
 
@@ -659,7 +747,7 @@ static void cli_add(const char *title, const char *description,
                     const char *category, int priority, time_t due_date,
                     int repeat_days, int repeat_months) {
     if (!title || strlen(title) == 0) {
-        fprintf(stderr, "Error: Title is required\n");
+        if (json_output) { json_print_error("Title is required"); } else { fprintf(stderr, "Error: Title is required\n"); }
         return;
     }
 
@@ -671,7 +759,11 @@ static void cli_add(const char *title, const char *description,
 
     int id = db_add_todo(title, description, category, priority, effective_due, repeat_days, repeat_months);
     if (id > 0) {
-        if (repeat_days > 0) {
+        if (json_output) {
+            char msg[256];
+            snprintf(msg, sizeof(msg), "Added todo #%d", id);
+            printf("{\"success\":true,\"message\":\"%s\",\"id\":%d}\n", msg, id);
+        } else if (repeat_days > 0) {
             snprintf(last_command_msg, sizeof(last_command_msg),
                      "Added repeating todo #%d (every %d day%s)", id, repeat_days, repeat_days == 1 ? "" : "s");
         } else if (repeat_months > 0) {
@@ -680,6 +772,8 @@ static void cli_add(const char *title, const char *description,
         } else {
             snprintf(last_command_msg, sizeof(last_command_msg), "Added todo #%d", id);
         }
+    } else if (json_output) {
+        json_print_error("Failed to add todo");
     }
 }
 
@@ -753,7 +847,13 @@ static void cli_list(const char *category, int status) {
 
     int count = db_get_todos(&list, &filter);
     if (count < 0) {
-        fprintf(stderr, "Error: Failed to retrieve todos\n");
+        if (json_output) { json_print_error("Failed to retrieve todos"); } else { fprintf(stderr, "Error: Failed to retrieve todos\n"); }
+        return;
+    }
+
+    if (json_output) {
+        json_print_todo_list(&list);
+        todo_list_free(&list);
         return;
     }
 
@@ -967,7 +1067,7 @@ static void cli_list(const char *category, int status) {
 
 static void cli_complete_multiple(const IdList *ids) {
     if (!ids || ids->count == 0) {
-        fprintf(stderr, "Error: No todo IDs provided\n");
+        if (json_output) { json_print_error("No todo IDs provided"); } else { fprintf(stderr, "Error: No todo IDs provided\n"); }
         return;
     }
 
@@ -978,7 +1078,6 @@ static void cli_complete_multiple(const IdList *ids) {
         int id = ids->ids[i];
 
         if (id <= 0) {
-            fprintf(stderr, "Error: Invalid todo ID %d\n", id);
             fail_count++;
             continue;
         }
@@ -990,7 +1089,12 @@ static void cli_complete_multiple(const IdList *ids) {
         }
     }
 
-    if (ids->count == 1 && success_count == 1) {
+    if (json_output) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Completed %d todo(s)", success_count);
+        printf("{\"success\":%s,\"message\":\"%s\"}\n",
+               success_count > 0 ? "true" : "false", msg);
+    } else if (ids->count == 1 && success_count == 1) {
         snprintf(last_command_msg, sizeof(last_command_msg), "Completed todo #%d", ids->ids[0]);
     } else if (success_count > 0) {
         snprintf(last_command_msg, sizeof(last_command_msg), "Completed %d todo(s)", success_count);
@@ -999,7 +1103,7 @@ static void cli_complete_multiple(const IdList *ids) {
 
 static void cli_delete_multiple(const IdList *ids) {
     if (!ids || ids->count == 0) {
-        fprintf(stderr, "Error: No todo IDs provided\n");
+        if (json_output) { json_print_error("No todo IDs provided"); } else { fprintf(stderr, "Error: No todo IDs provided\n"); }
         return;
     }
 
@@ -1010,7 +1114,6 @@ static void cli_delete_multiple(const IdList *ids) {
         int id = ids->ids[i];
 
         if (id <= 0) {
-            fprintf(stderr, "Error: Invalid todo ID %d\n", id);
             fail_count++;
             continue;
         }
@@ -1022,7 +1125,12 @@ static void cli_delete_multiple(const IdList *ids) {
         }
     }
 
-    if (ids->count == 1 && success_count == 1) {
+    if (json_output) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Deleted %d todo(s)", success_count);
+        printf("{\"success\":%s,\"message\":\"%s\"}\n",
+               success_count > 0 ? "true" : "false", msg);
+    } else if (ids->count == 1 && success_count == 1) {
         snprintf(last_command_msg, sizeof(last_command_msg), "Deleted todo #%d", ids->ids[0]);
     } else if (success_count > 0) {
         snprintf(last_command_msg, sizeof(last_command_msg), "Deleted %d todo(s)", success_count);
@@ -1031,23 +1139,27 @@ static void cli_delete_multiple(const IdList *ids) {
 
 static void cli_move_multiple(const IdList *ids, const char *target_list) {
     if (!ids || ids->count == 0) {
-        fprintf(stderr, "Error: No todo IDs provided\n");
+        if (json_output) { json_print_error("No todo IDs provided"); } else { fprintf(stderr, "Error: No todo IDs provided\n"); }
         return;
     }
 
     if (!target_list || !is_valid_list_name(target_list)) {
-        fprintf(stderr, "Error: Invalid target list name '%s'. Use alphanumeric characters, hyphens, and underscores only (max 63 chars).\n",
-                target_list ? target_list : "");
+        if (json_output) { json_print_error("Invalid target list name"); } else {
+            fprintf(stderr, "Error: Invalid target list name '%s'. Use alphanumeric characters, hyphens, and underscores only (max 63 chars).\n",
+                    target_list ? target_list : "");
+        }
         return;
     }
 
     /* Prevent moving to the same list */
     if (active_list_name && strcmp(active_list_name, target_list) == 0) {
-        fprintf(stderr, "Error: Source and target list are the same ('%s')\n", target_list);
+        char errbuf[128];
+        snprintf(errbuf, sizeof(errbuf), "Source and target list are the same ('%s')", target_list);
+        if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
         return;
     }
     if (!active_list_name && strcmp(target_list, "todos") == 0) {
-        fprintf(stderr, "Error: Source and target list are the same (default list)\n");
+        if (json_output) { json_print_error("Source and target list are the same (default list)"); } else { fprintf(stderr, "Error: Source and target list are the same (default list)\n"); }
         return;
     }
 
@@ -1112,7 +1224,12 @@ static void cli_move_multiple(const IdList *ids, const char *target_list) {
         success_count++;
     }
 
-    if (ids->count == 1 && success_count == 1) {
+    if (json_output) {
+        char msg[256];
+        snprintf(msg, sizeof(msg), "Moved %d todo(s) to %s", success_count, target_list);
+        printf("{\"success\":%s,\"message\":\"%s\"}\n",
+               success_count > 0 ? "true" : "false", msg);
+    } else if (ids->count == 1 && success_count == 1) {
         snprintf(last_command_msg, sizeof(last_command_msg),
                  "Moved todo #%d to %s", ids->ids[0], target_list);
     } else if (success_count > 0) {
@@ -1124,29 +1241,46 @@ static void cli_move_multiple(const IdList *ids, const char *target_list) {
 static void cli_edit(int id, const char *title, const char *description,
                      const char *category, int priority, time_t due_date) {
     if (id <= 0) {
-        fprintf(stderr, "Error: Invalid todo ID\n");
+        if (json_output) { json_print_error("Invalid todo ID"); } else { fprintf(stderr, "Error: Invalid todo ID\n"); }
         return;
     }
 
     if (!title && !description && !category && priority == 0 && due_date == 0) {
-        fprintf(stderr, "Error: No fields to update. Use --title, --description, --category, --priority, or --due\n");
+        if (json_output) { json_print_error("No fields to update"); } else { fprintf(stderr, "Error: No fields to update. Use --title, --description, --category, --priority, or --due\n"); }
         return;
     }
 
     if (db_update_todo(id, title, description, category, priority, due_date) == 0) {
-        snprintf(last_command_msg, sizeof(last_command_msg), "Updated todo #%d", id);
+        if (json_output) {
+            char msg[128];
+            snprintf(msg, sizeof(msg), "Updated todo #%d", id);
+            printf("{\"success\":true,\"message\":\"%s\",\"id\":%d}\n", msg, id);
+        } else {
+            snprintf(last_command_msg, sizeof(last_command_msg), "Updated todo #%d", id);
+        }
+    } else if (json_output) {
+        json_print_error("Failed to update todo");
     }
 }
 
 static void cli_show(int id) {
     if (id <= 0) {
-        fprintf(stderr, "Error: Invalid todo ID\n");
+        if (json_output) { json_print_error("Invalid todo ID"); } else { fprintf(stderr, "Error: Invalid todo ID\n"); }
         return;
     }
 
     Todo todo;
     if (db_get_todo_by_id(id, &todo) != 0) {
-        fprintf(stderr, "Error: Todo #%d not found\n", id);
+        char errbuf[64];
+        snprintf(errbuf, sizeof(errbuf), "Todo #%d not found", id);
+        if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
+        return;
+    }
+
+    if (json_output) {
+        printf("{\"success\":true,\"todo\":");
+        json_print_todo(&todo);
+        printf("}\n");
         return;
     }
 
@@ -1198,7 +1332,13 @@ static void cli_completed_since(time_t since_date) {
 
     int count = db_get_completed_since(&list, since_date);
     if (count < 0) {
-        fprintf(stderr, "Error: Failed to retrieve completed todos\n");
+        if (json_output) { json_print_error("Failed to retrieve completed todos"); } else { fprintf(stderr, "Error: Failed to retrieve completed todos\n"); }
+        return;
+    }
+
+    if (json_output) {
+        json_print_todo_list(&list);
+        todo_list_free(&list);
         return;
     }
 
@@ -1309,7 +1449,13 @@ static void cli_due_range(int days) {
 
     int count = db_get_todos_due_range(&list, start, end);
     if (count < 0) {
-        fprintf(stderr, "Error: Failed to retrieve todos\n");
+        if (json_output) { json_print_error("Failed to retrieve todos"); } else { fprintf(stderr, "Error: Failed to retrieve todos\n"); }
+        return;
+    }
+
+    if (json_output) {
+        json_print_todo_list(&list);
+        todo_list_free(&list);
         return;
     }
 
@@ -1413,7 +1559,13 @@ static void cli_schedule(void) {
 
     int count = db_get_todos_with_due_date(&list);
     if (count < 0) {
-        fprintf(stderr, "Error: Failed to retrieve todos\n");
+        if (json_output) { json_print_error("Failed to retrieve todos"); } else { fprintf(stderr, "Error: Failed to retrieve todos\n"); }
+        return;
+    }
+
+    if (json_output) {
+        json_print_todo_list(&list);
+        todo_list_free(&list);
         return;
     }
 

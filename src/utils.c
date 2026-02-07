@@ -371,6 +371,42 @@ int is_valid_list_name(const char *name) {
     return 1;
 }
 
+void json_escape(const char *src, char *dst, size_t dst_size) {
+    if (!dst || dst_size == 0) return;
+    if (!src) {
+        dst[0] = '\0';
+        return;
+    }
+
+    size_t j = 0;
+    for (size_t i = 0; src[i] && j < dst_size - 1; i++) {
+        unsigned char c = (unsigned char)src[i];
+        if (c == '"' || c == '\\') {
+            if (j + 2 > dst_size - 1) break;
+            dst[j++] = '\\';
+            dst[j++] = c;
+        } else if (c == '\n') {
+            if (j + 2 > dst_size - 1) break;
+            dst[j++] = '\\';
+            dst[j++] = 'n';
+        } else if (c == '\r') {
+            if (j + 2 > dst_size - 1) break;
+            dst[j++] = '\\';
+            dst[j++] = 'r';
+        } else if (c == '\t') {
+            if (j + 2 > dst_size - 1) break;
+            dst[j++] = '\\';
+            dst[j++] = 't';
+        } else if (c < 0x20) {
+            /* Other control chars: skip */
+            continue;
+        } else {
+            dst[j++] = c;
+        }
+    }
+    dst[j] = '\0';
+}
+
 #define BOX_WIDTH 80
 
 static void print_box_line_centered(void) {
