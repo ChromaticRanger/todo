@@ -26,6 +26,8 @@ The screenshot above shows a named list (`todo demo -l`) demonstrating:
 - View recently completed todos
 - Named lists to keep separate sets of todos (e.g. `work`, `personal`)
 - Move todos between lists (single or batch)
+- JSON output mode (`--json`) for scripting and integrations
+- MCP server for natural language task management via Claude Code
 
 ## Dependencies
 
@@ -134,6 +136,68 @@ todo --delete-list work                        # delete an empty named list
 ```
 
 List names may contain letters, numbers, hyphens and underscores. Target lists are created automatically if they don't exist.
+
+### JSON output
+
+Add `--json` to any command to get machine-readable JSON output instead of the bordered display:
+
+```sh
+todo --list --json                            # all todos as JSON
+todo --lists --json                           # available lists
+todo --show 3 --json                          # single todo details
+todo --add "Task" -p 2 -c Work --json         # returns new ID
+todo --today --json                           # today's todos
+```
+
+## Claude Code integration (MCP server)
+
+An [MCP](https://modelcontextprotocol.io/) server is included that exposes the todo CLI as structured tools, allowing you to manage tasks through natural language in [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+
+### Setup
+
+1. Install the Python dependency in a virtual environment:
+
+```sh
+cd mcp
+python3 -m venv .venv
+.venv/bin/pip install mcp
+```
+
+2. Register the server with Claude Code:
+
+```sh
+claude mcp add --transport stdio todo -- /path/to/todo/mcp/.venv/bin/python3 /path/to/todo/mcp/todo_server.py
+```
+
+3. Restart Claude Code. The `todo` tools will be available automatically.
+
+### Available tools
+
+| Tool | Description |
+|------|-------------|
+| `add_task` | Add a new todo with optional category, priority, due date and repeat |
+| `list_tasks` | List todos with optional category and status filters |
+| `complete_task` | Mark a todo as completed |
+| `delete_task` | Delete a todo |
+| `edit_task` | Edit a todo's title, category, priority or due date |
+| `show_task` | Show full details of a specific todo |
+| `move_task` | Move a todo to a different named list |
+| `show_lists` | Show all available todo lists |
+| `delete_list` | Delete an empty named list |
+| `show_today` | Show todos due today |
+| `show_week` | Show todos due within 7 days |
+| `show_schedule` | Show all scheduled todos ordered by date |
+| `show_categories` | Show all categories in a list |
+
+### Example usage
+
+Once configured, you can manage tasks with natural language in Claude Code:
+
+- "Show me my todo lists"
+- "Add a task to projects called 'Maths module in C' under category Ideas with high priority"
+- "What's due this week?"
+- "Complete task 5 on the work list"
+- "Move task 3 from default to personal"
 
 ## Data storage
 
