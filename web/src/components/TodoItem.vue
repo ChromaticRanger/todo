@@ -58,6 +58,18 @@ const isDueOverdue = computed(() => {
 
 const URL_RE = /https?:\/\/[^\s]+/g
 
+const faviconUrl = computed(() => {
+  const match = URL_RE.exec(props.todo.title)
+  URL_RE.lastIndex = 0
+  if (!match) return null
+  try {
+    const domain = new URL(match[0]).hostname
+    return `https://www.google.com/s2/favicons?domain=${domain}&sz=16`
+  } catch {
+    return null
+  }
+})
+
 const titleParts = computed(() => {
   const text = props.todo.title
   const parts: { type: 'text' | 'url'; value: string }[] = []
@@ -124,9 +136,20 @@ async function handleDelete() {
     <div class="flex-1 min-w-0">
       <div class="flex items-start gap-2">
         <span
-          class="text-sm text-gray-100 leading-5 flex-1"
+          class="text-sm text-gray-100 leading-5 flex-1 flex items-baseline gap-1.5"
           :class="isCompleted ? 'line-through text-gray-400' : ''"
         >
+          <span
+            v-if="faviconUrl"
+            class="inline-flex items-center justify-center size-5 rounded-full bg-white/90 flex-shrink-0 self-center"
+          >
+            <img
+              :src="faviconUrl"
+              class="size-3.5"
+              alt=""
+              @error="($event.target as HTMLImageElement).parentElement!.style.display = 'none'"
+            />
+          </span>
           <template v-for="part in titleParts" :key="part.value">
             <a
               v-if="part.type === 'url'"
