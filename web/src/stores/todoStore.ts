@@ -10,6 +10,15 @@ export const useTodoStore = defineStore('todos', () => {
   const currentView = ref<ViewType>('all')
   const currentList = ref<string>('todos')
 
+  // Per-list cache to avoid redundant DB calls
+  const todosCache = new Map<string, Map<ViewType, Todo[]>>()
+  const categoriesCache = new Map<string, string[]>()
+
+  function invalidateList(list: string) {
+    todosCache.delete(list)
+    categoriesCache.delete(list)
+  }
+
   // Group todos by category
   const byCategory = computed(() => {
     const map = new Map<string, Todo[]>()
@@ -35,9 +44,14 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function fetchCategories(list: string) {
+    if (categoriesCache.has(list)) {
+      categories.value = categoriesCache.get(list)!
+      return
+    }
     try {
       const res = await fetch(`/api/categories?list=${encodeURIComponent(list)}`)
       const data = await res.json() as { categories: string[] }
+      categoriesCache.set(list, data.categories)
       categories.value = data.categories
     } catch {
       // non-fatal, leave existing categories
@@ -45,10 +59,18 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function fetchTodos(list: string, view: ViewType = 'all') {
-    loading.value = true
-    error.value = null
     currentList.value = list
     currentView.value = view
+
+    const cachedTodos = todosCache.get(list)?.get(view)
+    if (cachedTodos !== undefined) {
+      todos.value = cachedTodos
+      fetchCategories(list)
+      return
+    }
+
+    loading.value = true
+    error.value = null
     fetchCategories(list)
     try {
       const url = view === 'completed'
@@ -59,6 +81,8 @@ export const useTodoStore = defineStore('todos', () => {
       const res = await fetch(url + statusParam)
       const data = await res.json() as { todos: Todo[] }
       todos.value = data.todos
+      if (!todosCache.has(list)) todosCache.set(list, new Map())
+      todosCache.get(list)!.set(view, data.todos)
     } catch (e) {
       error.value = String(e)
     } finally {
@@ -73,6 +97,7 @@ export const useTodoStore = defineStore('todos', () => {
       body: JSON.stringify({ list_name: list, ...form }),
     })
     if (!res.ok) throw new Error(await res.text())
+    invalidateList(list)
     await fetchTodos(list, currentView.value)
   }
 
@@ -83,6 +108,7 @@ export const useTodoStore = defineStore('todos', () => {
       body: JSON.stringify(form),
     })
     if (!res.ok) throw new Error(await res.text())
+    invalidateList(currentList.value)
     await fetchTodos(currentList.value, currentView.value)
   }
 
@@ -90,6 +116,7 @@ export const useTodoStore = defineStore('todos', () => {
     const res = await fetch(`/api/todos/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(await res.text())
     todos.value = todos.value.filter((t) => t.id !== id)
+    invalidateList(currentList.value)
   }
 
   async function completeTodo(id: number) {
@@ -97,6 +124,7 @@ export const useTodoStore = defineStore('todos', () => {
       method: 'POST',
     })
     if (!res.ok) throw new Error(await res.text())
+    invalidateList(currentList.value)
     await fetchTodos(currentList.value, currentView.value)
   }
 
@@ -105,6 +133,7 @@ export const useTodoStore = defineStore('todos', () => {
       method: 'POST',
     })
     if (!res.ok) throw new Error(await res.text())
+    invalidateList(currentList.value)
     await fetchTodos(currentList.value, currentView.value)
   }
 
@@ -116,6 +145,8 @@ export const useTodoStore = defineStore('todos', () => {
     })
     if (!res.ok) throw new Error(await res.text())
     todos.value = todos.value.filter((t) => t.id !== id)
+    invalidateList(currentList.value)
+    invalidateList(targetList)
   }
 
   function setView(view: ViewType) {
