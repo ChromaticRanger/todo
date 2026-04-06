@@ -18,6 +18,9 @@ const connStr = process.env.DATABASE_URL!
 export const pool = new Pool({
   connectionString: connStr,
   ssl: { rejectUnauthorized: false },
+  max: 3,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
 })
 
 export async function query<T extends pg.QueryResultRow>(
