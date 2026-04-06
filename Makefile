@@ -11,13 +11,13 @@ SOURCES = $(SRCDIR)/main.c $(SRCDIR)/cli.c $(SRCDIR)/db.c $(SRCDIR)/todo.c $(SRC
 OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
 TARGET = todo
 
-# SQLite3 flags via pkg-config
-SQLITE_CFLAGS := $(shell pkg-config --cflags sqlite3 2>/dev/null)
-SQLITE_LDFLAGS := $(shell pkg-config --libs sqlite3 2>/dev/null)
+# PostgreSQL (libpq) flags via pkg-config
+PG_CFLAGS := $(shell pkg-config --cflags libpq 2>/dev/null)
+PG_LDFLAGS := $(shell pkg-config --libs libpq 2>/dev/null)
 
 # Combine all flags
-CFLAGS += $(SQLITE_CFLAGS)
-LDFLAGS += $(SQLITE_LDFLAGS)
+CFLAGS += $(PG_CFLAGS)
+LDFLAGS += $(PG_LDFLAGS)
 
 # Debug build
 ifdef DEBUG
@@ -50,7 +50,7 @@ uninstall:
 
 # Dependencies
 $(OBJDIR)/main.o: $(SRCDIR)/main.c $(SRCDIR)/db.h $(SRCDIR)/cli.h $(SRCDIR)/utils.h
-$(OBJDIR)/db.o: $(SRCDIR)/db.c $(SRCDIR)/db.h $(SRCDIR)/todo.h $(SRCDIR)/utils.h
+$(OBJDIR)/db.o: $(SRCDIR)/db.c $(SRCDIR)/db.h $(SRCDIR)/todo.h
 $(OBJDIR)/todo.o: $(SRCDIR)/todo.c $(SRCDIR)/todo.h
 $(OBJDIR)/cli.o: $(SRCDIR)/cli.c $(SRCDIR)/cli.h $(SRCDIR)/db.h $(SRCDIR)/todo.h $(SRCDIR)/utils.h
 $(OBJDIR)/utils.o: $(SRCDIR)/utils.c $(SRCDIR)/utils.h

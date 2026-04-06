@@ -4,7 +4,6 @@
 #include <string.h>
 #include <getopt.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "cli.h"
 #include "db.h"
@@ -28,7 +27,8 @@ typedef enum {
     CMD_CATEGORIES,
     CMD_LISTS,
     CMD_MOVE,
-    CMD_DELETE_LIST
+    CMD_DELETE_LIST,
+    CMD_VERSION
 } Command;
 
 /* Store last command message for display in list */
@@ -115,6 +115,7 @@ static struct option long_options[] = {
     {"move",            required_argument, 0, 'm'},
     {"delete-list",     required_argument, 0, 256},
     {"json",            no_argument,       0, 'j'},
+    {"version",         no_argument,       0, 'v'},
     {0, 0, 0, 0}
 };
 
@@ -221,8 +222,19 @@ static void cli_categories(void) {
 }
 
 static void cli_lists(void) {
+    if (db_init(NULL) != 0) {
+        if (json_output) { json_print_error("Failed to connect to database"); }
+        else { fprintf(stderr, "Error: Failed to connect to database\n"); }
+        return;
+    }
+
+    char **names = NULL;
     int count = 0;
-    char **names = get_available_lists(&count);
+    if (db_get_available_lists(&names, &count) < 0) {
+        if (json_output) { json_print_error("Failed to retrieve lists"); }
+        else { fprintf(stderr, "Error: Failed to retrieve lists\n"); }
+        return;
+    }
 
     if (json_output) {
         printf("{\"success\":true,\"lists\":[");
@@ -233,26 +245,21 @@ static void cli_lists(void) {
             printf("\"%s\"", escaped);
         }
         printf("]}\n");
-        free_list_names(names, count);
-        return;
-    }
-
-    if (count == 0) {
+    } else if (count == 0) {
         printf("No todo lists found.\n");
-        free_list_names(names, count);
-        return;
-    }
-
-    printf("Available lists:\n");
-    for (int i = 0; i < count; i++) {
-        if (strcmp(names[i], "todos") == 0) {
-            printf("  %s (default)\n", names[i]);
-        } else {
-            printf("  %s\n", names[i]);
+    } else {
+        printf("Available lists:\n");
+        for (int i = 0; i < count; i++) {
+            if (strcmp(names[i], "todos") == 0) {
+                printf("  %s (default)\n", names[i]);
+            } else {
+                printf("  %s\n", names[i]);
+            }
         }
     }
 
-    free_list_names(names, count);
+    for (int i = 0; i < count; i++) free(names[i]);
+    free(names);
 }
 
 static int cli_delete_list(const char *name) {
@@ -268,23 +275,8 @@ static int cli_delete_list(const char *name) {
         return 1;
     }
 
-    char *db_path = get_db_path(name);
-    if (!db_path) return 1;
-
-    if (access(db_path, F_OK) != 0) {
-        char errbuf[128];
-        snprintf(errbuf, sizeof(errbuf), "List '%s' does not exist", name);
-        if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
-        free_db_path(db_path);
-        return 1;
-    }
-
-    /* Open the list and check if it's empty */
     if (db_init(name) != 0) {
-        char errbuf[128];
-        snprintf(errbuf, sizeof(errbuf), "Failed to open list '%s'", name);
-        if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
-        free_db_path(db_path);
+        if (json_output) { json_print_error("Failed to connect to database"); } else { fprintf(stderr, "Error: Failed to connect to database\n"); }
         return 1;
     }
 
@@ -292,19 +284,16 @@ static int cli_delete_list(const char *name) {
     TodoFilter filter = { .category = NULL, .status = STATUS_ALL };
     int count = db_get_todos(&list, &filter);
     todo_list_free(&list);
-    db_close();
+
+    if (count < 0) {
+        if (json_output) { json_print_error("Failed to query list"); } else { fprintf(stderr, "Error: Failed to query list\n"); }
+        return 1;
+    }
 
     if (count > 0) {
         char errbuf[128];
         snprintf(errbuf, sizeof(errbuf), "List '%s' has %d todo(s). Delete or move them first.", name, count);
         if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
-        free_db_path(db_path);
-        return 1;
-    }
-
-    if (remove(db_path) != 0) {
-        if (json_output) { json_print_error("Failed to delete list file"); } else { fprintf(stderr, "Error: Failed to delete list file\n"); }
-        free_db_path(db_path);
         return 1;
     }
 
@@ -315,7 +304,6 @@ static int cli_delete_list(const char *name) {
     } else {
         printf("Deleted list '%s'\n", name);
     }
-    free_db_path(db_path);
     return 0;
 }
 
@@ -525,7 +513,7 @@ int cli_run(int argc, char *argv[]) {
     /* Reset getopt */
     optind = 1;
 
-    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhALm:jt:d:c:p:s:u:r:",
+    while ((opt = getopt_long(argc, argv, "a:lC:D:e:S:R:TWMEhALm:jvt:d:c:p:s:u:r:",
                               long_options, &option_index)) != -1) {
         switch (opt) {
             case 'a':
@@ -597,6 +585,9 @@ int cli_run(int argc, char *argv[]) {
             case 'j':
                 json_output = 1;
                 break;
+            case 'v':
+                cmd = CMD_VERSION;
+                break;
             case 't':
                 edit_title = optarg;
                 break;
@@ -649,27 +640,16 @@ int cli_run(int argc, char *argv[]) {
         cli_help(argv[0]);
         return 0;
     }
+    if (cmd == CMD_VERSION) {
+        printf("todo 2.0.0 (postgresql)\n");
+        return 0;
+    }
     if (cmd == CMD_LISTS) {
         cli_lists();
         return 0;
     }
     if (cmd == CMD_DELETE_LIST) {
         return cli_delete_list(move_arg);
-    }
-
-    /* For named lists, only --add may create a new database file.
-     * All other commands require the list to already exist.
-     * (--move creates the *target* list inside cli_move_multiple.) */
-    if (active_list_name && cmd != CMD_ADD) {
-        char *db_path = get_db_path(active_list_name);
-        if (db_path && access(db_path, F_OK) != 0) {
-            char errbuf[256];
-            snprintf(errbuf, sizeof(errbuf), "List '%s' does not exist. Use --add to create a new list.", active_list_name);
-            if (json_output) { json_print_error(errbuf); } else { fprintf(stderr, "Error: %s\n", errbuf); }
-            free_db_path(db_path);
-            return 1;
-        }
-        free_db_path(db_path);
     }
 
     if (db_init(active_list_name) != 0) {
@@ -1175,48 +1155,8 @@ static void cli_move_multiple(const IdList *ids, const char *target_list) {
             continue;
         }
 
-        /* 1. Read todo from source */
-        Todo todo;
-        if (db_get_todo_by_id(id, &todo) != 0) {
-            fprintf(stderr, "Error: Todo #%d not found\n", id);
-            fail_count++;
-            continue;
-        }
-
-        /* 2. Close source db */
-        db_close();
-
-        /* 3. Open target db */
-        if (db_init(target_list) != 0) {
-            fprintf(stderr, "Error: Failed to open target list '%s'\n", target_list);
-            /* Reopen source */
-            db_init(active_list_name);
-            fail_count++;
-            continue;
-        }
-
-        /* 4. Insert into target */
-        int new_id = db_add_todo_full(&todo);
-
-        /* 5. Close target */
-        db_close();
-
-        /* 6. Reopen source */
-        if (db_init(active_list_name) != 0) {
-            fprintf(stderr, "Error: Failed to reopen source list\n");
-            fail_count++;
-            continue;
-        }
-
-        if (new_id < 0) {
+        if (db_move_todo(id, target_list) != 0) {
             fprintf(stderr, "Error: Failed to move todo #%d to '%s'\n", id, target_list);
-            fail_count++;
-            continue;
-        }
-
-        /* 7. Delete from source */
-        if (db_delete_todo(id) != 0) {
-            fprintf(stderr, "Error: Moved todo #%d but failed to delete from source\n", id);
             fail_count++;
             continue;
         }

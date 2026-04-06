@@ -4,7 +4,8 @@
 #include "todo.h"
 
 /* Initialize the database connection and create tables if needed.
- * If list_name is NULL, uses the default database (todos.db). */
+ * Reads DATABASE_URL from the environment. If list_name is non-NULL,
+ * sets it as the active list; otherwise defaults to "todos". */
 int db_init(const char *list_name);
 
 /* Close the database connection */
@@ -58,5 +59,14 @@ int db_get_todos_due_range(TodoList *list, time_t start, time_t end);
 
 /* Get all pending todos with due dates, sorted by due date ascending */
 int db_get_todos_with_due_date(TodoList *list);
+
+/* Get list of available todo list names from the database.
+ * Allocates *names_out as an array of strdup'd strings; caller must free each entry and the array.
+ * Returns count on success, -1 on error. */
+int db_get_available_lists(char ***names_out, int *count_out);
+
+/* Move a todo to a different list by updating its list_name.
+ * Returns 0 on success, -1 if the todo was not found or on error. */
+int db_move_todo(int id, const char *target_list);
 
 #endif /* DB_H */
