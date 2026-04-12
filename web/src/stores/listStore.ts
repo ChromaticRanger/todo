@@ -13,6 +13,7 @@ export const useListStore = defineStore('lists', () => {
     error.value = null
     try {
       const res = await apiFetch('/api/lists')
+      if (!res.ok) return
       const data = await res.json() as { lists: string[] }
       lists.value = data.lists
       // Set default active list if needed
