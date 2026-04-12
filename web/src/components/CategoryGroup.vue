@@ -17,10 +17,28 @@ const props = defineProps<{
 const store = useTodoStore()
 const listStore = useListStore()
 const showAddForm = ref(false)
+const editing = ref(false)
+const editName = ref('')
 
 async function handleAdd(form: TodoFormData) {
   await store.addTodo(listStore.activeList, { ...form, category: props.category })
   showAddForm.value = false
+}
+
+function startEdit() {
+  editName.value = props.category
+  editing.value = true
+}
+
+async function confirmRename() {
+  const trimmed = editName.value.trim()
+  editing.value = false
+  if (!trimmed || trimmed === props.category) return
+  await store.renameCategory(listStore.activeList, props.category, trimmed)
+}
+
+function cancelEdit() {
+  editing.value = false
 }
 </script>
 
@@ -31,16 +49,40 @@ async function handleAdd(form: TodoFormData) {
   >
     <!-- Category header -->
     <div class="flex items-center justify-between px-4 py-3 border-b border-gray-700/60 bg-gray-800/40">
-      <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">{{ category }}</h3>
+      <!-- Inline rename input -->
+      <input
+        v-if="editing"
+        v-model="editName"
+        type="text"
+        class="bg-gray-700 border border-purple-500 rounded px-1.5 py-0.5 text-sm font-semibold text-gray-300 uppercase tracking-wider focus:outline-none w-36 cursor-text"
+        autofocus
+        @keydown.enter="confirmRename"
+        @keydown.esc="cancelEdit"
+        @blur="confirmRename"
+      />
+      <h3 v-else class="text-sm font-semibold text-gray-300 uppercase tracking-wider">{{ category }}</h3>
+
       <div class="flex items-center gap-2">
         <span class="text-xs text-gray-500">{{ todos.length }}</span>
+        <!-- Edit / rename icon -->
         <button
-          class="p-1 rounded text-gray-500 hover:text-purple-400 hover:bg-gray-700 transition-colors"
+          v-if="!editing"
+          class="p-1 rounded text-gray-600 hover:text-purple-400 hover:bg-gray-700"
+          title="Rename category"
+          @click="startEdit"
+        >
+          <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474ZM3.75 13.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z" />
+          </svg>
+        </button>
+        <!-- Add todo icon -->
+        <button
+          class="p-1 rounded text-gray-500 hover:text-purple-400 hover:bg-gray-700"
           title="Add todo to this category"
           @click="showAddForm = true"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
           </svg>
         </button>
       </div>

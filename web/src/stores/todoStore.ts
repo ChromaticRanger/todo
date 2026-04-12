@@ -150,6 +150,17 @@ export const useTodoStore = defineStore('todos', () => {
     invalidateList(targetList)
   }
 
+  async function renameCategory(list: string, oldName: string, newName: string) {
+    const res = await apiFetch('/api/categories', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ list, oldName, newName }),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    invalidateList(list)
+    await fetchTodos(list, currentView.value)
+  }
+
   function setView(view: ViewType) {
     currentView.value = view
   }
@@ -169,6 +180,7 @@ export const useTodoStore = defineStore('todos', () => {
     completeTodo,
     uncompleteTodo,
     moveTodo,
+    renameCategory,
     setView,
   }
 })

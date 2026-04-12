@@ -31,6 +31,23 @@ export const useListStore = defineStore('lists', () => {
     activeList.value = name
   }
 
+  async function renameList(oldName: string, newName: string) {
+    try {
+      const res = await apiFetch(`/api/lists/${encodeURIComponent(oldName)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      })
+      if (!res.ok) return
+      const idx = lists.value.indexOf(oldName)
+      if (idx !== -1) lists.value[idx] = newName
+      lists.value.sort()
+      if (activeList.value === oldName) activeList.value = newName
+    } catch (e) {
+      error.value = String(e)
+    }
+  }
+
   async function deleteList(name: string) {
     try {
       await apiFetch(`/api/lists/${encodeURIComponent(name)}`, { method: 'DELETE' })
@@ -53,5 +70,5 @@ export const useListStore = defineStore('lists', () => {
     }
   }
 
-  return { lists, activeList, loading, error, fetchLists, setActiveList, deleteList, addListLocally }
+  return { lists, activeList, loading, error, fetchLists, setActiveList, renameList, deleteList, addListLocally }
 })

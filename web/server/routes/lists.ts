@@ -15,6 +15,21 @@ router.get('/', async (_req, res) => {
   }
 })
 
+// PATCH /api/lists/:name — rename a list
+router.patch('/:name', async (req, res) => {
+  const { name: newName } = req.body as { name?: string }
+  if (!newName || !newName.trim()) {
+    res.status(400).json({ error: 'New name is required' })
+    return
+  }
+  try {
+    await query('UPDATE todos SET list_name = $1 WHERE list_name = $2', [newName.trim(), req.params.name])
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // DELETE /api/lists/:name — delete all todos in a list
 router.delete('/:name', async (req, res) => {
   try {
