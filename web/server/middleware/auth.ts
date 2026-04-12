@@ -1,6 +1,5 @@
 import type { Request, Response, NextFunction } from 'express'
-
-export const validTokens = new Set<string>()
+import jwt from 'jsonwebtoken'
 
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization
@@ -10,10 +9,17 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
   }
 
   const token = authHeader.slice(7)
-  if (!validTokens.has(token)) {
-    res.status(401).json({ error: 'Invalid token' })
+  const secret = process.env.JWT_SECRET
+
+  if (!secret) {
+    res.status(500).json({ error: 'Server is not configured correctly' })
     return
   }
 
-  next()
+  try {
+    jwt.verify(token, secret)
+    next()
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' })
+  }
 }

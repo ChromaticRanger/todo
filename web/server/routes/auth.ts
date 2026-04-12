@@ -1,7 +1,6 @@
 import { Router } from 'express'
-import crypto from 'crypto'
+import jwt from 'jsonwebtoken'
 import rateLimit from 'express-rate-limit'
-import { validTokens } from '../middleware/auth.js'
 
 const router = Router()
 
@@ -18,15 +17,15 @@ router.post('/login', loginLimiter, (req, res) => {
 
   const validUsername = process.env.AUTH_USERNAME
   const validPassword = process.env.AUTH_PASSWORD
+  const secret = process.env.JWT_SECRET
 
-  if (!validUsername || !validPassword) {
+  if (!validUsername || !validPassword || !secret) {
     res.status(500).json({ error: 'Server authentication is not configured' })
     return
   }
 
   if (username === validUsername && password === validPassword) {
-    const token = crypto.randomUUID()
-    validTokens.add(token)
+    const token = jwt.sign({ username }, secret, { expiresIn: '7d' })
     res.json({ token })
   } else {
     res.status(401).json({ error: 'Invalid credentials' })
