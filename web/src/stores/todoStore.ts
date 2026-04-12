@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Todo, TodoFormData, ViewType } from '../types/todo'
+import { apiFetch } from '../lib/api'
 
 export const useTodoStore = defineStore('todos', () => {
   const todos = ref<Todo[]>([])
@@ -49,7 +50,7 @@ export const useTodoStore = defineStore('todos', () => {
       return
     }
     try {
-      const res = await fetch(`/api/categories?list=${encodeURIComponent(list)}`)
+      const res = await apiFetch(`/api/categories?list=${encodeURIComponent(list)}`)
       const data = await res.json() as { categories: string[] }
       categoriesCache.set(list, data.categories)
       categories.value = data.categories
@@ -78,7 +79,7 @@ export const useTodoStore = defineStore('todos', () => {
         : buildUrl(list, view)
 
       const statusParam = view === 'all' ? '&status=0' : ''
-      const res = await fetch(url + statusParam)
+      const res = await apiFetch(url + statusParam)
       const data = await res.json() as { todos: Todo[] }
       todos.value = data.todos
       if (!todosCache.has(list)) todosCache.set(list, new Map())
@@ -91,7 +92,7 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function addTodo(list: string, form: TodoFormData) {
-    const res = await fetch('/api/todos', {
+    const res = await apiFetch('/api/todos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ list_name: list, ...form }),
@@ -102,7 +103,7 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function updateTodo(id: number, form: Partial<TodoFormData>) {
-    const res = await fetch(`/api/todos/${id}`, {
+    const res = await apiFetch(`/api/todos/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -113,14 +114,14 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function deleteTodo(id: number) {
-    const res = await fetch(`/api/todos/${id}`, { method: 'DELETE' })
+    const res = await apiFetch(`/api/todos/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(await res.text())
     todos.value = todos.value.filter((t) => t.id !== id)
     invalidateList(currentList.value)
   }
 
   async function completeTodo(id: number) {
-    const res = await fetch(`/api/todos/${id}/complete?list=${encodeURIComponent(currentList.value)}`, {
+    const res = await apiFetch(`/api/todos/${id}/complete?list=${encodeURIComponent(currentList.value)}`, {
       method: 'POST',
     })
     if (!res.ok) throw new Error(await res.text())
@@ -129,7 +130,7 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function uncompleteTodo(id: number) {
-    const res = await fetch(`/api/todos/${id}/uncomplete?list=${encodeURIComponent(currentList.value)}`, {
+    const res = await apiFetch(`/api/todos/${id}/uncomplete?list=${encodeURIComponent(currentList.value)}`, {
       method: 'POST',
     })
     if (!res.ok) throw new Error(await res.text())
@@ -138,7 +139,7 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function moveTodo(id: number, targetList: string) {
-    const res = await fetch(`/api/todos/${id}/move`, {
+    const res = await apiFetch(`/api/todos/${id}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ target_list: targetList }),

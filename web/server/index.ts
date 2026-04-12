@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
@@ -5,6 +6,8 @@ import { fileURLToPath } from 'url'
 import todosRouter from './routes/todos.js'
 import listsRouter from './routes/lists.js'
 import categoriesRouter from './routes/categories.js'
+import authRouter from './routes/auth.js'
+import { authMiddleware } from './middleware/auth.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -18,6 +21,10 @@ app.use(express.json())
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
+
+app.use('/api', authRouter)
+
+app.use('/api', authMiddleware)
 
 app.use('/api/todos', todosRouter)
 app.use('/api/lists', listsRouter)
