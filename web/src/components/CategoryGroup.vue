@@ -11,6 +11,7 @@ const props = defineProps<{
   category: string
   todos: Todo[]
   allCategories: string[]
+  layout?: 'grid' | 'kanban'
 }>()
 
 const store = useTodoStore()
@@ -24,7 +25,10 @@ async function handleAdd(form: TodoFormData) {
 </script>
 
 <template>
-  <div class="w-max min-w-52 flex-shrink-0 flex flex-col bg-gray-900 border border-gray-700/60 rounded-xl overflow-hidden max-h-[calc(100vh-14rem)]">
+  <div
+    class="flex flex-col bg-gray-900 border border-gray-700/60 rounded-xl overflow-hidden max-h-[calc(100vh-14rem)]"
+    :class="layout === 'kanban' ? 'w-max min-w-52 shrink-0' : ''"
+  >
     <!-- Category header -->
     <div class="flex items-center justify-between px-4 py-3 border-b border-gray-700/60 bg-gray-800/40">
       <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">{{ category }}</h3>
