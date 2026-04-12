@@ -2,14 +2,17 @@
 import { onMounted, onUnmounted, watch, ref } from 'vue'
 import { useListStore } from './stores/listStore'
 import { useTodoStore } from './stores/todoStore'
+import { useAuthStore } from './stores/authStore'
 import type { ViewType } from './types/todo'
 import ListTabs from './components/ListTabs.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
 import ListView from './components/ListView.vue'
 import TodoForm from './components/TodoForm.vue'
+import LoginPage from './components/LoginPage.vue'
 
 const listStore = useListStore()
 const todoStore = useTodoStore()
+const authStore = useAuthStore()
 
 const showAddForm = ref(false)
 const currentView = ref<ViewType>('all')
@@ -21,11 +24,23 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-onMounted(async () => {
-  window.addEventListener('keydown', handleKeydown)
+async function loadData() {
   await listStore.fetchLists()
   if (listStore.lists.length > 0) {
     await todoStore.fetchTodos(listStore.activeList, currentView.value)
+  }
+}
+
+onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown)
+  if (authStore.isAuthenticated) {
+    await loadData()
+  }
+})
+
+watch(() => authStore.isAuthenticated, async (authenticated) => {
+  if (authenticated) {
+    await loadData()
   }
 })
 
@@ -58,7 +73,8 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
+  <LoginPage v-if="!authStore.isAuthenticated" />
+  <div v-else class="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
     <!-- Header -->
     <header class="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
       <div class="flex items-center gap-3">
@@ -68,15 +84,28 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
         </svg>
         <h1 class="text-lg font-semibold text-gray-100">Todo Dashboard</h1>
       </div>
-      <button
-        class="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"
-        @click="showAddForm = true"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-        </svg>
-        Add Todo
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          class="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"
+          @click="showAddForm = true"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          Add Todo
+        </button>
+        <button
+          type="button"
+          class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 text-sm transition-colors"
+          @click="authStore.logout()"
+          title="Sign out"
+        >
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          </svg>
+          Sign out
+        </button>
+      </div>
     </header>
 
     <!-- List tabs -->
