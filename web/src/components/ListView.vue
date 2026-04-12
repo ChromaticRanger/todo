@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUpdated } from 'vue'
 import { useTodoStore } from '../stores/todoStore'
 import CategoryGroup from './CategoryGroup.vue'
 import EmptyState from './EmptyState.vue'
@@ -17,6 +17,29 @@ const allCategories = computed(() => store.categories)
 
 const confirmDeleteId = ref<number | null>(null)
 
+// Carousel scroll state
+const kanbanRef = ref<HTMLElement | null>(null)
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+
+function updateScrollState() {
+  const el = kanbanRef.value
+  if (!el) return
+  canScrollLeft.value = el.scrollLeft > 0
+  canScrollRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+}
+
+function scrollLeft() {
+  kanbanRef.value?.scrollBy({ left: -kanbanRef.value.clientWidth, behavior: 'smooth' })
+}
+
+function scrollRight() {
+  kanbanRef.value?.scrollBy({ left: kanbanRef.value.clientWidth, behavior: 'smooth' })
+}
+
+onMounted(updateScrollState)
+onUpdated(updateScrollState)
+
 function formatDate(epoch: number | null): string {
   if (!epoch) return 'Unknown'
   return new Date(epoch * 1000).toLocaleDateString('en-GB', {
@@ -32,7 +55,7 @@ async function handleDelete() {
 </script>
 
 <template>
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 min-h-0" :class="showFlat ? 'overflow-y-auto' : 'overflow-hidden'">
     <EmptyState v-if="store.todos.length === 0 && !store.loading" :view="store.currentView" />
 
     <!-- Loading -->
@@ -41,14 +64,43 @@ async function handleDelete() {
     </div>
 
     <!-- Category view (All / Today / Week / Month) -->
-    <div v-else-if="!showFlat && store.todos.length > 0" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <CategoryGroup
-        v-for="[cat, todos] in store.byCategory"
-        :key="cat"
-        :category="cat"
-        :todos="todos"
-        :all-categories="allCategories"
-      />
+    <div v-else-if="!showFlat && store.todos.length > 0" class="relative h-full">
+      <!-- Left carousel button -->
+      <button
+        v-if="canScrollLeft"
+        class="fixed left-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-gray-800/90 border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors shadow-lg"
+        @click="scrollLeft"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
+
+      <!-- Scrollable track -->
+      <div
+        ref="kanbanRef"
+        class="flex gap-4 overflow-x-auto pb-4 items-start scrollbar-hide"
+        @scroll="updateScrollState"
+      >
+        <CategoryGroup
+          v-for="[cat, todos] in store.byCategory"
+          :key="cat"
+          :category="cat"
+          :todos="todos"
+          :all-categories="allCategories"
+        />
+      </div>
+
+      <!-- Right carousel button -->
+      <button
+        v-if="canScrollRight"
+        class="fixed right-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-gray-800/90 border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors shadow-lg"
+        @click="scrollRight"
+      >
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
     </div>
 
     <!-- Flat view (Schedule / Completed) -->

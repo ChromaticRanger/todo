@@ -133,10 +133,10 @@ async function handleDelete() {
     </button>
 
     <!-- Content -->
-    <div class="flex-1 min-w-0">
+    <div class="flex-1">
       <div class="flex items-start gap-2">
         <span
-          class="text-sm text-gray-100 leading-5 flex-1 flex items-baseline gap-1.5"
+          class="text-sm text-gray-100 leading-5 flex-1 flex items-baseline gap-1.5 whitespace-nowrap"
           :class="isCompleted ? 'line-through text-gray-400' : ''"
         >
           <span

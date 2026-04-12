@@ -119,7 +119,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
     </div>
 
     <!-- Main content -->
-    <main class="flex-1 overflow-auto p-4">
+    <main class="flex-1 flex flex-col min-h-0 overflow-hidden p-4">
       <ListView />
     </main>
 
