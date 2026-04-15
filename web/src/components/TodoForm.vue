@@ -90,43 +90,43 @@ const priorityLabels = [
 
 <template>
   <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-    <div class="bg-gray-800 border border-gray-700 rounded-xl w-full max-w-lg shadow-2xl max-h-screen overflow-y-auto">
+    <div class="bg-surface border border-border-strong rounded-xl w-full max-w-lg dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5 max-h-screen overflow-y-auto">
       <div class="p-6">
-        <h3 class="text-gray-100 font-semibold text-lg mb-5">
+        <h3 class="text-text font-semibold text-lg mb-5">
           {{ isEdit ? 'Edit Todo' : 'Add Todo' }}
         </h3>
 
         <form @submit.prevent="submit" class="space-y-4">
           <!-- Title -->
           <div>
-            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Title *</label>
+            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Title *</label>
             <input
               v-model="title"
               type="text"
               placeholder="What needs to be done?"
-              class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500"
+              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               ref="titleInput"
             />
           </div>
 
           <!-- Description -->
           <div>
-            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Description</label>
+            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Description</label>
             <textarea
               v-model="description"
               rows="2"
               placeholder="Optional details…"
-              class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500 resize-none"
+              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent resize-none"
             />
           </div>
 
           <!-- Category + Priority row -->
           <div class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Category</label>
+              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Category</label>
               <select
                 v-model="selectedCategory"
-                class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500"
+                class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               >
                 <option v-for="c in knownCategories" :key="c" :value="c">{{ c }}</option>
                 <option value="__other__">Other…</option>
@@ -136,14 +136,14 @@ const priorityLabels = [
                 v-model="customCategory"
                 type="text"
                 placeholder="Category name"
-                class="mt-2 w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500"
+                class="mt-2 w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               />
             </div>
             <div>
-              <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Priority</label>
+              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Priority</label>
               <select
                 v-model="priority"
-                class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500"
+                class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               >
                 <option v-for="p in priorityLabels" :key="p.value" :value="p.value">
                   {{ p.label }}
@@ -154,41 +154,41 @@ const priorityLabels = [
 
           <!-- Due date -->
           <div>
-            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Due Date</label>
+            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Due Date</label>
             <input
               v-model="dueStr"
               type="date"
-              class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500"
+              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
             />
           </div>
 
           <!-- Repeat -->
           <div>
-            <label class="block text-xs text-gray-400 mb-1 uppercase tracking-wider">Repeat</label>
+            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Repeat</label>
             <div class="flex gap-2">
               <input
                 v-model.number="repeatValue"
                 type="number"
                 min="0"
                 placeholder="0"
-                class="w-20 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500"
+                class="w-20 bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               />
               <select
                 v-model="repeatUnit"
-                class="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500"
+                class="flex-1 bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               >
                 <option value="days">Days</option>
                 <option value="months">Months</option>
               </select>
             </div>
-            <p v-if="repeatValue > 0" class="text-xs text-purple-400 mt-1">
+            <p v-if="repeatValue > 0" class="text-xs text-accent mt-1">
               Repeats every {{ repeatValue }} {{ repeatUnit }}
             </p>
           </div>
           <div class="flex gap-3 justify-end mt-6">
             <button
               type="button"
-              class="px-4 py-2 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors"
+              class="px-4 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
               @click="emit('cancel')"
             >
               Cancel
@@ -196,7 +196,7 @@ const priorityLabels = [
             <button
               type="submit"
               :disabled="!title.trim()"
-              class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors"
+              class="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg font-medium transition-colors"
             >
               {{ isEdit ? 'Save' : 'Add' }}
             </button>

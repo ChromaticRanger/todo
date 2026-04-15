@@ -44,30 +44,30 @@ function cancelEdit() {
 
 <template>
   <div
-    class="flex flex-col bg-gray-900 border border-gray-700/60 rounded-xl overflow-hidden max-h-[calc(100vh-14rem)]"
+    class="flex flex-col bg-surface border border-border-strong/60 rounded-xl overflow-hidden max-h-[calc(100vh-14rem)] dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
     :class="layout === 'kanban' ? 'w-max min-w-52 shrink-0' : ''"
   >
     <!-- Category header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-700/60 bg-gray-800/40">
+    <div class="flex items-center justify-between px-4 py-3 border-b border-border-strong/60 bg-surface-hover/40">
       <!-- Inline rename input -->
       <input
         v-if="editing"
         v-model="editName"
         type="text"
-        class="bg-gray-700 border border-purple-500 rounded px-1.5 py-0.5 text-sm font-semibold text-gray-300 uppercase tracking-wider focus:outline-none w-36 cursor-text"
+        class="bg-surface-hover border border-accent rounded px-1.5 py-0.5 text-sm font-semibold text-muted uppercase tracking-wider focus:outline-none w-36 cursor-text"
         autofocus
         @keydown.enter="confirmRename"
         @keydown.esc="cancelEdit"
         @blur="confirmRename"
       />
-      <h3 v-else class="text-sm font-semibold text-gray-300 uppercase tracking-wider">{{ category }}</h3>
+      <h3 v-else class="text-sm font-semibold text-muted uppercase tracking-wider">{{ category }}</h3>
 
       <div class="flex items-center gap-2">
-        <span class="text-xs text-gray-500">{{ todos.length }}</span>
+        <span class="text-xs text-muted">{{ todos.length }}</span>
         <!-- Edit / rename icon -->
         <button
           v-if="!editing"
-          class="p-1 rounded text-gray-600 hover:text-purple-400 hover:bg-gray-700"
+          class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
           title="Rename category"
           @click="startEdit"
         >
@@ -77,7 +77,7 @@ function cancelEdit() {
         </button>
         <!-- Add todo icon -->
         <button
-          class="p-1 rounded text-gray-500 hover:text-purple-400 hover:bg-gray-700"
+          class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
           title="Add todo to this category"
           @click="showAddForm = true"
         >
@@ -98,7 +98,7 @@ function cancelEdit() {
         :current-list="listStore.activeList"
       />
 
-      <div v-if="todos.length === 0" class="text-xs text-gray-600 text-center py-2">
+      <div v-if="todos.length === 0" class="text-xs text-muted text-center py-2">
         No items
       </div>
     </div>

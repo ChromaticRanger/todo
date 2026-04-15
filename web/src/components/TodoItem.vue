@@ -21,9 +21,9 @@ const showConfirm = ref(false)
 
 const priorityBorderClass = computed(() => {
   switch (props.todo.priority) {
-    case Priority.HIGH: return 'border-l-red-500'
-    case Priority.LOW: return 'border-l-green-500'
-    default: return 'border-l-yellow-500'
+    case Priority.HIGH: return 'border-l-danger'
+    case Priority.LOW: return 'border-l-success-fg'
+    default: return 'border-l-warning-fg'
   }
 })
 
@@ -37,9 +37,9 @@ const priorityLabel = computed(() => {
 
 const priorityBadgeClass = computed(() => {
   switch (props.todo.priority) {
-    case Priority.HIGH: return 'bg-red-900/40 text-red-400'
-    case Priority.LOW: return 'bg-green-900/40 text-green-400'
-    default: return 'bg-yellow-900/40 text-yellow-400'
+    case Priority.HIGH: return 'bg-danger-bg text-danger-fg'
+    case Priority.LOW: return 'bg-success-bg text-success-fg'
+    default: return 'bg-warning-bg text-warning-fg'
   }
 })
 
@@ -115,19 +115,19 @@ async function handleDelete() {
 
 <template>
   <div
-    class="flex items-start gap-3 p-3 rounded-lg border-l-4 bg-gray-800/60 hover:bg-gray-800 transition-colors group"
+    class="flex items-start gap-3 p-3 rounded-lg border-l-4 bg-surface/60 hover:bg-surface-hover transition-colors group"
     :class="[priorityBorderClass, isCompleted ? 'opacity-60' : '']"
   >
     <!-- Complete toggle -->
     <button
-      class="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors"
+      class="mt-0.5 flex-shrink-0 size-5 rounded-full border-2 flex items-center justify-center transition-colors"
       :class="isCompleted
-        ? 'bg-purple-600 border-purple-600'
-        : 'border-gray-500 hover:border-purple-400'"
+        ? 'bg-accent border-accent'
+        : 'border-border-strong hover:border-accent'"
       @click="toggleComplete"
       :title="isCompleted ? 'Mark pending' : 'Mark complete'"
     >
-      <svg v-if="isCompleted" class="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+      <svg v-if="isCompleted" class="size-3 text-accent-fg" fill="currentColor" viewBox="0 0 20 20">
         <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
       </svg>
     </button>
@@ -136,8 +136,8 @@ async function handleDelete() {
     <div class="flex-1">
       <div class="flex items-start gap-2">
         <span
-          class="text-sm text-gray-100 leading-5 flex-1 flex items-baseline gap-1.5 whitespace-nowrap"
-          :class="isCompleted ? 'line-through text-gray-400' : ''"
+          class="text-sm text-text leading-5 flex-1 flex items-baseline gap-1.5 whitespace-nowrap"
+          :class="isCompleted ? 'line-through text-muted' : ''"
         >
           <span
             v-if="faviconUrl"
@@ -156,7 +156,7 @@ async function handleDelete() {
               :href="part.value"
               target="_blank"
               rel="noopener noreferrer"
-              class="text-purple-400 hover:text-purple-300 underline underline-offset-2"
+              class="text-accent hover:text-accent-hover underline underline-offset-2"
               @click.stop
             >{{ part.value }}</a>
             <template v-else>{{ part.value }}</template>
@@ -167,7 +167,7 @@ async function handleDelete() {
         </span>
       </div>
 
-      <div v-if="todo.description" class="mt-1 text-xs text-gray-400 leading-relaxed">
+      <div v-if="todo.description" class="mt-1 text-xs text-muted leading-relaxed">
         {{ todo.description }}
       </div>
 
@@ -175,40 +175,40 @@ async function handleDelete() {
         <span
           v-if="dueDateStr"
           class="text-xs"
-          :class="isDueOverdue ? 'text-red-400 font-medium' : 'text-gray-500'"
+          :class="isDueOverdue ? 'text-danger font-medium' : 'text-muted'"
         >
           {{ isDueOverdue ? '⚠ ' : '' }}{{ dueDateStr }}
         </span>
-        <span v-if="repeatStr" class="text-xs text-purple-400">{{ repeatStr }}</span>
+        <span v-if="repeatStr" class="text-xs text-accent">{{ repeatStr }}</span>
       </div>
     </div>
 
     <!-- Actions (visible on hover) -->
     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
       <button
-        class="p-1 rounded text-gray-500 hover:text-gray-200 hover:bg-gray-700 transition-colors"
+        class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
         title="Edit"
         @click="showEdit = true"
       >
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
       </button>
       <button
-        class="p-1 rounded text-gray-500 hover:text-blue-400 hover:bg-gray-700 transition-colors"
+        class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover transition-colors"
         title="Move to list"
         @click="showMove = true"
       >
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
       </button>
       <button
-        class="p-1 rounded text-gray-500 hover:text-red-400 hover:bg-gray-700 transition-colors"
+        class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
         title="Delete"
         @click="showConfirm = true"
       >
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
         </svg>
       </button>
