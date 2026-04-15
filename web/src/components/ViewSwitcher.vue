@@ -21,8 +21,8 @@ const views: { key: ViewType; label: string }[] = [
       :key="v.key"
       class="px-3 py-1.5 rounded-lg text-sm transition-colors"
       :class="current === v.key
-        ? 'bg-purple-600 text-white font-medium'
-        : 'text-gray-400 hover:text-gray-100 hover:bg-gray-800'"
+        ? 'bg-accent text-accent-fg font-medium'
+        : 'text-muted hover:text-text hover:bg-surface-hover'"
       @click="emit('change', v.key)"
     >
       {{ v.label }}

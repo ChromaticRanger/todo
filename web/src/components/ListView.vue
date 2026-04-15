@@ -60,7 +60,7 @@ async function handleDelete() {
 
     <!-- Loading -->
     <div v-if="store.loading" class="flex items-center justify-center py-24">
-      <div class="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+      <div class="size-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
     </div>
 
     <!-- Category view (All / Today / Week / Month) -->
@@ -83,10 +83,10 @@ async function handleDelete() {
         <!-- Left carousel button -->
         <button
           v-if="canScrollLeft"
-          class="fixed left-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-gray-800/90 border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors shadow-lg"
+          class="fixed left-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-surface/90 border border-border-strong text-muted hover:text-text hover:bg-surface-hover transition-colors dark:shadow-none shadow-lg"
           @click="scrollLeft"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
@@ -110,10 +110,10 @@ async function handleDelete() {
         <!-- Right carousel button -->
         <button
           v-if="canScrollRight"
-          class="fixed right-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-gray-800/90 border border-gray-700 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors shadow-lg"
+          class="fixed right-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-surface/90 border border-border-strong text-muted hover:text-text hover:bg-surface-hover transition-colors dark:shadow-none shadow-lg"
           @click="scrollRight"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
         </button>
@@ -126,30 +126,30 @@ async function handleDelete() {
       <div
         v-for="todo in store.todos"
         :key="todo.id"
-        class="bg-gray-900 border border-gray-700/60 rounded-xl p-4 group"
+        class="bg-surface border border-border-strong/60 rounded-xl p-4 group dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="flex-1">
             <div class="flex items-center gap-2 mb-1">
-              <span class="text-xs text-gray-500 uppercase tracking-wider">{{ todo.category }}</span>
+              <span class="text-xs text-muted uppercase tracking-wider">{{ todo.category }}</span>
             </div>
-            <p class="text-sm text-gray-100" :class="todo.status === 1 ? 'line-through text-gray-400' : ''">
+            <p class="text-sm text-text" :class="todo.status === 1 ? 'line-through text-muted' : ''">
               {{ todo.title }}
             </p>
-            <p v-if="store.currentView === 'schedule' && todo.due_date" class="text-xs text-purple-400 mt-1">
+            <p v-if="store.currentView === 'schedule' && todo.due_date" class="text-xs text-accent mt-1">
               Due: {{ formatDate(todo.due_date) }}
             </p>
-            <p v-if="store.currentView === 'completed' && todo.completed_at" class="text-xs text-gray-500 mt-1">
+            <p v-if="store.currentView === 'completed' && todo.completed_at" class="text-xs text-muted mt-1">
               Completed: {{ formatDate(todo.completed_at) }}
             </p>
           </div>
           <button
             v-if="store.currentView === 'completed'"
-            class="p-1 rounded text-gray-600 hover:text-red-400 hover:bg-gray-700 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+            class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors opacity-0 group-hover:opacity-100 shrink-0"
             title="Delete"
             @click="confirmDeleteId = todo.id"
           >
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>

@@ -33,28 +33,28 @@ function confirm() {
 
 <template>
   <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-gray-800 border border-gray-700 rounded-xl p-6 max-w-sm w-full mx-4 shadow-2xl">
-      <h3 class="text-gray-100 font-semibold mb-4">Move "{{ todoTitle }}"</h3>
+    <div class="bg-surface border border-border-strong rounded-xl p-6 max-w-sm w-full mx-4 dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5">
+      <h3 class="text-text font-semibold mb-4">Move "{{ todoTitle }}"</h3>
 
       <div class="space-y-2 mb-4">
         <div v-for="(list, i) in otherLists" :key="list">
-          <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-700 cursor-pointer">
+          <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover cursor-pointer">
             <input
               :ref="i === 0 ? 'firstRadio' : undefined"
               type="radio"
               v-model="selected"
               :value="list"
               @change="showNewInput = false"
-              class="accent-purple-500"
+              class="accent-accent"
             />
-            <span class="text-gray-200">{{ list }}</span>
+            <span class="text-text">{{ list }}</span>
           </label>
         </div>
 
-        <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-700 cursor-pointer">
+        <label class="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-hover cursor-pointer">
           <input type="radio" v-model="selected" value="__new__" @change="showNewInput = true"
-            class="accent-purple-500" />
-          <span class="text-gray-400">New list…</span>
+            class="accent-accent" />
+          <span class="text-muted">New list…</span>
         </label>
       </div>
 
@@ -63,21 +63,21 @@ function confirm() {
           v-model="newListName"
           type="text"
           placeholder="List name"
-          class="w-full bg-gray-900 border border-gray-600 rounded-lg px-3 py-2 text-gray-100 text-sm focus:outline-none focus:border-purple-500"
+          class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
           autofocus
         />
       </div>
 
       <div class="flex gap-3 justify-end">
         <button
-          class="px-4 py-2 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-700 transition-colors"
+          class="px-4 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
           @click="emit('cancel')"
         >
           Cancel
         </button>
         <button
           :disabled="!selected && !newListName.trim()"
-          class="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors"
+          class="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg font-medium transition-colors"
           @click="confirm"
         >
           Move

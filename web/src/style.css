@@ -1,16 +1,249 @@
 @import "tailwindcss";
 
+/* ── Dark mode variant — driven by data-mode attribute ──────────────────────── */
+@custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
+
+/* ── Semantic color tokens ──────────────────────────────────────────────────── */
+/*
+ * Utilities generated:
+ *   bg-bg, bg-surface, bg-surface-hover
+ *   border-border, border-border-strong
+ *   text-text, text-muted
+ *   bg-accent, text-accent, bg-accent-hover, text-accent-fg
+ *   ring-ring
+ *   bg-danger-bg, text-danger-fg, border-danger, text-danger
+ *   bg-success-bg, text-success-fg
+ *   bg-warning-bg, text-warning-fg
+ */
+@theme {
+  /* Midnight dark — default (shown before JS sets data attributes) */
+  --color-bg:           oklch(0.12 0.008 280);
+  --color-surface:      oklch(0.18 0.006 280);
+  --color-surface-hover: oklch(0.24 0.006 280);
+  --color-border:       oklch(0.28 0.006 280);
+  --color-border-strong: oklch(0.36 0.008 280);
+  --color-text:         oklch(0.93 0.003 280);
+  --color-muted:        oklch(0.55 0.006 280);
+  --color-accent:       oklch(0.585 0.233 293);
+  --color-accent-hover: oklch(0.656 0.2 293);
+  --color-accent-fg:    oklch(1 0 0);
+  --color-ring:         oklch(1 0 0 / 0.1);
+  /* Danger / success / warning (dark defaults) */
+  --color-danger:       oklch(0.637 0.237 25);
+  --color-danger-bg:    oklch(0.2 0.05 22);
+  --color-danger-fg:    oklch(0.83 0.07 22);
+  --color-success-bg:   oklch(0.18 0.05 155);
+  --color-success-fg:   oklch(0.73 0.14 155);
+  --color-warning-bg:   oklch(0.22 0.06 70);
+  --color-warning-fg:   oklch(0.77 0.17 70);
+}
+
+/* ── Per-mode semantic overrides (danger/warning/success + color-scheme) ─────── */
+[data-mode="dark"] {
+  color-scheme: dark;
+  --color-danger:     oklch(0.637 0.237 25);
+  --color-danger-bg:  oklch(0.2 0.05 22);
+  --color-danger-fg:  oklch(0.83 0.07 22);
+  --color-success-bg: oklch(0.18 0.05 155);
+  --color-success-fg: oklch(0.73 0.14 155);
+  --color-warning-bg: oklch(0.22 0.06 70);
+  --color-warning-fg: oklch(0.77 0.17 70);
+}
+
+[data-mode="light"] {
+  color-scheme: light;
+  --color-danger:     oklch(0.577 0.245 27);
+  --color-danger-bg:  oklch(0.95 0.04 20);
+  --color-danger-fg:  oklch(0.48 0.2 22);
+  --color-success-bg: oklch(0.95 0.04 155);
+  --color-success-fg: oklch(0.4 0.13 155);
+  --color-warning-bg: oklch(0.97 0.05 80);
+  --color-warning-fg: oklch(0.45 0.13 70);
+}
+
+/* ── Theme palettes ──────────────────────────────────────────────────────────── */
+
+/* Midnight — violet */
+[data-theme="midnight"][data-mode="dark"] {
+  --color-bg:            oklch(0.12 0.008 280);
+  --color-surface:       oklch(0.18 0.006 280);
+  --color-surface-hover: oklch(0.24 0.006 280);
+  --color-border:        oklch(0.28 0.006 280);
+  --color-border-strong: oklch(0.36 0.008 280);
+  --color-text:          oklch(0.93 0.003 280);
+  --color-muted:         oklch(0.55 0.006 280);
+  --color-accent:        oklch(0.585 0.233 293);
+  --color-accent-hover:  oklch(0.656 0.2 293);
+  --color-accent-fg:     oklch(1 0 0);
+  --color-ring:          oklch(1 0 0 / 0.1);
+}
+[data-theme="midnight"][data-mode="light"] {
+  --color-bg:            oklch(0.97 0.004 280);
+  --color-surface:       oklch(1 0 0);
+  --color-surface-hover: oklch(0.95 0.004 280);
+  --color-border:        oklch(0.87 0.004 280);
+  --color-border-strong: oklch(0.77 0.006 280);
+  --color-text:          oklch(0.15 0.008 280);
+  --color-muted:         oklch(0.45 0.006 280);
+  --color-accent:        oklch(0.585 0.233 293);
+  --color-accent-hover:  oklch(0.5 0.24 293);
+  --color-accent-fg:     oklch(1 0 0);
+  --color-ring:          oklch(0 0 0 / 0.08);
+}
+
+/* Slate — cyan */
+[data-theme="slate"][data-mode="dark"] {
+  --color-bg:            oklch(0.12 0.012 220);
+  --color-surface:       oklch(0.18 0.009 220);
+  --color-surface-hover: oklch(0.23 0.009 220);
+  --color-border:        oklch(0.29 0.009 220);
+  --color-border-strong: oklch(0.37 0.012 220);
+  --color-text:          oklch(0.92 0.003 220);
+  --color-muted:         oklch(0.54 0.009 220);
+  --color-accent:        oklch(0.715 0.143 215);
+  --color-accent-hover:  oklch(0.645 0.143 215);
+  --color-accent-fg:     oklch(0.12 0.012 220);
+  --color-ring:          oklch(1 0 0 / 0.1);
+}
+[data-theme="slate"][data-mode="light"] {
+  --color-bg:            oklch(0.97 0.006 220);
+  --color-surface:       oklch(1 0 0);
+  --color-surface-hover: oklch(0.95 0.006 220);
+  --color-border:        oklch(0.87 0.006 220);
+  --color-border-strong: oklch(0.77 0.01 220);
+  --color-text:          oklch(0.15 0.012 220);
+  --color-muted:         oklch(0.45 0.01 220);
+  --color-accent:        oklch(0.52 0.143 215);
+  --color-accent-hover:  oklch(0.44 0.13 215);
+  --color-accent-fg:     oklch(1 0 0);
+  --color-ring:          oklch(0 0 0 / 0.08);
+}
+
+/* Forest — emerald */
+[data-theme="forest"][data-mode="dark"] {
+  --color-bg:            oklch(0.12 0.015 155);
+  --color-surface:       oklch(0.17 0.012 155);
+  --color-surface-hover: oklch(0.22 0.01 155);
+  --color-border:        oklch(0.27 0.01 155);
+  --color-border-strong: oklch(0.35 0.012 155);
+  --color-text:          oklch(0.92 0.003 155);
+  --color-muted:         oklch(0.53 0.01 155);
+  --color-accent:        oklch(0.696 0.17 162);
+  --color-accent-hover:  oklch(0.623 0.17 162);
+  --color-accent-fg:     oklch(0.12 0.015 155);
+  --color-ring:          oklch(1 0 0 / 0.1);
+}
+[data-theme="forest"][data-mode="light"] {
+  --color-bg:            oklch(0.97 0.008 155);
+  --color-surface:       oklch(1 0 0);
+  --color-surface-hover: oklch(0.95 0.008 155);
+  --color-border:        oklch(0.87 0.007 155);
+  --color-border-strong: oklch(0.76 0.012 155);
+  --color-text:          oklch(0.14 0.015 155);
+  --color-muted:         oklch(0.44 0.012 155);
+  --color-accent:        oklch(0.532 0.157 162);
+  --color-accent-hover:  oklch(0.458 0.143 162);
+  --color-accent-fg:     oklch(1 0 0);
+  --color-ring:          oklch(0 0 0 / 0.08);
+}
+
+/* Sunset — amber */
+[data-theme="sunset"][data-mode="dark"] {
+  --color-bg:            oklch(0.13 0.012 55);
+  --color-surface:       oklch(0.19 0.01 55);
+  --color-surface-hover: oklch(0.25 0.01 55);
+  --color-border:        oklch(0.31 0.01 55);
+  --color-border-strong: oklch(0.39 0.012 55);
+  --color-text:          oklch(0.93 0.005 80);
+  --color-muted:         oklch(0.56 0.01 55);
+  --color-accent:        oklch(0.769 0.188 70);
+  --color-accent-hover:  oklch(0.696 0.18 70);
+  --color-accent-fg:     oklch(0.13 0.012 55);
+  --color-ring:          oklch(1 0 0 / 0.1);
+}
+[data-theme="sunset"][data-mode="light"] {
+  --color-bg:            oklch(0.975 0.007 70);
+  --color-surface:       oklch(1 0 0);
+  --color-surface-hover: oklch(0.96 0.007 70);
+  --color-border:        oklch(0.87 0.008 70);
+  --color-border-strong: oklch(0.77 0.012 70);
+  --color-text:          oklch(0.15 0.012 50);
+  --color-muted:         oklch(0.45 0.012 60);
+  --color-accent:        oklch(0.555 0.163 63);
+  --color-accent-hover:  oklch(0.479 0.15 63);
+  --color-accent-fg:     oklch(1 0 0);
+  --color-ring:          oklch(0 0 0 / 0.08);
+}
+
+/* Rose — rose */
+[data-theme="rose"][data-mode="dark"] {
+  --color-bg:            oklch(0.12 0.01 10);
+  --color-surface:       oklch(0.18 0.008 10);
+  --color-surface-hover: oklch(0.23 0.008 10);
+  --color-border:        oklch(0.29 0.008 10);
+  --color-border-strong: oklch(0.37 0.01 10);
+  --color-text:          oklch(0.93 0.003 10);
+  --color-muted:         oklch(0.54 0.008 10);
+  --color-accent:        oklch(0.712 0.194 13);
+  --color-accent-hover:  oklch(0.645 0.2 13);
+  --color-accent-fg:     oklch(1 0 0);
+  --color-ring:          oklch(1 0 0 / 0.1);
+}
+[data-theme="rose"][data-mode="light"] {
+  --color-bg:            oklch(0.97 0.006 10);
+  --color-surface:       oklch(1 0 0);
+  --color-surface-hover: oklch(0.96 0.006 10);
+  --color-border:        oklch(0.88 0.006 10);
+  --color-border-strong: oklch(0.78 0.01 10);
+  --color-text:          oklch(0.15 0.01 10);
+  --color-muted:         oklch(0.45 0.01 10);
+  --color-accent:        oklch(0.588 0.214 17);
+  --color-accent-hover:  oklch(0.514 0.224 17);
+  --color-accent-fg:     oklch(1 0 0);
+  --color-ring:          oklch(0 0 0 / 0.08);
+}
+
+/* Mono — neutral */
+[data-theme="mono"][data-mode="dark"] {
+  --color-bg:            oklch(0.12 0 0);
+  --color-surface:       oklch(0.18 0 0);
+  --color-surface-hover: oklch(0.24 0 0);
+  --color-border:        oklch(0.29 0 0);
+  --color-border-strong: oklch(0.38 0 0);
+  --color-text:          oklch(0.93 0 0);
+  --color-muted:         oklch(0.55 0 0);
+  --color-accent:        oklch(0.92 0 0);
+  --color-accent-hover:  oklch(0.82 0 0);
+  --color-accent-fg:     oklch(0.12 0 0);
+  --color-ring:          oklch(1 0 0 / 0.1);
+}
+[data-theme="mono"][data-mode="light"] {
+  --color-bg:            oklch(0.97 0 0);
+  --color-surface:       oklch(1 0 0);
+  --color-surface-hover: oklch(0.94 0 0);
+  --color-border:        oklch(0.87 0 0);
+  --color-border-strong: oklch(0.77 0 0);
+  --color-text:          oklch(0.15 0 0);
+  --color-muted:         oklch(0.45 0 0);
+  --color-accent:        oklch(0.18 0 0);
+  --color-accent-hover:  oklch(0.28 0 0);
+  --color-accent-fg:     oklch(1 0 0);
+  --color-ring:          oklch(0 0 0 / 0.08);
+}
+
+/* ── Base styles ─────────────────────────────────────────────────────────────── */
 @layer base {
   body {
-    @apply bg-gray-950 text-gray-100;
+    @apply bg-bg text-text antialiased;
     font-family: system-ui, -apple-system, sans-serif;
   }
 }
 
+/* ── Utilities ───────────────────────────────────────────────────────────────── */
 @layer utilities {
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: #4b5563 transparent;
+    scrollbar-color: var(--color-border-strong) transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar {
@@ -22,12 +255,12 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: #4b5563;
+    background-color: var(--color-border-strong);
     border-radius: 9999px;
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-    background-color: #6b7280;
+    background-color: var(--color-muted);
   }
 
   .scrollbar-hide {

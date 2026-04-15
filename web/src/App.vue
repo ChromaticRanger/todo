@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, watch, ref, computed } from 'vue'
 import { useListStore } from './stores/listStore'
 import { useTodoStore } from './stores/todoStore'
 import { useAuthStore } from './stores/authStore'
+import { useSettingsStore } from './stores/settingsStore'
 import type { ViewType } from './types/todo'
 
 type LayoutMode = 'grid' | 'kanban'
@@ -23,6 +24,7 @@ function storeLayout(list: string, mode: LayoutMode) {
     localStorage.setItem('list-layouts', JSON.stringify(stored))
   } catch {}
 }
+import AppHeader from './components/AppHeader.vue'
 import ListTabs from './components/ListTabs.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
 import ListView from './components/ListView.vue'
@@ -32,6 +34,7 @@ import LoginPage from './components/LoginPage.vue'
 const listStore = useListStore()
 const todoStore = useTodoStore()
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 
 const showAddForm = ref(false)
 const currentView = ref<ViewType>('all')
@@ -61,12 +64,14 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   if (authStore.isAuthenticated) {
     await loadData()
+    await settingsStore.loadFromServer()
   }
 })
 
 watch(() => authStore.isAuthenticated, async (authenticated) => {
   if (authenticated) {
     await loadData()
+    await settingsStore.loadFromServer()
   }
 })
 
@@ -101,68 +106,37 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
 
 <template>
   <LoginPage v-if="!authStore.isAuthenticated" />
-  <div v-else class="min-h-screen bg-gray-950 text-gray-100 flex flex-col">
-    <!-- Header -->
-    <header class="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between flex-shrink-0">
-      <div class="flex items-center gap-3">
-        <svg class="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4" />
-        </svg>
-        <h1 class="text-lg font-semibold text-gray-100">Todo Dashboard</h1>
-      </div>
-      <div class="flex items-center gap-2">
-        <button
-          class="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium transition-colors"
-          @click="showAddForm = true"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          Add Todo
-        </button>
-        <button
-          type="button"
-          class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-gray-800 text-sm transition-colors"
-          @click="authStore.logout()"
-          title="Sign out"
-        >
-          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          Sign out
-        </button>
-      </div>
-    </header>
+  <div v-else class="min-h-dvh bg-bg text-text flex flex-col isolate">
+    <AppHeader @add-todo="showAddForm = true" />
 
     <!-- List tabs -->
-    <div class="bg-gray-900/50 border-b border-gray-800 px-4 pt-2">
+    <div class="bg-surface/50 border-b border-border px-4 pt-2">
       <ListTabs @select="onListSelect" />
     </div>
 
     <!-- View switcher -->
-    <div class="px-4 py-3 border-b border-gray-800/60 bg-gray-900/20 flex items-center justify-between gap-4">
+    <div class="px-4 py-3 border-b border-border/60 bg-surface/20 flex items-center justify-between gap-4">
       <ViewSwitcher :current="currentView" @change="onViewChange" />
 
       <!-- Layout toggle (category views only) -->
-      <div v-if="isCategoryView" class="flex rounded-lg border border-gray-700 overflow-hidden shrink-0">
+      <div v-if="isCategoryView" class="flex rounded-lg border border-border-strong overflow-hidden shrink-0">
         <button
           title="Grid view"
           class="px-2.5 py-1.5 transition-colors"
-          :class="layoutMode === 'grid' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'"
+          :class="layoutMode === 'grid' ? 'bg-accent text-accent-fg' : 'text-muted hover:text-text hover:bg-surface-hover'"
           @click="setLayout('grid')"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
           </svg>
         </button>
         <button
           title="Kanban view"
-          class="px-2.5 py-1.5 border-l border-gray-700 transition-colors"
-          :class="layoutMode === 'kanban' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800'"
+          class="px-2.5 py-1.5 border-l border-border-strong transition-colors"
+          :class="layoutMode === 'kanban' ? 'bg-accent text-accent-fg' : 'text-muted hover:text-text hover:bg-surface-hover'"
           @click="setLayout('kanban')"
         >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
           </svg>
         </button>
@@ -177,7 +151,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
     <!-- Error toast -->
     <div
       v-if="todoStore.error || listStore.error"
-      class="fixed bottom-4 right-4 bg-red-900/90 border border-red-700 text-red-200 px-4 py-3 rounded-xl text-sm max-w-sm shadow-xl"
+      class="fixed bottom-4 right-4 bg-danger-bg border border-danger text-danger-fg px-4 py-3 rounded-xl text-sm max-w-sm shadow-xl dark:shadow-none"
     >
       {{ todoStore.error || listStore.error }}
     </div>
