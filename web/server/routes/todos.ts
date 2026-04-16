@@ -25,6 +25,8 @@ interface TodoRow {
   repeat_days: number
   repeat_months: number
   spawned_next: number
+  type: string
+  url: string | null
 }
 
 // pg serializes BIGINT/NUMERIC as strings; coerce to numbers for the client
@@ -40,6 +42,8 @@ function coerceTodo(row: TodoRow) {
     repeat_days: Number(row.repeat_days),
     repeat_months: Number(row.repeat_months),
     spawned_next: Number(row.spawned_next),
+    type: (row.type as string) || 'todo',
+    url: row.url ?? null,
   }
 }
 
@@ -93,7 +97,7 @@ function buildTodoSelect(extra = ''): string {
   return `SELECT id, list_name, title, description, category, priority, status,
     EXTRACT(EPOCH FROM created_at)::BIGINT AS created_at,
     EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at,
-    due_date, repeat_days, repeat_months, spawned_next
+    due_date, repeat_days, repeat_months, spawned_next, type, url
   FROM todos ${extra}`
 }
 
@@ -139,7 +143,7 @@ router.get('/today', async (req, res) => {
     await spawnRepeatingTodos(list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 0
+        `WHERE list_name = $1 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
          AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
          AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '1 day')::BIGINT
@@ -160,7 +164,7 @@ router.get('/week', async (req, res) => {
     await spawnRepeatingTodos(list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 0
+        `WHERE list_name = $1 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
          AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
          AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '7 days')::BIGINT
@@ -181,7 +185,7 @@ router.get('/month', async (req, res) => {
     await spawnRepeatingTodos(list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 0
+        `WHERE list_name = $1 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
          AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
          AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '30 days')::BIGINT
@@ -202,7 +206,7 @@ router.get('/schedule', async (req, res) => {
     await spawnRepeatingTodos(list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 0
+        `WHERE list_name = $1 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
          ORDER BY due_date ASC`
       ),
@@ -221,7 +225,7 @@ router.get('/completed', async (req, res) => {
   try {
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 1
+        `WHERE list_name = $1 AND status = 1 AND type = 'todo'
          AND (EXTRACT(EPOCH FROM completed_at)::BIGINT >= $2 OR $2 = 0)
          ORDER BY completed_at DESC`
       ),
@@ -258,6 +262,8 @@ router.post('/', async (req, res) => {
     due_date = null,
     repeat_days = 0,
     repeat_months = 0,
+    type = 'todo',
+    url = null,
   } = req.body as Partial<{
     list_name: string
     title: string
@@ -267,9 +273,12 @@ router.post('/', async (req, res) => {
     due_date: number | null
     repeat_days: number
     repeat_months: number
+    type: string
+    url: string | null
   }>
 
   if (!title) return res.status(400).json({ error: 'Title is required' })
+  if (type === 'bookmark' && !url) return res.status(400).json({ error: 'URL is required for bookmarks' })
 
   try {
     const effectiveDue =
@@ -278,9 +287,9 @@ router.post('/', async (req, res) => {
     const result = await query<{ id: number }>(
       `INSERT INTO todos
          (list_name, title, description, category, priority, status,
-          due_date, repeat_days, repeat_months, spawned_next)
-       VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,0) RETURNING id`,
-      [list_name, title, description, category, priority, effectiveDue, repeat_days, repeat_months]
+          due_date, repeat_days, repeat_months, spawned_next, type, url)
+       VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,0,$9,$10) RETURNING id`,
+      [list_name, title, description, category, priority, effectiveDue, repeat_days, repeat_months, type, url]
     )
     res.status(201).json({ id: Number(result.rows[0].id) })
   } catch (err) {
@@ -290,12 +299,13 @@ router.post('/', async (req, res) => {
 
 // PUT /api/todos/:id
 router.put('/:id', async (req, res) => {
-  const { title, description, category, priority, due_date } = req.body as Partial<{
+  const { title, description, category, priority, due_date, url } = req.body as Partial<{
     title: string
     description: string
     category: string
     priority: number
     due_date: number | null
+    url: string | null
   }>
 
   try {
@@ -305,9 +315,10 @@ router.put('/:id', async (req, res) => {
          description = COALESCE($2, description),
          category = COALESCE($3, category),
          priority = COALESCE($4, priority),
-         due_date = $5
-       WHERE id = $6`,
-      [title, description, category, priority, due_date ?? null, req.params.id]
+         due_date = $5,
+         url = COALESCE($6, url)
+       WHERE id = $7`,
+      [title, description, category, priority, due_date ?? null, url ?? null, req.params.id]
     )
     res.json({ ok: true })
   } catch (err) {

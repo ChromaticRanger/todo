@@ -15,6 +15,8 @@ export type Status = (typeof Status)[keyof typeof Status]
 
 export type ViewType = 'all' | 'today' | 'week' | 'month' | 'schedule' | 'completed'
 
+export type ItemType = 'todo' | 'bookmark' | 'note'
+
 export interface Todo {
   id: number
   list_name: string
@@ -29,6 +31,8 @@ export interface Todo {
   repeat_days: number
   repeat_months: number
   spawned_next: number
+  type: ItemType
+  url: string | null
 }
 
 export interface TodoFormData {
@@ -39,4 +43,6 @@ export interface TodoFormData {
   due_date: number | null
   repeat_days: number
   repeat_months: number
+  type: ItemType
+  url: string | null
 }

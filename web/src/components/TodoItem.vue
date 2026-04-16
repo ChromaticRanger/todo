@@ -19,7 +19,12 @@ const showEdit = ref(false)
 const showMove = ref(false)
 const showConfirm = ref(false)
 
+const isTodo = computed(() => props.todo.type === 'todo' || !props.todo.type)
+const isBookmark = computed(() => props.todo.type === 'bookmark')
+const isNote = computed(() => props.todo.type === 'note')
+
 const priorityBorderClass = computed(() => {
+  if (!isTodo.value) return 'border-l-border-strong'
   switch (props.todo.priority) {
     case Priority.HIGH: return 'border-l-danger'
     case Priority.LOW: return 'border-l-success-fg'
@@ -58,7 +63,16 @@ const isDueOverdue = computed(() => {
 
 const URL_RE = /https?:\/\/[^\s]+/g
 
+// For bookmarks use the stored url; for todos detect URL in title
 const faviconUrl = computed(() => {
+  if (isBookmark.value && props.todo.url) {
+    try {
+      const domain = new URL(props.todo.url).hostname
+      return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+    } catch {
+      return null
+    }
+  }
   const match = URL_RE.exec(props.todo.title)
   URL_RE.lastIndex = 0
   if (!match) return null
@@ -89,6 +103,12 @@ const repeatStr = computed(() => {
   return null
 })
 
+function openBookmark() {
+  if (isBookmark.value && props.todo.url) {
+    window.open(props.todo.url, '_blank', 'noopener')
+  }
+}
+
 async function toggleComplete() {
   if (isCompleted.value) {
     await store.uncompleteTodo(props.todo.id)
@@ -114,8 +134,109 @@ async function handleDelete() {
 </script>
 
 <template>
+  <!-- Bookmark item -->
   <div
-    class="flex items-start gap-3 p-3 rounded-lg border-l-4 bg-surface/60 hover:bg-surface-hover transition-colors group"
+    v-if="isBookmark"
+    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-4 bg-accent/5 hover:bg-accent/10 transition-colors group cursor-pointer"
+    :class="priorityBorderClass"
+    @click="openBookmark"
+  >
+    <!-- Favicon -->
+    <span
+      v-if="faviconUrl"
+      class="flex-shrink-0 inline-flex items-center justify-center size-9 rounded-lg bg-white/90"
+    >
+      <img
+        :src="faviconUrl"
+        class="size-7"
+        alt=""
+        @error="($event.target as HTMLImageElement).parentElement!.style.display = 'none'"
+      />
+    </span>
+    <span v-else class="flex-shrink-0 size-9 flex items-center justify-center text-muted">
+      <svg class="size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+      </svg>
+    </span>
+
+    <!-- Content -->
+    <div class="flex-1 min-w-0">
+      <div class="text-sm text-text leading-5 truncate">{{ todo.title }}</div>
+      <div v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed truncate">
+        {{ todo.description }}
+      </div>
+      <div class="mt-0.5 text-xs text-accent truncate">{{ todo.url }}</div>
+    </div>
+
+    <!-- Actions (visible on hover) -->
+    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" @click.stop>
+      <button
+        class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
+        title="Edit"
+        @click="showEdit = true"
+      >
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      </button>
+      <button
+        class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
+        title="Delete"
+        @click="showConfirm = true"
+      >
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Note item -->
+  <div
+    v-else-if="isNote"
+    class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-4 bg-warning-bg/30 hover:bg-warning-bg/50 transition-colors group"
+    :class="priorityBorderClass"
+  >
+    <!-- Note icon -->
+    <span class="mt-0.5 flex-shrink-0 size-5 flex items-center justify-center text-muted">
+      <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    </span>
+
+    <!-- Content -->
+    <div class="flex-1 min-w-0">
+      <div class="text-sm text-text leading-5 font-medium">{{ todo.title }}</div>
+      <pre v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed whitespace-pre-wrap font-sans">{{ todo.description }}</pre>
+    </div>
+
+    <!-- Actions (visible on hover) -->
+    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+      <button
+        class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
+        title="Edit"
+        @click="showEdit = true"
+      >
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      </button>
+      <button
+        class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
+        title="Delete"
+        @click="showConfirm = true"
+      >
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Todo item (default) -->
+  <div
+    v-else
+    class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-4 bg-surface-hover/40 hover:bg-surface-hover transition-colors group"
     :class="[priorityBorderClass, isCompleted ? 'opacity-60' : '']"
   >
     <!-- Complete toggle -->
@@ -167,11 +288,11 @@ async function handleDelete() {
         </span>
       </div>
 
-      <div v-if="todo.description" class="mt-1 text-xs text-muted leading-relaxed">
+      <div v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed">
         {{ todo.description }}
       </div>
 
-      <div class="flex items-center gap-2 mt-1 flex-wrap">
+      <div class="flex items-center gap-2 mt-0.5 flex-wrap">
         <span
           v-if="dueDateStr"
           class="text-xs"
