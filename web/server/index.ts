@@ -36,8 +36,17 @@ app.use('/api/settings', settingsRouter)
 // In production, serve the Vite build and let Vue Router handle the rest
 if (isProd) {
   const distPath = path.join(__dirname, '../dist')
+
+  app.use('/assets', express.static(path.join(distPath, 'assets'), {
+    immutable: true,
+    maxAge: '1y',
+  }))
+
   app.use(express.static(distPath))
-  app.get(/.*/, (_req, res) => {
+
+  app.get(/.*/, (req, res) => {
+    if (path.extname(req.path)) return res.status(404).end()
+    res.setHeader('Cache-Control', 'no-cache')
     res.sendFile(path.join(distPath, 'index.html'))
   })
 }
