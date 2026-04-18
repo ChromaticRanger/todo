@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import type { Todo } from '../types/todo'
+import type { Todo, ItemType } from '../types/todo'
 import TodoItem from './TodoItem.vue'
 import TodoForm from './TodoForm.vue'
 import type { TodoFormData } from '../types/todo'
@@ -17,8 +17,16 @@ const props = defineProps<{
 const store = useTodoStore()
 const listStore = useListStore()
 const showAddForm = ref(false)
+const addType = ref<ItemType>('todo')
+const showTypeMenu = ref(false)
 const editing = ref(false)
 const editName = ref('')
+
+function openAddForm(type: ItemType) {
+  addType.value = type
+  showTypeMenu.value = false
+  showAddForm.value = true
+}
 
 async function handleAdd(form: TodoFormData) {
   await store.addTodo(listStore.activeList, { ...form, category: props.category })
@@ -75,20 +83,64 @@ function cancelEdit() {
             <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474ZM3.75 13.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z" />
           </svg>
         </button>
-        <!-- Add todo icon -->
-        <button
-          class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
-          title="Add todo to this category"
-          @click="showAddForm = true"
-        >
-          <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
-          </svg>
-        </button>
+
+        <!-- Add item button with type dropdown -->
+        <div class="relative">
+          <button
+            class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
+            title="Add item"
+            @click="showTypeMenu = !showTypeMenu"
+          >
+            <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
+            </svg>
+          </button>
+
+          <!-- Type picker menu -->
+          <div
+            v-if="showTypeMenu"
+            class="absolute right-0 top-full mt-1 z-20 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-36"
+          >
+            <button
+              class="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+              @click="openAddForm('todo')"
+            >
+              <svg class="size-3.5 text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Todo
+            </button>
+            <button
+              class="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+              @click="openAddForm('bookmark')"
+            >
+              <svg class="size-3.5 text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              </svg>
+              Bookmark
+            </button>
+            <button
+              class="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+              @click="openAddForm('note')"
+            >
+              <svg class="size-3.5 text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Note
+            </button>
+          </div>
+
+          <!-- Click-outside overlay to close menu -->
+          <div
+            v-if="showTypeMenu"
+            class="fixed inset-0 z-10"
+            @click="showTypeMenu = false"
+          />
+        </div>
       </div>
     </div>
 
-    <!-- Todos list -->
+    <!-- Items list -->
     <div class="p-3 space-y-2 flex-1 overflow-y-auto scrollbar-thin">
       <TodoItem
         v-for="todo in todos"
@@ -109,6 +161,7 @@ function cancelEdit() {
     v-if="showAddForm"
     :categories="allCategories"
     :default-category="category"
+    :initial-type="addType"
     @submit="handleAdd"
     @cancel="showAddForm = false"
   />

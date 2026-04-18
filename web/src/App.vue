@@ -4,7 +4,7 @@ import { useListStore } from './stores/listStore'
 import { useTodoStore } from './stores/todoStore'
 import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
-import type { ViewType } from './types/todo'
+import type { ViewType, ItemType } from './types/todo'
 
 type LayoutMode = 'grid' | 'kanban'
 
@@ -37,6 +37,12 @@ const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 
 const showAddForm = ref(false)
+const addType = ref<ItemType>('todo')
+
+function openAddForm(type: ItemType) {
+  addType.value = type
+  showAddForm.value = true
+}
 const currentView = ref<ViewType>('all')
 const layoutMode = ref<LayoutMode>(getStoredLayout(listStore.activeList))
 const isCategoryView = computed(() => currentView.value !== 'schedule' && currentView.value !== 'completed')
@@ -47,9 +53,17 @@ function setLayout(mode: LayoutMode) {
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (e.ctrlKey && e.key === 'a' && !showAddForm.value) {
+  if (!e.altKey || e.ctrlKey || e.metaKey || showAddForm.value) return
+  const key = e.key.toLowerCase()
+  if (key === 't') {
     e.preventDefault()
-    showAddForm.value = true
+    openAddForm('todo')
+  } else if (key === 'b') {
+    e.preventDefault()
+    openAddForm('bookmark')
+  } else if (key === 'n') {
+    e.preventDefault()
+    openAddForm('note')
   }
 }
 
@@ -107,7 +121,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
 <template>
   <LoginPage v-if="!authStore.isAuthenticated" />
   <div v-else class="min-h-dvh bg-bg text-text flex flex-col isolate">
-    <AppHeader @add-todo="showAddForm = true" />
+    <AppHeader @add="openAddForm" />
 
     <!-- List tabs -->
     <div class="bg-surface/50 border-b border-border px-4 pt-2">
@@ -160,6 +174,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
     <TodoForm
       v-if="showAddForm"
       :categories="todoStore.categories"
+      :initial-type="addType"
       @submit="handleAdd"
       @cancel="showAddForm = false"
     />

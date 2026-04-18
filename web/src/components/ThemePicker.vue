@@ -31,7 +31,7 @@ interface ThemeConfig {
 const themes: ThemeConfig[] = [
   {
     name: 'midnight',
-    label: 'Midnight',
+    label: 'Amethyst',
     dark:  { bg: 'oklch(0.12 0.008 280)', surface: 'oklch(0.18 0.006 280)', accent: 'oklch(0.585 0.233 293)' },
     light: { bg: 'oklch(0.97 0.004 280)', surface: 'oklch(1 0 0)',           accent: 'oklch(0.585 0.233 293)' },
   },
@@ -94,7 +94,7 @@ const themes: ThemeConfig[] = [
     <!-- Popover -->
     <div
       v-if="open"
-      class="absolute right-0 top-full mt-2 z-50 w-72 rounded-xl bg-surface border border-border shadow-xl dark:shadow-none dark:inset-ring dark:inset-ring-white/5 p-4"
+      class="absolute right-0 top-full mt-2 z-50 w-80 rounded-xl bg-surface border border-border shadow-xl dark:shadow-none dark:inset-ring dark:inset-ring-white/5 p-4"
     >
       <!-- Mode toggle -->
       <div class="flex rounded-lg border border-border-strong overflow-hidden mb-4">
@@ -149,10 +149,7 @@ const themes: ThemeConfig[] = [
               :style="{ background: store.mode === 'dark' ? t.dark.accent : t.light.accent }"
             />
           </span>
-          {{ t.label }}
-          <svg v-if="store.theme === t.name" class="size-3 ml-auto shrink-0 text-accent" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-          </svg>
+          <span class="truncate">{{ t.label }}</span>
         </button>
       </div>
     </div>

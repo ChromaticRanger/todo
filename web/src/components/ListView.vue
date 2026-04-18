@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUpdated } from 'vue'
+import { computed, ref, onMounted, onUnmounted, onUpdated } from 'vue'
 import { useTodoStore } from '../stores/todoStore'
 import CategoryGroup from './CategoryGroup.vue'
 import EmptyState from './EmptyState.vue'
@@ -21,6 +21,7 @@ const confirmDeleteId = ref<number | null>(null)
 const kanbanRef = ref<HTMLElement | null>(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
+const isDragging = ref(false)
 
 function updateScrollState() {
   const el = kanbanRef.value
@@ -37,7 +38,81 @@ function scrollRight() {
   kanbanRef.value?.scrollBy({ left: kanbanRef.value.clientWidth, behavior: 'smooth' })
 }
 
-onMounted(updateScrollState)
+// Click-and-drag panning
+const DRAG_THRESHOLD = 5
+type DragState = { startX: number; startScroll: number; pointerId: number; dragging: boolean }
+let dragState: DragState | null = null
+
+function onPointerDown(e: PointerEvent) {
+  if (e.button !== 0) return
+  // Only when the kanban track is rendered
+  const el = kanbanRef.value
+  if (!el) return
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  // Scope drag to the main content area — header, tabs, modals are out
+  if (!target.closest('main')) return
+  // Let interactive elements handle their own clicks
+  if (target.closest('button, a, input, textarea, select, [contenteditable="true"]')) return
+  dragState = {
+    startX: e.clientX,
+    startScroll: el.scrollLeft,
+    pointerId: e.pointerId,
+    dragging: false,
+  }
+}
+
+function onPointerMove(e: PointerEvent) {
+  const s = dragState
+  if (!s) return
+  const dx = e.clientX - s.startX
+  if (!s.dragging) {
+    if (Math.abs(dx) < DRAG_THRESHOLD) return
+    s.dragging = true
+    isDragging.value = true
+    try { kanbanRef.value?.setPointerCapture(s.pointerId) } catch {}
+  }
+  e.preventDefault()
+  kanbanRef.value!.scrollLeft = s.startScroll - dx
+}
+
+function onPointerUp(e: PointerEvent) {
+  const s = dragState
+  if (!s) return
+  const wasDragging = s.dragging
+  dragState = null
+  if (!wasDragging) return
+  try { kanbanRef.value?.releasePointerCapture(s.pointerId) } catch {}
+  // Swallow the click that follows the drag release
+  const suppress = (ev: MouseEvent) => {
+    ev.stopPropagation()
+    ev.preventDefault()
+    window.removeEventListener('click', suppress, true)
+  }
+  window.addEventListener('click', suppress, true)
+  // Clear the flag on next frame so the suppress handler above has already fired
+  requestAnimationFrame(() => { isDragging.value = false })
+  e.preventDefault()
+}
+
+function onPointerCancel() {
+  if (dragState?.dragging) isDragging.value = false
+  dragState = null
+}
+
+onMounted(() => {
+  updateScrollState()
+  window.addEventListener('pointerdown', onPointerDown)
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', onPointerUp)
+  window.addEventListener('pointercancel', onPointerCancel)
+})
+onUnmounted(() => {
+  window.removeEventListener('pointerdown', onPointerDown)
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', onPointerUp)
+  window.removeEventListener('pointercancel', onPointerCancel)
+})
 onUpdated(updateScrollState)
 
 function formatDate(epoch: number | null): string {
@@ -79,7 +154,11 @@ async function handleDelete() {
       </div>
 
       <!-- Kanban layout -->
-      <div v-else class="relative">
+      <div
+        v-else
+        class="relative min-h-full"
+        :class="isDragging ? 'cursor-grabbing' : 'cursor-grab'"
+      >
         <!-- Left carousel button -->
         <button
           v-if="canScrollLeft"
@@ -94,7 +173,7 @@ async function handleDelete() {
         <!-- Scrollable track -->
         <div
           ref="kanbanRef"
-          class="flex gap-4 overflow-x-auto pb-4 items-start scrollbar-hide"
+          class="flex gap-4 overflow-x-auto pb-4 items-start scrollbar-hide select-none"
           @scroll="updateScrollState"
         >
           <CategoryGroup
