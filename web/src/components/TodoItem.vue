@@ -254,12 +254,12 @@ async function handleDelete() {
   <!-- Todo item (default) -->
   <div
     v-else
-    class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-4 bg-surface-hover/40 hover:bg-surface-hover transition-colors group"
+    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-4 bg-surface-hover/40 hover:bg-surface-hover transition-colors group"
     :class="[priorityBorderClass, isCompleted ? 'opacity-60' : '']"
   >
     <!-- Complete toggle -->
     <button
-      class="mt-0.5 flex-shrink-0 size-5 rounded-full border-2 flex items-center justify-center transition-colors"
+      class="flex-shrink-0 size-5 rounded-full border-2 flex items-center justify-center transition-colors"
       :class="isCompleted
         ? 'bg-accent border-accent'
         : 'border-border-strong hover:border-accent'"
@@ -273,38 +273,33 @@ async function handleDelete() {
 
     <!-- Content -->
     <div class="flex-1">
-      <div class="flex items-start gap-2">
+      <span
+        class="text-sm text-text leading-5 flex items-baseline gap-1.5 whitespace-nowrap"
+        :class="isCompleted ? 'line-through text-muted' : ''"
+      >
         <span
-          class="text-sm text-text leading-5 flex-1 flex items-baseline gap-1.5 whitespace-nowrap"
-          :class="isCompleted ? 'line-through text-muted' : ''"
+          v-if="faviconUrl"
+          class="inline-flex items-center justify-center size-5 rounded-full bg-white/90 flex-shrink-0 self-center"
         >
-          <span
-            v-if="faviconUrl"
-            class="inline-flex items-center justify-center size-5 rounded-full bg-white/90 flex-shrink-0 self-center"
-          >
-            <img
-              :src="faviconUrl"
-              class="size-3.5"
-              alt=""
-              @error="($event.target as HTMLImageElement).parentElement!.style.display = 'none'"
-            />
-          </span>
-          <template v-for="part in titleParts" :key="part.value">
-            <a
-              v-if="part.type === 'url'"
-              :href="part.value"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="text-accent hover:text-accent-hover underline underline-offset-2"
-              @click.stop
-            >{{ part.value }}</a>
-            <template v-else>{{ part.value }}</template>
-          </template>
+          <img
+            :src="faviconUrl"
+            class="size-3.5"
+            alt=""
+            @error="($event.target as HTMLImageElement).parentElement!.style.display = 'none'"
+          />
         </span>
-        <span class="flex-shrink-0 text-xs px-1.5 py-0.5 rounded font-medium" :class="priorityBadgeClass">
-          {{ priorityLabel }}
-        </span>
-      </div>
+        <template v-for="part in titleParts" :key="part.value">
+          <a
+            v-if="part.type === 'url'"
+            :href="part.value"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-accent hover:text-accent-hover underline underline-offset-2"
+            @click.stop
+          >{{ part.value }}</a>
+          <template v-else>{{ part.value }}</template>
+        </template>
+      </span>
 
       <div v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed">
         {{ todo.description }}
@@ -352,6 +347,11 @@ async function handleDelete() {
         </svg>
       </button>
     </div>
+
+    <!-- Priority badge -->
+    <span class="flex-shrink-0 self-center text-xs px-1.5 py-0.5 rounded font-medium" :class="priorityBadgeClass">
+      {{ priorityLabel }}
+    </span>
   </div>
 
   <!-- Modals -->
