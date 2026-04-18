@@ -55,8 +55,8 @@ function cancelEdit() {
     class="flex flex-col bg-surface border border-border-strong/60 rounded-xl overflow-hidden max-h-[calc(100vh-14rem)] dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
     :class="layout === 'kanban' ? 'w-max min-w-52 shrink-0' : ''"
   >
-    <!-- Category header -->
-    <div class="flex items-center justify-between px-3 py-1.5 border-b border-border-strong/60 bg-surface-hover/40">
+    <!-- Category header (drag handle) -->
+    <div class="category-drag-handle flex items-center justify-between px-3 py-1.5 border-b border-border-strong/60 bg-surface-hover/40 cursor-grab active:cursor-grabbing">
       <!-- Inline rename input -->
       <input
         v-if="editing"

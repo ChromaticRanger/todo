@@ -3,6 +3,11 @@
 /* ── Dark mode variant — driven by data-mode attribute ──────────────────────── */
 @custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 
+@theme {
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-display--font-variation-settings: "SOFT" 100, "opsz" 144;
+}
+
 /* ── Semantic color tokens ──────────────────────────────────────────────────── */
 /*
  * Utilities generated:

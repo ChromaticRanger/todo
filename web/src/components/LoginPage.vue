@@ -28,13 +28,12 @@ async function handleSubmit() {
     <div class="w-full max-w-xs">
       <!-- Branding -->
       <div class="flex flex-col items-center gap-3 mb-8">
-        <div class="flex size-12 items-center justify-center rounded-xl bg-surface ring-1 ring-ring">
-          <svg class="size-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4" />
-          </svg>
-        </div>
-        <h1 class="text-xl font-semibold text-text">My Stash</h1>
+        <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-20" />
+        <h1
+          class="font-display italic text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
+        >
+          Stash Squirrel
+        </h1>
       </div>
 
       <!-- Login card -->

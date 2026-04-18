@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+import draggable from 'vuedraggable'
 import { useListStore } from '../stores/listStore'
 import ConfirmDialog from './ConfirmDialog.vue'
 
@@ -51,15 +52,31 @@ async function deleteList() {
   await listStore.deleteList(confirmDelete.value)
   confirmDelete.value = null
 }
+
+const draggableLists = computed({
+  get: () => listStore.lists,
+  set: (value) => listStore.reorderLists(value),
+})
 </script>
 
 <template>
   <div class="flex items-center gap-1 overflow-x-auto pb-1 flex-shrink-0">
     <!-- List tabs -->
+    <draggable
+      v-model="draggableLists"
+      tag="div"
+      class="flex items-center gap-1"
+      :item-key="(el: string) => el"
+      :animation="150"
+      handle=".list-tab-handle"
+      filter="input,.tab-action"
+      :prevent-on-filter="false"
+      ghost-class="opacity-40"
+    >
+      <template #item="{ element: list }">
     <div
-      v-for="list in listStore.lists"
       :key="list"
-      class="group flex items-center gap-2 px-3 py-1 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 cursor-pointer select-none"
+      class="list-tab-handle group flex items-center gap-2 px-3 py-1 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 cursor-pointer select-none"
       :class="listStore.activeList === list
         ? 'border-accent text-accent bg-surface-hover/60'
         : 'border-transparent text-muted hover:text-text hover:bg-surface-hover/40'"
@@ -82,7 +99,7 @@ async function deleteList() {
       <template v-if="editingList !== list">
         <!-- Edit / rename icon -->
         <span
-          class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-surface-hover hover:text-text transition-all"
+          class="tab-action opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-surface-hover hover:text-text transition-all"
           title="Rename list"
           @click.stop="startEdit(list)"
         >
@@ -93,7 +110,7 @@ async function deleteList() {
         </span>
         <!-- Delete icon -->
         <span
-          class="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-danger-bg hover:text-danger transition-all"
+          class="tab-action opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-danger-bg hover:text-danger transition-all"
           title="Delete list"
           @click.stop="confirmDelete = list"
         >
@@ -103,6 +120,8 @@ async function deleteList() {
         </span>
       </template>
     </div>
+      </template>
+    </draggable>
 
     <!-- New list button/input -->
     <div v-if="!showNewInput">

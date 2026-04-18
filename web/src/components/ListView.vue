@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, onUpdated } from 'vue'
+import draggable from 'vuedraggable'
+import type { Todo } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
+import { useListStore } from '../stores/listStore'
 import CategoryGroup from './CategoryGroup.vue'
 import EmptyState from './EmptyState.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -8,6 +11,14 @@ import ConfirmDialog from './ConfirmDialog.vue'
 const props = defineProps<{ layout?: 'grid' | 'kanban' }>()
 
 const store = useTodoStore()
+const listStore = useListStore()
+
+const draggableCategories = computed({
+  get: () => [...store.byCategory.entries()],
+  set: (value: [string, Todo[]][]) => {
+    store.reorderCategories(listStore.activeList, value.map(([cat]) => cat))
+  },
+})
 
 const showFlat = computed(() =>
   store.currentView === 'schedule' || store.currentView === 'completed'
@@ -18,24 +29,32 @@ const allCategories = computed(() => store.categories)
 const confirmDeleteId = ref<number | null>(null)
 
 // Carousel scroll state (kanban only)
-const kanbanRef = ref<HTMLElement | null>(null)
+const kanbanRef = ref<{ $el: HTMLElement } | HTMLElement | null>(null)
 const canScrollLeft = ref(false)
 const canScrollRight = ref(false)
 const isDragging = ref(false)
 
+function kanbanEl(): HTMLElement | null {
+  const r = kanbanRef.value
+  if (!r) return null
+  return '$el' in r ? r.$el : r
+}
+
 function updateScrollState() {
-  const el = kanbanRef.value
+  const el = kanbanEl()
   if (!el) return
   canScrollLeft.value = el.scrollLeft > 0
   canScrollRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
 }
 
 function scrollLeft() {
-  kanbanRef.value?.scrollBy({ left: -kanbanRef.value.clientWidth, behavior: 'smooth' })
+  const el = kanbanEl()
+  el?.scrollBy({ left: -el.clientWidth, behavior: 'smooth' })
 }
 
 function scrollRight() {
-  kanbanRef.value?.scrollBy({ left: kanbanRef.value.clientWidth, behavior: 'smooth' })
+  const el = kanbanEl()
+  el?.scrollBy({ left: el.clientWidth, behavior: 'smooth' })
 }
 
 // Click-and-drag panning
@@ -46,14 +65,14 @@ let dragState: DragState | null = null
 function onPointerDown(e: PointerEvent) {
   if (e.button !== 0) return
   // Only when the kanban track is rendered
-  const el = kanbanRef.value
+  const el = kanbanEl()
   if (!el) return
   const target = e.target as HTMLElement | null
   if (!target) return
   // Scope drag to the main content area — header, tabs, modals are out
   if (!target.closest('main')) return
   // Let interactive elements handle their own clicks
-  if (target.closest('button, a, input, textarea, select, [contenteditable="true"]')) return
+  if (target.closest('button, a, input, textarea, select, [contenteditable="true"], .category-drag-handle')) return
   dragState = {
     startX: e.clientX,
     startScroll: el.scrollLeft,
@@ -70,10 +89,10 @@ function onPointerMove(e: PointerEvent) {
     if (Math.abs(dx) < DRAG_THRESHOLD) return
     s.dragging = true
     isDragging.value = true
-    try { kanbanRef.value?.setPointerCapture(s.pointerId) } catch {}
+    try { kanbanEl()?.setPointerCapture(s.pointerId) } catch {}
   }
   e.preventDefault()
-  kanbanRef.value!.scrollLeft = s.startScroll - dx
+  kanbanEl()!.scrollLeft = s.startScroll - dx
 }
 
 function onPointerUp(e: PointerEvent) {
@@ -82,7 +101,7 @@ function onPointerUp(e: PointerEvent) {
   const wasDragging = s.dragging
   dragState = null
   if (!wasDragging) return
-  try { kanbanRef.value?.releasePointerCapture(s.pointerId) } catch {}
+  try { kanbanEl()?.releasePointerCapture(s.pointerId) } catch {}
   // Swallow the click that follows the drag release
   const suppress = (ev: MouseEvent) => {
     ev.stopPropagation()
@@ -142,16 +161,29 @@ async function handleDelete() {
     <template v-else-if="!showFlat && store.todos.length > 0">
 
       <!-- Grid layout -->
-      <div v-if="props.layout === 'grid'" class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <CategoryGroup
-          v-for="[cat, todos] in store.byCategory"
-          :key="cat"
-          :category="cat"
-          :todos="todos"
-          :all-categories="allCategories"
-          layout="grid"
-        />
-      </div>
+      <draggable
+        v-if="props.layout === 'grid'"
+        v-model="draggableCategories"
+        tag="div"
+        class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+        :item-key="([cat]: [string, Todo[]]) => cat"
+        :animation="150"
+        handle=".category-drag-handle"
+        filter="input,button"
+        :prevent-on-filter="false"
+        ghost-class="opacity-40"
+      >
+        <template #item="{ element: [cat, todos] }">
+          <div :key="cat">
+            <CategoryGroup
+              :category="cat"
+              :todos="todos"
+              :all-categories="allCategories"
+              layout="grid"
+            />
+          </div>
+        </template>
+      </draggable>
 
       <!-- Kanban layout -->
       <div
@@ -171,20 +203,30 @@ async function handleDelete() {
         </button>
 
         <!-- Scrollable track -->
-        <div
+        <draggable
           ref="kanbanRef"
+          v-model="draggableCategories"
+          tag="div"
           class="flex gap-4 overflow-x-auto pb-4 items-start scrollbar-hide select-none"
+          :item-key="([cat]: [string, Todo[]]) => cat"
+          :animation="150"
+          handle=".category-drag-handle"
+          filter="input,button"
+          :prevent-on-filter="false"
+          ghost-class="opacity-40"
           @scroll="updateScrollState"
         >
-          <CategoryGroup
-            v-for="[cat, todos] in store.byCategory"
-            :key="cat"
-            :category="cat"
-            :todos="todos"
-            :all-categories="allCategories"
-            layout="kanban"
-          />
-        </div>
+          <template #item="{ element: [cat, todos] }">
+            <div :key="cat" class="shrink-0">
+              <CategoryGroup
+                :category="cat"
+                :todos="todos"
+                :all-categories="allCategories"
+                layout="kanban"
+              />
+            </div>
+          </template>
+        </draggable>
 
         <!-- Right carousel button -->
         <button

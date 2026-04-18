@@ -10,6 +10,8 @@ export const useTodoStore = defineStore('todos', () => {
   const error = ref<string | null>(null)
   const currentView = ref<ViewType>('all')
   const currentList = ref<string>('todos')
+  const categoryOrder = ref<Record<string, string[]>>({})
+  let categoryOrderLoaded = false
 
   // Per-list cache to avoid redundant DB calls
   const todosCache = new Map<string, Map<ViewType, Todo[]>>()
@@ -20,7 +22,30 @@ export const useTodoStore = defineStore('todos', () => {
     categoriesCache.delete(list)
   }
 
-  // Group todos by category
+  async function loadCategoryOrder() {
+    if (categoryOrderLoaded) return
+    categoryOrderLoaded = true
+    try {
+      const res = await apiFetch('/api/settings/category-order')
+      if (!res.ok) return
+      const data = await res.json() as { order: Record<string, string[]> }
+      categoryOrder.value = data.order ?? {}
+    } catch {
+      // non-fatal
+    }
+  }
+
+  /** Default sort: 'General' first, then alphabetical. */
+  function defaultCategorySort(keys: string[]): string[] {
+    return [...keys].sort((a, b) => {
+      if (a === 'General') return -1
+      if (b === 'General') return 1
+      return a.localeCompare(b)
+    })
+  }
+
+  // Group todos by category, ordered by user preference (with reconciliation
+  // for new categories not yet in the saved order).
   const byCategory = computed(() => {
     const map = new Map<string, Todo[]>()
     for (const t of todos.value) {
@@ -28,16 +53,28 @@ export const useTodoStore = defineStore('todos', () => {
       if (!map.has(cat)) map.set(cat, [])
       map.get(cat)!.push(t)
     }
-    // Sort categories alphabetically, keeping General first
+    const present = new Set(map.keys())
+    const saved = categoryOrder.value[currentList.value] ?? []
+    const ordered = saved.filter((c) => present.has(c))
+    const seen = new Set(ordered)
+    const remaining = defaultCategorySort([...present].filter((c) => !seen.has(c)))
     const sorted = new Map<string, Todo[]>()
-    const keys = [...map.keys()].sort((a, b) => {
-      if (a === 'General') return -1
-      if (b === 'General') return 1
-      return a.localeCompare(b)
-    })
-    for (const k of keys) sorted.set(k, map.get(k)!)
+    for (const k of [...ordered, ...remaining]) sorted.set(k, map.get(k)!)
     return sorted
   })
+
+  async function reorderCategories(list: string, newOrder: string[]) {
+    categoryOrder.value = { ...categoryOrder.value, [list]: newOrder }
+    try {
+      await apiFetch('/api/settings/category-order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order: categoryOrder.value }),
+      })
+    } catch (e) {
+      error.value = String(e)
+    }
+  }
 
   function buildUrl(list: string, view: ViewType): string {
     const base = view === 'all' ? '/api/todos' : `/api/todos/${view}`
@@ -62,6 +99,8 @@ export const useTodoStore = defineStore('todos', () => {
   async function fetchTodos(list: string, view: ViewType = 'all') {
     currentList.value = list
     currentView.value = view
+
+    loadCategoryOrder()
 
     const cachedTodos = todosCache.get(list)?.get(view)
     if (cachedTodos !== undefined) {
@@ -183,6 +222,11 @@ export const useTodoStore = defineStore('todos', () => {
       body: JSON.stringify({ list, oldName, newName }),
     })
     if (!res.ok) throw new Error(await res.text())
+    const saved = categoryOrder.value[list]
+    if (saved) {
+      const next = saved.map((c) => (c === oldName ? newName : c))
+      await reorderCategories(list, next)
+    }
     invalidateList(list)
     await fetchTodos(list, currentView.value)
   }
@@ -208,6 +252,7 @@ export const useTodoStore = defineStore('todos', () => {
     moveTodo,
     fetchCategoriesFor,
     renameCategory,
+    reorderCategories,
     setView,
   }
 })

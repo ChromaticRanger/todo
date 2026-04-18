@@ -17,12 +17,13 @@ function openAdd(type: ItemType) {
 
 <template>
   <header class="bg-surface border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0">
-    <div class="flex items-center gap-3">
-      <svg class="size-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12l2 2 4-4" />
-      </svg>
-      <h1 class="text-lg font-semibold text-text">My Stash</h1>
+    <div class="flex items-center gap-2">
+      <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-12" />
+      <h1
+        class="font-display italic text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
+      >
+        Stash Squirrel
+      </h1>
     </div>
     <div class="flex items-center gap-2">
       <!-- Add button with type dropdown -->
