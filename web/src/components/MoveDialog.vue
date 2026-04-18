@@ -27,8 +27,11 @@ const categoryChoice = ref(props.currentCategory)
 const newCategoryName = ref('')
 const categorySuggestions = ref<string[]>([])
 
-let firstRadio: HTMLInputElement | null = null
-onMounted(() => firstRadio?.focus())
+const firstRadio = ref<HTMLInputElement | null>(null)
+function setFirstRadio(el: unknown, i: number) {
+  if (i === 0) firstRadio.value = el as HTMLInputElement | null
+}
+onMounted(() => firstRadio.value?.focus())
 useEscapeKey(() => emit('cancel'))
 
 const availableCategories = computed(() => {
@@ -106,7 +109,7 @@ const canSubmit = () => {
             class="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-surface-hover cursor-pointer"
           >
             <input
-              :ref="(el) => { if (i === 0) firstRadio = el as HTMLInputElement | null }"
+              :ref="(el) => setFirstRadio(el, i)"
               type="radio"
               v-model="selected"
               :value="list"
