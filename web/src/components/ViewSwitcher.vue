@@ -19,7 +19,7 @@ const views: { key: ViewType; label: string }[] = [
     <button
       v-for="v in views"
       :key="v.key"
-      class="px-3 py-1.5 rounded-lg text-sm transition-colors"
+      class="px-2.5 py-1 rounded-lg text-sm transition-colors"
       :class="current === v.key
         ? 'bg-accent text-accent-fg font-medium'
         : 'text-muted hover:text-text hover:bg-surface-hover'"

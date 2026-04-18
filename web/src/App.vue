@@ -124,12 +124,12 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
     <AppHeader @add="openAddForm" />
 
     <!-- List tabs -->
-    <div class="bg-surface/50 border-b border-border px-4 pt-2">
+    <div class="bg-surface/50 border-b border-border px-4 pt-1">
       <ListTabs @select="onListSelect" />
     </div>
 
     <!-- View switcher -->
-    <div class="px-4 py-3 border-b border-border/60 bg-surface/20 flex items-center justify-between gap-4">
+    <div class="px-4 py-1.5 border-b border-border/60 bg-surface/20 flex items-center justify-between gap-4">
       <ViewSwitcher :current="currentView" @change="onViewChange" />
 
       <!-- Layout toggle (category views only) -->
