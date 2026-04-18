@@ -59,7 +59,7 @@ async function deleteList() {
     <div
       v-for="list in listStore.lists"
       :key="list"
-      class="group flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 cursor-pointer select-none"
+      class="group flex items-center gap-2 px-3 py-1 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 cursor-pointer select-none"
       :class="listStore.activeList === list
         ? 'border-accent text-accent bg-surface-hover/60'
         : 'border-transparent text-muted hover:text-text hover:bg-surface-hover/40'"
@@ -107,7 +107,7 @@ async function deleteList() {
     <!-- New list button/input -->
     <div v-if="!showNewInput">
       <button
-        class="px-3 py-2 rounded-t-lg text-sm text-muted hover:text-text hover:bg-surface-hover/40 transition-colors border-b-2 border-transparent whitespace-nowrap"
+        class="px-2.5 py-1 rounded-t-lg text-sm text-muted hover:text-text hover:bg-surface-hover/40 transition-colors border-b-2 border-transparent whitespace-nowrap"
         @click="showNewInput = true"
       >
         + New list

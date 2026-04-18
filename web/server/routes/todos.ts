@@ -370,13 +370,22 @@ router.post('/:id/uncomplete', async (req, res) => {
 
 // POST /api/todos/:id/move
 router.post('/:id/move', async (req, res) => {
-  const { target_list } = req.body as { target_list: string }
+  const { target_list, target_category } = req.body as {
+    target_list: string
+    target_category?: string
+  }
   if (!target_list) return res.status(400).json({ error: 'target_list is required' })
   try {
-    const result = await query(
-      'UPDATE todos SET list_name = $1 WHERE id = $2',
-      [target_list, req.params.id]
-    )
+    const cat = (target_category ?? '').trim()
+    const result = cat
+      ? await query(
+          'UPDATE todos SET list_name = $1, category = $2 WHERE id = $3',
+          [target_list, cat, req.params.id]
+        )
+      : await query(
+          'UPDATE todos SET list_name = $1 WHERE id = $2',
+          [target_list, req.params.id]
+        )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ ok: true })
   } catch (err) {

@@ -138,16 +138,42 @@ export const useTodoStore = defineStore('todos', () => {
     await fetchTodos(currentList.value, currentView.value)
   }
 
-  async function moveTodo(id: number, targetList: string) {
+  async function moveTodo(id: number, targetList: string, targetCategory?: string) {
+    const body: { target_list: string; target_category?: string } = { target_list: targetList }
+    if (targetCategory && targetCategory.trim()) body.target_category = targetCategory.trim()
     const res = await apiFetch(`/api/todos/${id}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target_list: targetList }),
+      body: JSON.stringify(body),
     })
     if (!res.ok) throw new Error(await res.text())
-    todos.value = todos.value.filter((t) => t.id !== id)
     invalidateList(currentList.value)
     invalidateList(targetList)
+    if (targetList === currentList.value) {
+      // Same list, (possibly) different category — mutate in place so byCategory regroups.
+      const cat = body.target_category
+      if (cat) {
+        const item = todos.value.find((t) => t.id === id)
+        if (item) {
+          item.category = cat
+          if (!categories.value.includes(cat)) categories.value = [...categories.value, cat]
+        }
+      }
+    } else {
+      todos.value = todos.value.filter((t) => t.id !== id)
+    }
+  }
+
+  async function fetchCategoriesFor(list: string): Promise<string[]> {
+    if (categoriesCache.has(list)) return categoriesCache.get(list)!
+    try {
+      const res = await apiFetch(`/api/categories?list=${encodeURIComponent(list)}`)
+      const data = await res.json() as { categories: string[] }
+      categoriesCache.set(list, data.categories)
+      return data.categories
+    } catch {
+      return []
+    }
   }
 
   async function renameCategory(list: string, oldName: string, newName: string) {
@@ -180,6 +206,7 @@ export const useTodoStore = defineStore('todos', () => {
     completeTodo,
     uncompleteTodo,
     moveTodo,
+    fetchCategoriesFor,
     renameCategory,
     setView,
   }

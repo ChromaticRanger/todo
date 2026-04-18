@@ -56,7 +56,7 @@ function cancelEdit() {
     :class="layout === 'kanban' ? 'w-max min-w-52 shrink-0' : ''"
   >
     <!-- Category header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-border-strong/60 bg-surface-hover/40">
+    <div class="flex items-center justify-between px-3 py-1.5 border-b border-border-strong/60 bg-surface-hover/40">
       <!-- Inline rename input -->
       <input
         v-if="editing"
