@@ -92,6 +92,42 @@ router.put('/list-order', async (req, res) => {
   }
 })
 
+// GET /api/settings/active-list
+router.get('/active-list', async (req, res) => {
+  const userId = req.userId!
+  try {
+    const result = await query<{ value: string }>(
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'active_list'`,
+      [userId]
+    )
+    res.json({ activeList: result.rows[0]?.value ?? null })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/settings/active-list
+router.put('/active-list', async (req, res) => {
+  const userId = req.userId!
+  const { activeList } = req.body as { activeList?: unknown }
+
+  if (typeof activeList !== 'string') {
+    return res.status(400).json({ error: 'activeList must be a string' })
+  }
+
+  try {
+    await query(
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'active_list', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify(activeList)]
+    )
+    res.json({ activeList })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/settings/category-order
 router.get('/category-order', async (req, res) => {
   const userId = req.userId!

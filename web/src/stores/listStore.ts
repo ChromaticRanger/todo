@@ -21,17 +21,23 @@ export const useListStore = defineStore('lists', () => {
     loading.value = true
     error.value = null
     try {
-      const [listsRes, orderRes] = await Promise.all([
+      const [listsRes, orderRes, activeRes] = await Promise.all([
         apiFetch('/api/lists'),
         apiFetch('/api/settings/list-order'),
+        apiFetch('/api/settings/active-list'),
       ])
       if (!listsRes.ok) return
       const { lists: fetched } = await listsRes.json() as { lists: string[] }
       const savedOrder = orderRes.ok
         ? ((await orderRes.json()) as { order: string[] }).order
         : []
+      const savedActive = activeRes.ok
+        ? ((await activeRes.json()) as { activeList: string | null }).activeList
+        : null
       lists.value = applyOrder(fetched, savedOrder)
-      if (lists.value.length > 0 && !lists.value.includes(activeList.value)) {
+      if (savedActive && lists.value.includes(savedActive)) {
+        activeList.value = savedActive
+      } else if (lists.value.length > 0 && !lists.value.includes(activeList.value)) {
         activeList.value = lists.value[0]
       }
     } catch (e) {
@@ -41,8 +47,22 @@ export const useListStore = defineStore('lists', () => {
     }
   }
 
+  async function saveActiveList() {
+    try {
+      await apiFetch('/api/settings/active-list', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activeList: activeList.value }),
+      })
+    } catch (e) {
+      error.value = String(e)
+    }
+  }
+
   function setActiveList(name: string) {
+    if (activeList.value === name) return
     activeList.value = name
+    void saveActiveList()
   }
 
   async function saveOrder() {
@@ -73,7 +93,10 @@ export const useListStore = defineStore('lists', () => {
       if (!res.ok) return
       const idx = lists.value.indexOf(oldName)
       if (idx !== -1) lists.value[idx] = newName
-      if (activeList.value === oldName) activeList.value = newName
+      if (activeList.value === oldName) {
+        activeList.value = newName
+        void saveActiveList()
+      }
       await saveOrder()
     } catch (e) {
       error.value = String(e)
@@ -86,6 +109,7 @@ export const useListStore = defineStore('lists', () => {
       lists.value = lists.value.filter((l) => l !== name)
       if (activeList.value === name) {
         activeList.value = lists.value[0] ?? 'todos'
+        void saveActiveList()
       }
       await saveOrder()
     } catch (e) {
