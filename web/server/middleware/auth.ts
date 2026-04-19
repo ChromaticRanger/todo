@@ -1,25 +1,28 @@
 import type { Request, Response, NextFunction } from 'express'
-import jwt from 'jsonwebtoken'
+import { fromNodeHeaders } from 'better-auth/node'
+import { auth } from '../auth.js'
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction) {
-  const authHeader = req.headers.authorization
-  if (!authHeader?.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Unauthorized' })
-    return
+declare module 'express-serve-static-core' {
+  interface Request {
+    userId?: string
   }
+}
 
-  const token = authHeader.slice(7)
-  const secret = process.env.JWT_SECRET
-
-  if (!secret) {
-    res.status(500).json({ error: 'Server is not configured correctly' })
-    return
-  }
-
+export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
   try {
-    jwt.verify(token, secret)
+    const session = await auth.api.getSession({
+      headers: fromNodeHeaders(req.headers),
+    })
+
+    if (!session?.user?.id) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+
+    req.userId = session.user.id
     next()
-  } catch {
-    res.status(401).json({ error: 'Invalid or expired token' })
+  } catch (err) {
+    console.error('[auth] session lookup failed:', err)
+    res.status(401).json({ error: 'Unauthorized' })
   }
 }

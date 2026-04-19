@@ -1,17 +1,13 @@
-import { useAuthStore } from '../stores/authStore'
+import { authClient } from './auth-client'
 
 export async function apiFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const authStore = useAuthStore()
-  const headers = new Headers(options.headers)
-
-  if (authStore.token) {
-    headers.set('Authorization', `Bearer ${authStore.token}`)
-  }
-
-  const res = await fetch(url, { ...options, headers })
+  const res = await fetch(url, {
+    ...options,
+    credentials: 'include',
+  })
 
   if (res.status === 401) {
-    authStore.logout()
+    await authClient.signOut().catch(() => {})
   }
 
   return res

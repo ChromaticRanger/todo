@@ -17,10 +17,12 @@ interface UiSettings {
 const DEFAULT_SETTINGS: UiSettings = { theme: 'midnight', mode: 'dark' }
 
 // GET /api/settings
-router.get('/', async (_req, res) => {
+router.get('/', async (req, res) => {
+  const userId = req.userId!
   try {
     const result = await query<{ value: UiSettings }>(
-      `SELECT value FROM app_settings WHERE key = 'ui'`
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'ui'`,
+      [userId]
     )
     res.json(result.rows[0]?.value ?? DEFAULT_SETTINGS)
   } catch (err) {
@@ -30,6 +32,7 @@ router.get('/', async (_req, res) => {
 
 // PUT /api/settings
 router.put('/', async (req, res) => {
+  const userId = req.userId!
   const { theme, mode } = req.body as Partial<UiSettings>
 
   if (!theme || !(VALID_THEMES as readonly string[]).includes(theme)) {
@@ -42,10 +45,10 @@ router.put('/', async (req, res) => {
   const value: UiSettings = { theme, mode }
   try {
     await query(
-      `INSERT INTO app_settings (key, value, updated_at)
-       VALUES ('ui', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
-      [JSON.stringify(value)]
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'ui', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify(value)]
     )
     res.json(value)
   } catch (err) {
@@ -54,10 +57,12 @@ router.put('/', async (req, res) => {
 })
 
 // GET /api/settings/list-order
-router.get('/list-order', async (_req, res) => {
+router.get('/list-order', async (req, res) => {
+  const userId = req.userId!
   try {
     const result = await query<{ value: string[] }>(
-      `SELECT value FROM app_settings WHERE key = 'list_order'`
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'list_order'`,
+      [userId]
     )
     res.json({ order: result.rows[0]?.value ?? [] })
   } catch (err) {
@@ -67,6 +72,7 @@ router.get('/list-order', async (_req, res) => {
 
 // PUT /api/settings/list-order
 router.put('/list-order', async (req, res) => {
+  const userId = req.userId!
   const { order } = req.body as { order?: unknown }
 
   if (!Array.isArray(order) || !order.every((v) => typeof v === 'string')) {
@@ -75,10 +81,10 @@ router.put('/list-order', async (req, res) => {
 
   try {
     await query(
-      `INSERT INTO app_settings (key, value, updated_at)
-       VALUES ('list_order', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
-      [JSON.stringify(order)]
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'list_order', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify(order)]
     )
     res.json({ order })
   } catch (err) {
@@ -87,10 +93,12 @@ router.put('/list-order', async (req, res) => {
 })
 
 // GET /api/settings/category-order
-router.get('/category-order', async (_req, res) => {
+router.get('/category-order', async (req, res) => {
+  const userId = req.userId!
   try {
     const result = await query<{ value: Record<string, string[]> }>(
-      `SELECT value FROM app_settings WHERE key = 'category_order'`
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'category_order'`,
+      [userId]
     )
     res.json({ order: result.rows[0]?.value ?? {} })
   } catch (err) {
@@ -100,6 +108,7 @@ router.get('/category-order', async (_req, res) => {
 
 // PUT /api/settings/category-order
 router.put('/category-order', async (req, res) => {
+  const userId = req.userId!
   const { order } = req.body as { order?: unknown }
 
   if (
@@ -115,10 +124,10 @@ router.put('/category-order', async (req, res) => {
 
   try {
     await query(
-      `INSERT INTO app_settings (key, value, updated_at)
-       VALUES ('category_order', $1, NOW())
-       ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW()`,
-      [JSON.stringify(order)]
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'category_order', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify(order)]
     )
     res.json({ order })
   } catch (err) {

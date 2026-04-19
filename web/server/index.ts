@@ -3,11 +3,12 @@ import express from 'express'
 import cors from 'cors'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { toNodeHandler } from 'better-auth/node'
+import { auth } from './auth.js'
 import todosRouter from './routes/todos.js'
 import listsRouter from './routes/lists.js'
 import categoriesRouter from './routes/categories.js'
 import settingsRouter from './routes/settings.js'
-import authRouter from './routes/auth.js'
 import { authMiddleware } from './middleware/auth.js'
 import { initDb } from './db.js'
 
@@ -17,14 +18,21 @@ const isProd = process.env.NODE_ENV === 'production'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
-app.use(cors())
+app.use(
+  cors({
+    origin: (origin, cb) => cb(null, origin ?? true),
+    credentials: true,
+  })
+)
+
+// Better Auth handler — must be mounted BEFORE express.json() since it reads the raw body itself
+app.all('/api/auth/*splat', toNodeHandler(auth))
+
 app.use(express.json())
 
 app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
-
-app.use('/api', authRouter)
 
 app.use('/api', authMiddleware)
 
