@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuthStore } from '../stores/authStore'
 import ThemePicker from './ThemePicker.vue'
 import type { ItemType } from '../types/todo'
@@ -8,6 +8,17 @@ const emit = defineEmits<{ add: [type: ItemType] }>()
 
 const authStore = useAuthStore()
 const showTypeMenu = ref(false)
+
+const displayName = computed(() => {
+  const u = authStore.user
+  if (!u) return ''
+  return u.name?.trim() || u.email?.split('@')[0] || ''
+})
+
+const initial = computed(() => {
+  const source = displayName.value || authStore.user?.email || ''
+  return source.charAt(0).toUpperCase() || '?'
+})
 
 function openAdd(type: ItemType) {
   showTypeMenu.value = false
@@ -86,6 +97,29 @@ function openAdd(type: ItemType) {
       </div>
 
       <ThemePicker />
+
+      <!-- Current user -->
+      <div
+        v-if="authStore.user"
+        class="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg text-sm text-text"
+        :title="authStore.user.email ?? ''"
+      >
+        <img
+          v-if="authStore.user.image"
+          :src="authStore.user.image"
+          :alt="displayName"
+          class="size-7 rounded-full outline-1 -outline-offset-1 outline-black/5 dark:outline-white/10"
+        />
+        <div
+          v-else
+          aria-hidden="true"
+          class="flex size-7 items-center justify-center rounded-full bg-accent/15 text-accent text-xs font-semibold outline-1 -outline-offset-1 outline-black/5 dark:outline-white/10"
+        >
+          {{ initial }}
+        </div>
+        <span class="max-md:hidden font-medium leading-none">{{ displayName }}</span>
+      </div>
+
       <button
         type="button"
         class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover text-sm transition-colors"

@@ -47,15 +47,15 @@ function coerceTodo(row: TodoRow) {
   }
 }
 
-async function spawnRepeatingTodos(listName: string) {
-  // Find repeating todos that are completed but haven't spawned yet
+async function spawnRepeatingTodos(userId: string, listName: string) {
   const result = await query<TodoRow>(
     `SELECT * FROM todos
-     WHERE list_name = $1
+     WHERE user_id = $1
+       AND list_name = $2
        AND status = 1
        AND spawned_next = 0
        AND (repeat_days > 0 OR repeat_months > 0)`,
-    [listName]
+    [userId, listName]
   )
 
   const now = Math.floor(Date.now() / 1000)
@@ -74,10 +74,11 @@ async function spawnRepeatingTodos(listName: string) {
 
     await query(
       `INSERT INTO todos
-         (list_name, title, description, category, priority, status,
+         (user_id, list_name, title, description, category, priority, status,
           due_date, repeat_days, repeat_months, spawned_next)
-       VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,0)`,
+       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0)`,
       [
+        userId,
         listName,
         todo.title,
         todo.description,
@@ -89,7 +90,10 @@ async function spawnRepeatingTodos(listName: string) {
       ]
     )
 
-    await query('UPDATE todos SET spawned_next = 1 WHERE id = $1', [todo.id])
+    await query(
+      'UPDATE todos SET spawned_next = 1 WHERE id = $1 AND user_id = $2',
+      [todo.id, userId]
+    )
   }
 }
 
@@ -105,15 +109,16 @@ function buildTodoSelect(extra = ''): string {
 
 // GET /api/todos?list=X&status=0|1|-1&category=X
 router.get('/', async (req, res) => {
+  const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   const statusParam = req.query.status as string | undefined
   const category = req.query.category as string | undefined
 
   try {
-    await spawnRepeatingTodos(list)
+    await spawnRepeatingTodos(userId, list)
 
-    const params: unknown[] = [list]
-    const conditions: string[] = ['list_name = $1']
+    const params: unknown[] = [userId, list]
+    const conditions: string[] = ['user_id = $1', 'list_name = $2']
 
     if (statusParam !== undefined && statusParam !== '-1') {
       params.push(parseInt(statusParam))
@@ -125,7 +130,7 @@ router.get('/', async (req, res) => {
       conditions.push(`category = $${params.length}`)
     }
 
-    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+    const where = `WHERE ${conditions.join(' AND ')}`
     const result = await query<TodoRow>(
       buildTodoSelect(`${where} ORDER BY priority DESC, id ASC`),
       params
@@ -138,18 +143,19 @@ router.get('/', async (req, res) => {
 
 // GET /api/todos/today?list=X
 router.get('/today', async (req, res) => {
+  const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   try {
-    await spawnRepeatingTodos(list)
+    await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
          AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
          AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '1 day')::BIGINT
          ORDER BY due_date ASC`
       ),
-      [list]
+      [userId, list]
     )
     res.json({ todos: result.rows.map(coerceTodo) })
   } catch (err) {
@@ -159,18 +165,19 @@ router.get('/today', async (req, res) => {
 
 // GET /api/todos/week?list=X
 router.get('/week', async (req, res) => {
+  const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   try {
-    await spawnRepeatingTodos(list)
+    await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
          AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
          AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '7 days')::BIGINT
          ORDER BY due_date ASC`
       ),
-      [list]
+      [userId, list]
     )
     res.json({ todos: result.rows.map(coerceTodo) })
   } catch (err) {
@@ -180,18 +187,19 @@ router.get('/week', async (req, res) => {
 
 // GET /api/todos/month?list=X
 router.get('/month', async (req, res) => {
+  const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   try {
-    await spawnRepeatingTodos(list)
+    await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
          AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
          AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '30 days')::BIGINT
          ORDER BY due_date ASC`
       ),
-      [list]
+      [userId, list]
     )
     res.json({ todos: result.rows.map(coerceTodo) })
   } catch (err) {
@@ -201,16 +209,17 @@ router.get('/month', async (req, res) => {
 
 // GET /api/todos/schedule?list=X
 router.get('/schedule', async (req, res) => {
+  const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   try {
-    await spawnRepeatingTodos(list)
+    await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
          ORDER BY due_date ASC`
       ),
-      [list]
+      [userId, list]
     )
     res.json({ todos: result.rows.map(coerceTodo) })
   } catch (err) {
@@ -220,16 +229,17 @@ router.get('/schedule', async (req, res) => {
 
 // GET /api/todos/completed?list=X&since=epoch
 router.get('/completed', async (req, res) => {
+  const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   const since = req.query.since ? parseInt(req.query.since as string) : 0
   try {
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE list_name = $1 AND status = 1 AND type = 'todo'
-         AND (EXTRACT(EPOCH FROM completed_at)::BIGINT >= $2 OR $2 = 0)
+        `WHERE user_id = $1 AND list_name = $2 AND status = 1 AND type = 'todo'
+         AND (EXTRACT(EPOCH FROM completed_at)::BIGINT >= $3 OR $3 = 0)
          ORDER BY completed_at DESC`
       ),
-      [list, since]
+      [userId, list, since]
     )
     res.json({ todos: result.rows.map(coerceTodo) })
   } catch (err) {
@@ -239,10 +249,11 @@ router.get('/completed', async (req, res) => {
 
 // GET /api/todos/:id
 router.get('/:id', async (req, res) => {
+  const userId = req.userId!
   try {
     const result = await query<TodoRow>(
-      buildTodoSelect('WHERE id = $1'),
-      [req.params.id]
+      buildTodoSelect('WHERE id = $1 AND user_id = $2'),
+      [req.params.id, userId]
     )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ todo: coerceTodo(result.rows[0]) })
@@ -253,6 +264,7 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/todos
 router.post('/', async (req, res) => {
+  const userId = req.userId!
   const {
     list_name = 'todos',
     title,
@@ -286,10 +298,10 @@ router.post('/', async (req, res) => {
 
     const result = await query<{ id: number }>(
       `INSERT INTO todos
-         (list_name, title, description, category, priority, status,
+         (user_id, list_name, title, description, category, priority, status,
           due_date, repeat_days, repeat_months, spawned_next, type, url)
-       VALUES ($1,$2,$3,$4,$5,0,$6,$7,$8,0,$9,$10) RETURNING id`,
-      [list_name, title, description, category, priority, effectiveDue, repeat_days, repeat_months, type, url]
+       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0,$10,$11) RETURNING id`,
+      [userId, list_name, title, description, category, priority, effectiveDue, repeat_days, repeat_months, type, url]
     )
     res.status(201).json({ id: Number(result.rows[0].id) })
   } catch (err) {
@@ -299,6 +311,7 @@ router.post('/', async (req, res) => {
 
 // PUT /api/todos/:id
 router.put('/:id', async (req, res) => {
+  const userId = req.userId!
   const { title, description, category, priority, due_date, url } = req.body as Partial<{
     title: string
     description: string
@@ -309,7 +322,7 @@ router.put('/:id', async (req, res) => {
   }>
 
   try {
-    await query(
+    const result = await query(
       `UPDATE todos SET
          title = COALESCE($1, title),
          description = COALESCE($2, description),
@@ -317,9 +330,10 @@ router.put('/:id', async (req, res) => {
          priority = COALESCE($4, priority),
          due_date = $5,
          url = COALESCE($6, url)
-       WHERE id = $7`,
-      [title, description, category, priority, due_date ?? null, url ?? null, req.params.id]
+       WHERE id = $7 AND user_id = $8`,
+      [title, description, category, priority, due_date ?? null, url ?? null, req.params.id, userId]
     )
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -328,8 +342,12 @@ router.put('/:id', async (req, res) => {
 
 // DELETE /api/todos/:id
 router.delete('/:id', async (req, res) => {
+  const userId = req.userId!
   try {
-    const result = await query('DELETE FROM todos WHERE id = $1', [req.params.id])
+    const result = await query(
+      'DELETE FROM todos WHERE id = $1 AND user_id = $2',
+      [req.params.id, userId]
+    )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ ok: true })
   } catch (err) {
@@ -339,14 +357,15 @@ router.delete('/:id', async (req, res) => {
 
 // POST /api/todos/:id/complete
 router.post('/:id/complete', async (req, res) => {
+  const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   try {
     await query(
       `UPDATE todos SET status = 1, completed_at = NOW()
-       WHERE id = $1 AND list_name = $2`,
-      [req.params.id, list]
+       WHERE id = $1 AND list_name = $2 AND user_id = $3`,
+      [req.params.id, list, userId]
     )
-    await spawnRepeatingTodos(list)
+    await spawnRepeatingTodos(userId, list)
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -355,12 +374,13 @@ router.post('/:id/complete', async (req, res) => {
 
 // POST /api/todos/:id/uncomplete
 router.post('/:id/uncomplete', async (req, res) => {
+  const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   try {
     await query(
       `UPDATE todos SET status = 0, completed_at = NULL
-       WHERE id = $1 AND list_name = $2`,
-      [req.params.id, list]
+       WHERE id = $1 AND list_name = $2 AND user_id = $3`,
+      [req.params.id, list, userId]
     )
     res.json({ ok: true })
   } catch (err) {
@@ -370,6 +390,7 @@ router.post('/:id/uncomplete', async (req, res) => {
 
 // POST /api/todos/:id/move
 router.post('/:id/move', async (req, res) => {
+  const userId = req.userId!
   const { target_list, target_category } = req.body as {
     target_list: string
     target_category?: string
@@ -379,12 +400,12 @@ router.post('/:id/move', async (req, res) => {
     const cat = (target_category ?? '').trim()
     const result = cat
       ? await query(
-          'UPDATE todos SET list_name = $1, category = $2 WHERE id = $3',
-          [target_list, cat, req.params.id]
+          'UPDATE todos SET list_name = $1, category = $2 WHERE id = $3 AND user_id = $4',
+          [target_list, cat, req.params.id, userId]
         )
       : await query(
-          'UPDATE todos SET list_name = $1 WHERE id = $2',
-          [target_list, req.params.id]
+          'UPDATE todos SET list_name = $1 WHERE id = $2 AND user_id = $3',
+          [target_list, req.params.id, userId]
         )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ ok: true })
