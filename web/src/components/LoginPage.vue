@@ -71,13 +71,16 @@ function toggleMode() {
   <div class="min-h-dvh bg-bg flex items-center justify-center p-4 antialiased">
     <div class="w-full max-w-xs">
       <!-- Branding -->
-      <div class="flex flex-col items-center gap-3 mb-8">
+      <div class="flex flex-col items-center gap-2 mb-8">
         <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-20" />
         <h1
           class="font-display italic text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
         >
           Stash Squirrel
         </h1>
+        <p class="text-sm text-muted text-center text-balance">
+          A nest for your todos, bookmarks, and notes.
+        </p>
       </div>
 
       <!-- Auth card -->
