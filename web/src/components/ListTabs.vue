@@ -2,9 +2,21 @@
 import { computed, ref } from 'vue'
 import draggable from 'vuedraggable'
 import { useListStore } from '../stores/listStore'
+import { usePlanStore } from '../stores/planStore'
+import { useTodoStore } from '../stores/todoStore'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 const listStore = useListStore()
+const planStore = usePlanStore()
+const todoStore = useTodoStore()
+
+const maxLists = computed(() => planStore.limits?.maxLists ?? null)
+const atListCap = computed(() => {
+  if (planStore.tier !== 'free') return false
+  const cap = maxLists.value
+  if (cap == null) return false
+  return listStore.lists.length >= cap
+})
 
 const showNewInput = ref(false)
 const newName = ref('')
@@ -22,6 +34,15 @@ function selectList(name: string) {
 async function createList() {
   const name = newName.value.trim()
   if (!name) return
+  if (atListCap.value) {
+    todoStore.error = `You've reached the Free plan list limit (${maxLists.value}). Remove a list or upgrade to Pro.`
+    setTimeout(() => {
+      if (todoStore.error?.includes('list limit')) todoStore.error = null
+    }, 6000)
+    showNewInput.value = false
+    newName.value = ''
+    return
+  }
   listStore.addListLocally(name)
   listStore.setActiveList(name)
   emit('select', name)
@@ -126,7 +147,14 @@ const draggableLists = computed({
     <!-- New list button/input -->
     <div v-if="!showNewInput">
       <button
-        class="px-2.5 py-1 rounded-t-lg text-sm text-muted hover:text-text hover:bg-surface-hover/40 transition-colors border-b-2 border-transparent whitespace-nowrap"
+        class="px-2.5 py-1 rounded-t-lg text-sm transition-colors border-b-2 border-transparent whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed"
+        :class="atListCap
+          ? 'text-muted'
+          : 'text-muted hover:text-text hover:bg-surface-hover/40'"
+        :disabled="atListCap"
+        :title="atListCap
+          ? `Free plan is capped at ${maxLists} lists — upgrade to Pro for more.`
+          : 'Create a new list'"
         @click="showNewInput = true"
       >
         + New list

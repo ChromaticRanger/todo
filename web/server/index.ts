@@ -9,7 +9,10 @@ import todosRouter from './routes/todos.js'
 import listsRouter from './routes/lists.js'
 import categoriesRouter from './routes/categories.js'
 import settingsRouter from './routes/settings.js'
+import planRouter from './routes/plan.js'
 import { authMiddleware } from './middleware/auth.js'
+import { requirePlan } from './middleware/requirePlan.js'
+import { rateLimit } from './middleware/rateLimit.js'
 import { initDb } from './db.js'
 
 const app = express()
@@ -35,6 +38,14 @@ app.get('/api/health', (_req, res) => {
 })
 
 app.use('/api', authMiddleware)
+
+// Plan selection lives outside requirePlan — a tier-less user must be able
+// to reach /api/plan/select-free on first login.
+app.use('/api/plan', planRouter)
+
+// Everything below requires the user to have chosen a plan.
+app.use('/api', requirePlan)
+app.use('/api', rateLimit)
 
 app.use('/api/todos', todosRouter)
 app.use('/api/lists', listsRouter)

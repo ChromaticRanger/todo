@@ -127,5 +127,11 @@ export const useListStore = defineStore('lists', () => {
     }
   }
 
-  return { lists, activeList, loading, error, fetchLists, setActiveList, reorderLists, renameList, deleteList, addListLocally }
+  function reset() {
+    lists.value = []
+    activeList.value = 'todos'
+    error.value = null
+  }
+
+  return { lists, activeList, loading, error, fetchLists, setActiveList, reorderLists, renameList, deleteList, addListLocally, reset }
 })

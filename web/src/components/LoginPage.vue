@@ -10,12 +10,18 @@ const password = ref('')
 const name = ref('')
 const error = ref('')
 const loading = ref(false)
+const needsVerification = ref(false)
+const resendStatus = ref<'' | 'sending' | 'sent' | 'failed'>('')
+const awaitingVerification = ref(false)
+const awaitingEmail = ref('')
 
 const title = computed(() => (mode.value === 'signin' ? 'Sign in' : 'Create account'))
 const submitLabel = computed(() => (mode.value === 'signin' ? 'Sign in' : 'Sign up'))
 
 async function handleSubmit() {
   error.value = ''
+  resendStatus.value = ''
+  needsVerification.value = false
   loading.value = true
   try {
     if (mode.value === 'signup') {
@@ -26,6 +32,10 @@ async function handleSubmit() {
       })
       if (err) {
         error.value = err.message || 'Sign up failed'
+      } else {
+        awaitingEmail.value = email.value
+        awaitingVerification.value = true
+        password.value = ''
       }
     } else {
       const { error: err } = await authClient.signIn.email({
@@ -33,7 +43,9 @@ async function handleSubmit() {
         password: password.value,
       })
       if (err) {
-        error.value = err.message || 'Invalid credentials'
+        const msg = err.message || 'Invalid credentials'
+        error.value = msg
+        if (/verif/i.test(msg)) needsVerification.value = true
       }
     }
   } catch (e) {
@@ -41,6 +53,31 @@ async function handleSubmit() {
   } finally {
     loading.value = false
   }
+}
+
+async function resendVerification(target?: string) {
+  const addr = target || email.value
+  if (!addr) return
+  resendStatus.value = 'sending'
+  try {
+    const res = await fetch('/api/auth/send-verification-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: addr, callbackURL: '/' }),
+    })
+    resendStatus.value = res.ok ? 'sent' : 'failed'
+  } catch {
+    resendStatus.value = 'failed'
+  }
+}
+
+function backToSignIn() {
+  awaitingVerification.value = false
+  awaitingEmail.value = ''
+  resendStatus.value = ''
+  error.value = ''
+  mode.value = 'signin'
 }
 
 async function signInWithGoogle() {
@@ -83,8 +120,47 @@ function toggleMode() {
         </p>
       </div>
 
+      <!-- Post-signup "check your inbox" card -->
+      <div v-if="awaitingVerification" class="rounded-2xl bg-surface ring-1 ring-ring p-6 dark:inset-ring dark:inset-ring-white/5">
+        <div class="flex flex-col items-center text-center gap-3">
+          <div class="flex size-12 items-center justify-center rounded-full bg-accent/15 text-accent">
+            <svg class="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 class="text-base font-semibold text-text">Check your inbox</h2>
+          <p class="text-sm text-muted text-balance">
+            We sent a verification link to <span class="text-text font-medium">{{ awaitingEmail }}</span>. Click it to finish creating your account.
+          </p>
+          <p class="text-xs text-muted">
+            Didn't get it? Check spam, or
+            <template v-if="resendStatus === 'sent'">
+              <span class="text-accent">resent — check again.</span>
+            </template>
+            <template v-else-if="resendStatus === 'failed'">
+              <span class="text-danger-fg">resend failed, try again in a moment.</span>
+            </template>
+            <template v-else>
+              <button
+                type="button"
+                class="text-accent hover:underline disabled:opacity-60"
+                :disabled="resendStatus === 'sending'"
+                @click="resendVerification(awaitingEmail)"
+              >{{ resendStatus === 'sending' ? 'sending…' : 'resend' }}</button>
+            </template>
+          </p>
+          <button
+            type="button"
+            class="mt-2 text-xs text-muted hover:text-text"
+            @click="backToSignIn"
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+
       <!-- Auth card -->
-      <div class="rounded-2xl bg-surface ring-1 ring-ring p-6 dark:inset-ring dark:inset-ring-white/5">
+      <div v-else class="rounded-2xl bg-surface ring-1 ring-ring p-6 dark:inset-ring dark:inset-ring-white/5">
         <h2 class="text-base font-semibold text-text mb-4">{{ title }}</h2>
 
         <!-- Social providers -->
@@ -166,6 +242,24 @@ function toggleMode() {
 
           <div v-if="error" class="rounded-lg bg-danger-bg px-3 py-2 ring-1 ring-danger/60">
             <p class="text-sm text-danger-fg">{{ error }}</p>
+            <p v-if="needsVerification" class="mt-2 text-xs text-danger-fg">
+              <template v-if="resendStatus === 'sent'">
+                Verification email sent. Check your inbox.
+              </template>
+              <template v-else-if="resendStatus === 'failed'">
+                Couldn't send the verification email. Try again in a moment.
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="underline hover:no-underline disabled:opacity-60"
+                  :disabled="resendStatus === 'sending'"
+                  @click="resendVerification()"
+                >
+                  {{ resendStatus === 'sending' ? 'Sending…' : 'Resend verification email' }}
+                </button>
+              </template>
+            </p>
           </div>
 
           <button

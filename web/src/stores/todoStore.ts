@@ -22,6 +22,29 @@ export const useTodoStore = defineStore('todos', () => {
     categoriesCache.delete(list)
   }
 
+  function setErrorWithTimeout(msg: string, ms = 6000) {
+    error.value = msg
+    setTimeout(() => {
+      if (error.value === msg) error.value = null
+    }, ms)
+  }
+
+  async function surfaceCapError(res: Response) {
+    let body: { error?: string; limit?: number } | null = null
+    try { body = await res.json() } catch { /* noop */ }
+    if (body?.error === 'free_tier_item_limit') {
+      setErrorWithTimeout(
+        `You're at the Free plan item limit (${body.limit}). Delete an item or upgrade to Pro.`
+      )
+    } else if (body?.error === 'free_tier_list_limit') {
+      setErrorWithTimeout(
+        `You're at the Free plan list limit (${body.limit}). Remove a list or upgrade to Pro.`
+      )
+    } else {
+      setErrorWithTimeout(`Error ${res.status}: ${body?.error ?? res.statusText}`)
+    }
+  }
+
   async function loadCategoryOrder() {
     if (categoryOrderLoaded) return
     categoryOrderLoaded = true
@@ -88,6 +111,7 @@ export const useTodoStore = defineStore('todos', () => {
     }
     try {
       const res = await apiFetch(`/api/categories?list=${encodeURIComponent(list)}`)
+      if (!res.ok) return
       const data = await res.json() as { categories: string[] }
       categoriesCache.set(list, data.categories)
       categories.value = data.categories
@@ -119,10 +143,15 @@ export const useTodoStore = defineStore('todos', () => {
 
       const statusParam = view === 'all' ? '&status=0' : ''
       const res = await apiFetch(url + statusParam)
+      if (!res.ok) {
+        // Non-OK (e.g. 429 rate limit). Keep existing todos; surface the error
+        // once for rate-limits (the api layer already toasts) and bail.
+        return
+      }
       const data = await res.json() as { todos: Todo[] }
-      todos.value = data.todos
+      todos.value = Array.isArray(data.todos) ? data.todos : []
       if (!todosCache.has(list)) todosCache.set(list, new Map())
-      todosCache.get(list)!.set(view, data.todos)
+      todosCache.get(list)!.set(view, todos.value)
     } catch (e) {
       error.value = String(e)
     } finally {
@@ -136,7 +165,10 @@ export const useTodoStore = defineStore('todos', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ list_name: list, ...form }),
     })
-    if (!res.ok) throw new Error(await res.text())
+    if (!res.ok) {
+      await surfaceCapError(res)
+      return
+    }
     invalidateList(list)
     await fetchTodos(list, currentView.value)
   }
@@ -185,7 +217,10 @@ export const useTodoStore = defineStore('todos', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
-    if (!res.ok) throw new Error(await res.text())
+    if (!res.ok) {
+      await surfaceCapError(res)
+      return
+    }
     invalidateList(currentList.value)
     invalidateList(targetList)
     if (targetList === currentList.value) {
@@ -207,6 +242,7 @@ export const useTodoStore = defineStore('todos', () => {
     if (categoriesCache.has(list)) return categoriesCache.get(list)!
     try {
       const res = await apiFetch(`/api/categories?list=${encodeURIComponent(list)}`)
+      if (!res.ok) return []
       const data = await res.json() as { categories: string[] }
       categoriesCache.set(list, data.categories)
       return data.categories
@@ -235,6 +271,18 @@ export const useTodoStore = defineStore('todos', () => {
     currentView.value = view
   }
 
+  function reset() {
+    todos.value = []
+    categories.value = []
+    error.value = null
+    currentView.value = 'all'
+    currentList.value = 'todos'
+    categoryOrder.value = {}
+    categoryOrderLoaded = false
+    todosCache.clear()
+    categoriesCache.clear()
+  }
+
   return {
     todos,
     categories,
@@ -254,5 +302,6 @@ export const useTodoStore = defineStore('todos', () => {
     renameCategory,
     reorderCategories,
     setView,
+    reset,
   }
 })

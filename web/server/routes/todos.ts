@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { query } from '../db.js'
+import { LIMITS, countUserLists, countUserItems, userHasList } from '../lib/limits.js'
 
 const router = Router()
 
@@ -293,6 +294,17 @@ router.post('/', async (req, res) => {
   if (type === 'bookmark' && !url) return res.status(400).json({ error: 'URL is required for bookmarks' })
 
   try {
+    if (req.plan === 'free') {
+      if (!(await userHasList(userId, list_name))) {
+        if ((await countUserLists(userId)) >= LIMITS.maxLists) {
+          return res.status(403).json({ error: 'free_tier_list_limit', limit: LIMITS.maxLists })
+        }
+      }
+      if ((await countUserItems(userId)) >= LIMITS.maxItems) {
+        return res.status(403).json({ error: 'free_tier_item_limit', limit: LIMITS.maxItems })
+      }
+    }
+
     const effectiveDue =
       due_date ?? ((repeat_days > 0 || repeat_months > 0) ? Math.floor(Date.now() / 1000) : null)
 
@@ -397,6 +409,12 @@ router.post('/:id/move', async (req, res) => {
   }
   if (!target_list) return res.status(400).json({ error: 'target_list is required' })
   try {
+    if (req.plan === 'free' && !(await userHasList(userId, target_list))) {
+      if ((await countUserLists(userId)) >= LIMITS.maxLists) {
+        return res.status(403).json({ error: 'free_tier_list_limit', limit: LIMITS.maxLists })
+      }
+    }
+
     const cat = (target_category ?? '').trim()
     const result = cat
       ? await query(
