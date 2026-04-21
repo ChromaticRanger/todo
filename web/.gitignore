@@ -24,3 +24,9 @@ dist-server
 *.njsproj
 *.sln
 *.sw?
+
+# Claude Code / tooling
+.claude/
+.agents/
+skills-lock.json
+Untitled

@@ -24,12 +24,14 @@ function storeLayout(list: string, mode: LayoutMode) {
     localStorage.setItem('list-layouts', JSON.stringify(stored))
   } catch {}
 }
+import { apiEvents } from './lib/api'
 import AppHeader from './components/AppHeader.vue'
 import ListTabs from './components/ListTabs.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
 import ListView from './components/ListView.vue'
 import TodoForm from './components/TodoForm.vue'
 import LoginPage from './components/LoginPage.vue'
+import ChoosePlan from './components/ChoosePlan.vue'
 
 const listStore = useListStore()
 const todoStore = useTodoStore()
@@ -38,6 +40,14 @@ const settingsStore = useSettingsStore()
 
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
+const rateLimitMessage = ref('')
+
+function handleRateLimit(e: Event) {
+  const detail = (e as CustomEvent<{ retryAfter?: string | null }>).detail
+  const suffix = detail?.retryAfter ? ` Retry in ${detail.retryAfter}s.` : ''
+  rateLimitMessage.value = `Too many requests — slow down.${suffix}`
+  setTimeout(() => (rateLimitMessage.value = ''), 5000)
+}
 
 function openAddForm(type: ItemType) {
   addType.value = type
@@ -76,21 +86,32 @@ async function loadData() {
 
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
-  if (authStore.isAuthenticated) {
+  apiEvents.addEventListener('rate-limited', handleRateLimit)
+  if (authStore.isAuthenticated && !authStore.needsPlanChoice) {
     await loadData()
     await settingsStore.loadFromServer()
   }
 })
 
-watch(() => authStore.isAuthenticated, async (authenticated) => {
-  if (authenticated) {
-    await loadData()
-    await settingsStore.loadFromServer()
+// Watching the user identity (not just auth status) so we also reset when
+// one user logs out and a different user signs in on the same tab.
+watch(
+  () => (authStore.needsPlanChoice ? null : authStore.user?.id ?? null),
+  async (currentId, previousId) => {
+    if (currentId === previousId) return
+    // User identity changed (including going to/from null). Purge per-user stores.
+    listStore.reset()
+    todoStore.reset()
+    if (currentId) {
+      await loadData()
+      await settingsStore.loadFromServer()
+    }
   }
-})
+)
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeydown)
+  apiEvents.removeEventListener('rate-limited', handleRateLimit)
 })
 
 // Re-fetch when active list changes and restore its layout preference
@@ -120,6 +141,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
 
 <template>
   <LoginPage v-if="!authStore.isAuthenticated" />
+  <ChoosePlan v-else-if="authStore.needsPlanChoice" />
   <div v-else class="min-h-dvh bg-bg text-text flex flex-col isolate">
     <AppHeader @add="openAddForm" />
 
@@ -165,9 +187,31 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
     <!-- Error toast -->
     <div
       v-if="todoStore.error || listStore.error"
-      class="fixed bottom-4 right-4 bg-danger-bg border border-danger text-danger-fg px-4 py-3 rounded-xl text-sm max-w-sm shadow-xl dark:shadow-none"
+      role="alert"
+      class="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-danger-bg border-2 border-danger text-danger-fg px-5 py-4 rounded-xl text-base font-medium max-w-xl shadow-2xl flex items-start gap-3"
     >
-      {{ todoStore.error || listStore.error }}
+      <svg class="size-5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span class="flex-1">{{ todoStore.error || listStore.error }}</span>
+      <button
+        type="button"
+        class="shrink-0 text-danger-fg/70 hover:text-danger-fg"
+        :title="'Dismiss'"
+        @click="todoStore.error = null; listStore.error = null"
+      >
+        <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Rate-limit toast -->
+    <div
+      v-if="rateLimitMessage"
+      class="fixed bottom-4 left-4 bg-surface border border-border-strong text-text px-4 py-3 rounded-xl text-sm max-w-sm shadow-xl dark:shadow-none"
+    >
+      {{ rateLimitMessage }}
     </div>
 
     <!-- Add form modal -->

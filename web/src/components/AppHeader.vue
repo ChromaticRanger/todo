@@ -1,13 +1,80 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useAuthStore } from '../stores/authStore'
+import { useTodoStore } from '../stores/todoStore'
+import { useListStore } from '../stores/listStore'
+import { usePlanStore } from '../stores/planStore'
+import { authClient } from '../lib/auth-client'
 import ThemePicker from './ThemePicker.vue'
 import type { ItemType } from '../types/todo'
 
 const emit = defineEmits<{ add: [type: ItemType] }>()
 
 const authStore = useAuthStore()
+const todoStore = useTodoStore()
+const listStore = useListStore()
+const planStore = usePlanStore()
 const showTypeMenu = ref(false)
+const showBillingMenu = ref(false)
+const billingBusy = ref(false)
+const billingError = ref('')
+
+function flashBillingError(msg: string) {
+  billingError.value = msg
+  setTimeout(() => (billingError.value = ''), 6000)
+}
+
+async function loadPlanStatus() {
+  if (!authStore.isAuthenticated || authStore.needsPlanChoice) return
+  await planStore.refresh()
+}
+
+onMounted(loadPlanStatus)
+watch(
+  () => [authStore.user?.id ?? null, authStore.tier, authStore.needsPlanChoice],
+  (next, prev) => {
+    if (next[0] !== prev?.[0]) planStore.reset()
+    loadPlanStatus()
+  }
+)
+
+// Refresh plan status whenever list or todo counts change so the banner
+// reflects the current state without a page refresh.
+watch(
+  () => [listStore.lists.length, todoStore.todos.length],
+  () => {
+    if (authStore.tier === 'free') loadPlanStatus()
+  }
+)
+
+const capStatus = computed<{ severity: 'over' | 'at'; message: string } | null>(() => {
+  const s = planStore.status
+  if (!s || s.tier !== 'free') return null
+  // Combine server-reported list count with locally-added-but-empty lists so
+  // UI-only lists that haven't had items added yet still count.
+  const effectiveListCount = Math.max(s.listCount, listStore.lists.length)
+  const atListCap = effectiveListCount >= s.limits.maxLists
+  const atItemCap = s.itemCount >= s.limits.maxItems
+
+  // Only surface the banner when the user is fully blocked — both caps hit
+  // simultaneously. The disabled "+ New list" button handles the
+  // list-cap-only case; the toast on failed item-add handles transient
+  // item-cap hits.
+  if (!(atListCap && atItemCap)) return null
+
+  const over = s.overListCap && s.overItemCap
+  const counts = `${effectiveListCount}/${s.limits.maxLists} lists and ${s.itemCount}/${s.limits.maxItems} items`
+
+  return over
+    ? {
+        severity: 'over',
+        message: `You're above the Free plan limit — ${counts}. Existing items stay editable; new additions are paused until you're back under cap or upgrade to Pro.`,
+      }
+    : {
+        severity: 'at',
+        message: `You've reached the Free plan limit — ${counts}. To add more, delete something or upgrade to Pro.`,
+      }
+})
 
 const displayName = computed(() => {
   const u = authStore.user
@@ -24,10 +91,64 @@ function openAdd(type: ItemType) {
   showTypeMenu.value = false
   emit('add', type)
 }
+
+async function openBillingPortal() {
+  showBillingMenu.value = false
+  billingBusy.value = true
+  try {
+    const client = authClient as unknown as {
+      subscription: {
+        billingPortal: (args: { returnUrl: string }) => Promise<{
+          data?: { url?: string } | null
+          error?: { message?: string } | null
+        }>
+      }
+    }
+    const { data, error } = await client.subscription.billingPortal({
+      returnUrl: window.location.origin,
+    })
+    if (error) {
+      console.error('[billing] portal error:', error)
+      flashBillingError(
+        error.message ||
+          "Couldn't open the billing portal. If this is a grandfathered account, there's no Stripe subscription yet."
+      )
+      return
+    }
+    if (data?.url) window.location.href = data.url
+    else flashBillingError("Stripe didn't return a portal URL.")
+  } catch (e) {
+    flashBillingError(String(e))
+  } finally {
+    billingBusy.value = false
+  }
+}
+
+async function upgradeTo(annual: boolean) {
+  showBillingMenu.value = false
+  billingBusy.value = true
+  try {
+    const { error } = await authClient.subscription.upgrade({
+      plan: 'pro',
+      annual,
+      successUrl: `${window.location.origin}/?billing=success`,
+      cancelUrl: `${window.location.origin}/?billing=cancel`,
+    })
+    if (error) {
+      console.error('[billing] upgrade error:', error)
+      flashBillingError(error.message || "Couldn't start checkout.")
+    }
+  } catch (e) {
+    flashBillingError(String(e))
+  } finally {
+    billingBusy.value = false
+  }
+}
 </script>
 
 <template>
-  <header class="bg-surface border-b border-border px-4 py-3 flex items-center justify-between flex-shrink-0">
+  <div class="flex-shrink-0">
+  <header class="bg-surface border-b border-border px-4 py-3 flex items-center justify-between">
     <div class="flex items-center gap-2">
       <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-12" />
       <h1
@@ -98,6 +219,51 @@ function openAdd(type: ItemType) {
 
       <ThemePicker />
 
+      <!-- Billing -->
+      <div v-if="authStore.tier" class="relative">
+        <button
+          type="button"
+          :disabled="billingBusy"
+          class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover text-sm transition-colors disabled:opacity-50"
+          :title="authStore.tier === 'pro' ? 'Manage subscription' : 'Upgrade to Pro'"
+          @click="authStore.tier === 'pro' ? openBillingPortal() : (showBillingMenu = !showBillingMenu)"
+        >
+          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
+          </svg>
+          <span class="max-md:hidden">{{ authStore.tier === 'pro' ? 'Billing' : 'Upgrade' }}</span>
+        </button>
+
+        <div
+          v-if="showBillingMenu && authStore.tier === 'free'"
+          class="absolute right-0 top-full mt-1 z-20 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-56"
+        >
+          <button
+            class="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
+            @click="upgradeTo(false)"
+          >
+            <div class="font-medium">Pro · Monthly</div>
+            <div class="text-xs text-muted">£6 / month</div>
+          </button>
+          <button
+            class="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
+            @click="upgradeTo(true)"
+          >
+            <div class="font-medium flex items-center gap-2">
+              Pro · Yearly
+              <span class="rounded-full bg-accent/15 text-accent text-[10px] font-semibold px-1.5 py-0.5">Save ~17%</span>
+            </div>
+            <div class="text-xs text-muted">£60 / year</div>
+          </button>
+        </div>
+
+        <div
+          v-if="showBillingMenu"
+          class="fixed inset-0 z-10"
+          @click="showBillingMenu = false"
+        />
+      </div>
+
       <!-- Current user -->
       <div
         v-if="authStore.user"
@@ -118,6 +284,16 @@ function openAdd(type: ItemType) {
           {{ initial }}
         </div>
         <span class="max-md:hidden font-medium leading-none">{{ displayName }}</span>
+        <span
+          v-if="authStore.tier"
+          class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none"
+          :class="authStore.tier === 'pro'
+            ? 'bg-accent/15 text-accent'
+            : 'bg-muted/15 text-muted'"
+          :title="authStore.tier === 'pro' ? 'Pro plan' : 'Free plan'"
+        >
+          {{ authStore.tier }}
+        </span>
       </div>
 
       <button
@@ -133,4 +309,38 @@ function openAdd(type: ItemType) {
       </button>
     </div>
   </header>
+
+  <div
+    v-if="capStatus"
+    :class="[
+      'px-4 py-2 text-sm flex items-center justify-between gap-3 border-b',
+      capStatus.severity === 'over'
+        ? 'bg-danger-bg border-danger/60 text-danger-fg'
+        : 'bg-accent/10 border-accent/40 text-text'
+    ]"
+  >
+    <span>{{ capStatus.message }}</span>
+    <button
+      type="button"
+      class="shrink-0 rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg hover:bg-accent-hover transition-colors"
+      @click="upgradeTo(false)"
+    >
+      Upgrade
+    </button>
+  </div>
+
+  <div
+    v-if="billingError"
+    class="bg-danger-bg border-b border-danger/60 px-4 py-2 text-sm text-danger-fg flex items-center justify-between gap-3"
+  >
+    <span>{{ billingError }}</span>
+    <button
+      type="button"
+      class="shrink-0 text-xs text-danger-fg/80 hover:text-danger-fg"
+      @click="billingError = ''"
+    >
+      Dismiss
+    </button>
+  </div>
+  </div>
 </template>

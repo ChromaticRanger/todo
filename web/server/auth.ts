@@ -1,6 +1,9 @@
 import 'dotenv/config'
 import { betterAuth } from 'better-auth'
-import { pool } from './db.js'
+import Stripe from 'stripe'
+import { stripe as stripePlugin } from '@better-auth/stripe'
+import { pool, query } from './db.js'
+import { sendVerificationEmailFor, sendPasswordResetEmailFor } from './lib/email.js'
 
 const {
   BETTER_AUTH_SECRET,
@@ -9,6 +12,11 @@ const {
   GOOGLE_CLIENT_SECRET,
   GITHUB_CLIENT_ID,
   GITHUB_CLIENT_SECRET,
+  STRIPE_SECRET_KEY,
+  STRIPE_WEBHOOK_SECRET,
+  STRIPE_PRICE_PRO_MONTHLY,
+  STRIPE_PRICE_PRO_YEARLY,
+  REQUIRE_EMAIL_VERIFICATION,
 } = process.env
 
 if (!BETTER_AUTH_SECRET) {
@@ -33,6 +41,20 @@ if (GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET) {
   }
 }
 
+const stripeEnabled = !!(
+  STRIPE_SECRET_KEY &&
+  STRIPE_WEBHOOK_SECRET &&
+  STRIPE_PRICE_PRO_MONTHLY
+)
+
+if (!stripeEnabled) {
+  console.warn(
+    '[auth] Stripe env vars missing — Stripe plugin disabled. Pro upgrades will not work until STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and STRIPE_PRICE_PRO_MONTHLY are set.'
+  )
+}
+
+const stripeClient = stripeEnabled ? new Stripe(STRIPE_SECRET_KEY!) : null
+
 export const auth = betterAuth({
   appName: 'Stash Squirrel',
   database: pool,
@@ -40,18 +62,60 @@ export const auth = betterAuth({
   secret: BETTER_AUTH_SECRET,
   emailAndPassword: {
     enabled: true,
-    requireEmailVerification: false,
+    requireEmailVerification: REQUIRE_EMAIL_VERIFICATION === 'true',
     minPasswordLength: 8,
     sendResetPassword: async ({ user, url }) => {
-      console.log(`[auth] password reset for ${user.email}: ${url}`)
+      await sendPasswordResetEmailFor(user, url)
     },
   },
   emailVerification: {
     sendVerificationEmail: async ({ user, url }) => {
-      console.log(`[auth] verify email for ${user.email}: ${url}`)
+      await sendVerificationEmailFor(user, url)
+    },
+    autoSignInAfterVerification: true,
+  },
+  user: {
+    additionalFields: {
+      tier: {
+        type: 'string',
+        required: false,
+        defaultValue: null,
+        input: false,
+      },
     },
   },
   socialProviders,
+  plugins: stripeEnabled && stripeClient
+    ? [
+        stripePlugin({
+          stripeClient,
+          stripeWebhookSecret: STRIPE_WEBHOOK_SECRET!,
+          createCustomerOnSignUp: false,
+          subscription: {
+            enabled: true,
+            plans: [
+              {
+                name: 'pro',
+                priceId: STRIPE_PRICE_PRO_MONTHLY!,
+                annualDiscountPriceId: STRIPE_PRICE_PRO_YEARLY || undefined,
+              },
+            ],
+            onSubscriptionComplete: async ({ subscription }) => {
+              await query('UPDATE "user" SET tier = $1 WHERE id = $2', [
+                'pro',
+                subscription.referenceId,
+              ])
+            },
+            onSubscriptionDeleted: async ({ subscription }) => {
+              await query('UPDATE "user" SET tier = $1 WHERE id = $2', [
+                'free',
+                subscription.referenceId,
+              ])
+            },
+          },
+        }),
+      ]
+    : [],
   trustedOrigins: [
     'http://localhost:5173',
     'http://localhost:3001',
