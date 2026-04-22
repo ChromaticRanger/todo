@@ -165,7 +165,6 @@ async function handleDelete() {
       <div v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed truncate">
         {{ todo.description }}
       </div>
-      <div class="mt-0.5 text-xs text-accent truncate">{{ todo.url }}</div>
     </div>
 
     <!-- Actions (visible on hover) -->
