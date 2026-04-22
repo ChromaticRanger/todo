@@ -120,7 +120,7 @@ export const useTodoStore = defineStore('todos', () => {
     }
   }
 
-  async function fetchTodos(list: string, view: ViewType = 'all') {
+  async function fetchTodos(list: string, view: ViewType = 'all', opts: { silent?: boolean } = {}) {
     currentList.value = list
     currentView.value = view
 
@@ -133,7 +133,7 @@ export const useTodoStore = defineStore('todos', () => {
       return
     }
 
-    loading.value = true
+    if (!opts.silent) loading.value = true
     error.value = null
     fetchCategories(list)
     try {
@@ -155,7 +155,7 @@ export const useTodoStore = defineStore('todos', () => {
     } catch (e) {
       error.value = String(e)
     } finally {
-      loading.value = false
+      if (!opts.silent) loading.value = false
     }
   }
 
@@ -251,21 +251,51 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function completeTodo(id: number) {
-    const res = await apiFetch(`/api/todos/${id}/complete?list=${encodeURIComponent(currentList.value)}`, {
-      method: 'POST',
-    })
-    if (!res.ok) throw new Error(await res.text())
-    invalidateList(currentList.value)
-    await fetchTodos(currentList.value, currentView.value)
+    const list = currentList.value
+    const view = currentView.value
+    const index = todos.value.findIndex((t) => t.id === id)
+    const removed = index >= 0 ? todos.value[index] : null
+    const isRepeating = !!removed && (removed.repeat_days > 0 || removed.repeat_months > 0)
+
+    // Optimistic: remove from current view (all non-'completed' views filter status=0).
+    if (index >= 0 && view !== 'completed') todos.value.splice(index, 1)
+
+    try {
+      const res = await apiFetch(`/api/todos/${id}/complete?list=${encodeURIComponent(list)}`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error(await res.text())
+    } catch (e) {
+      if (removed && index >= 0 && view !== 'completed') todos.value.splice(index, 0, removed)
+      throw e
+    }
+    invalidateOtherViews(list)
+    // Repeating todos may spawn a new row on the server — pull it in without a flash.
+    if (isRepeating && view !== 'completed') {
+      todosCache.get(list)?.delete(view)
+      await fetchTodos(list, view, { silent: true })
+    }
   }
 
   async function uncompleteTodo(id: number) {
-    const res = await apiFetch(`/api/todos/${id}/uncomplete?list=${encodeURIComponent(currentList.value)}`, {
-      method: 'POST',
-    })
-    if (!res.ok) throw new Error(await res.text())
-    invalidateList(currentList.value)
-    await fetchTodos(currentList.value, currentView.value)
+    const list = currentList.value
+    const view = currentView.value
+    const index = todos.value.findIndex((t) => t.id === id)
+    const removed = index >= 0 ? todos.value[index] : null
+
+    // Optimistic: only the 'completed' view filters status=1, so remove there.
+    if (index >= 0 && view === 'completed') todos.value.splice(index, 1)
+
+    try {
+      const res = await apiFetch(`/api/todos/${id}/uncomplete?list=${encodeURIComponent(list)}`, {
+        method: 'POST',
+      })
+      if (!res.ok) throw new Error(await res.text())
+    } catch (e) {
+      if (removed && index >= 0 && view === 'completed') todos.value.splice(index, 0, removed)
+      throw e
+    }
+    invalidateOtherViews(list)
   }
 
   async function moveTodo(id: number, targetList: string, targetCategory?: string) {
