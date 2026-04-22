@@ -159,6 +159,29 @@ export const useTodoStore = defineStore('todos', () => {
     }
   }
 
+  // Drop cached views for `list` except the one currently displayed — their
+  // filters may differ from what we patched locally, so they'll refetch on
+  // next visit. The current view's cache entry shares a reference with
+  // `todos.value`, so in-place mutations below keep it in sync automatically.
+  function invalidateOtherViews(list: string) {
+    const listCache = todosCache.get(list)
+    if (!listCache) return
+    const keep = list === currentList.value ? currentView.value : null
+    for (const view of [...listCache.keys()]) {
+      if (view !== keep) listCache.delete(view)
+    }
+  }
+
+  function registerCategory(list: string, cat: string) {
+    if (list === currentList.value && !categories.value.includes(cat)) {
+      categories.value = [...categories.value, cat]
+    }
+    const cached = categoriesCache.get(list)
+    if (cached && !cached.includes(cat)) {
+      categoriesCache.set(list, [...cached, cat])
+    }
+  }
+
   async function addTodo(list: string, form: TodoFormData) {
     const res = await apiFetch('/api/todos', {
       method: 'POST',
@@ -169,8 +192,34 @@ export const useTodoStore = defineStore('todos', () => {
       await surfaceCapError(res)
       return
     }
-    invalidateList(list)
-    await fetchTodos(list, currentView.value)
+    const { id } = await res.json() as { id: number }
+
+    const now = Math.floor(Date.now() / 1000)
+    // Mirrors server default: a repeating todo with no due date starts today.
+    const effectiveDue =
+      form.due_date ?? ((form.repeat_days > 0 || form.repeat_months > 0) ? now : null)
+    const cat = form.category || 'General'
+    const newTodo: Todo = {
+      id,
+      list_name: list,
+      title: form.title,
+      description: form.description,
+      category: cat,
+      priority: form.priority,
+      status: 0,
+      created_at: now,
+      completed_at: null,
+      due_date: effectiveDue,
+      repeat_days: form.repeat_days,
+      repeat_months: form.repeat_months,
+      spawned_next: 0,
+      type: form.type,
+      url: form.url,
+    }
+
+    if (list === currentList.value) todos.value.push(newTodo)
+    registerCategory(list, cat)
+    invalidateOtherViews(list)
   }
 
   async function updateTodo(id: number, form: Partial<TodoFormData>) {
@@ -180,8 +229,18 @@ export const useTodoStore = defineStore('todos', () => {
       body: JSON.stringify(form),
     })
     if (!res.ok) throw new Error(await res.text())
-    invalidateList(currentList.value)
-    await fetchTodos(currentList.value, currentView.value)
+
+    const item = todos.value.find((t) => t.id === id)
+    if (item) {
+      if (form.title !== undefined) item.title = form.title
+      if (form.description !== undefined) item.description = form.description
+      if (form.category !== undefined) item.category = form.category || 'General'
+      if (form.priority !== undefined) item.priority = form.priority
+      if ('due_date' in form) item.due_date = form.due_date ?? null
+      if ('url' in form) item.url = form.url ?? null
+    }
+    if (form.category) registerCategory(currentList.value, form.category || 'General')
+    invalidateOtherViews(currentList.value)
   }
 
   async function deleteTodo(id: number) {
