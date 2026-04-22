@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, onUpdated } from 'vue'
 import draggable from 'vuedraggable'
 import { useListStore } from '../stores/listStore'
 import { usePlanStore } from '../stores/planStore'
@@ -78,10 +78,58 @@ const draggableLists = computed({
   get: () => listStore.lists,
   set: (value) => listStore.reorderLists(value),
 })
+
+// Horizontal scroll arrows: shown only when the tab row overflows.
+const scroller = ref<HTMLElement | null>(null)
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+const hasOverflow = computed(() => canScrollLeft.value || canScrollRight.value)
+
+function updateScrollState() {
+  const el = scroller.value
+  if (!el) return
+  canScrollLeft.value = el.scrollLeft > 0
+  canScrollRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 1
+}
+
+function scrollByPage(direction: -1 | 1) {
+  const el = scroller.value
+  if (!el) return
+  el.scrollBy({ left: direction * Math.max(160, el.clientWidth * 0.75), behavior: 'smooth' })
+}
+
+let ro: ResizeObserver | null = null
+onMounted(() => {
+  updateScrollState()
+  scroller.value?.addEventListener('scroll', updateScrollState, { passive: true })
+  ro = new ResizeObserver(updateScrollState)
+  if (scroller.value) ro.observe(scroller.value)
+})
+onUpdated(updateScrollState)
+onBeforeUnmount(() => {
+  scroller.value?.removeEventListener('scroll', updateScrollState)
+  ro?.disconnect()
+})
 </script>
 
 <template>
-  <div class="flex items-center gap-1 overflow-x-auto pb-1 flex-shrink-0">
+  <div class="flex items-center gap-1 pb-1 shrink-0">
+    <!-- Scroll-left arrow (only when overflowing) -->
+    <button
+      v-if="hasOverflow"
+      type="button"
+      class="shrink-0 p-1 rounded-md text-muted hover:text-text hover:bg-surface-hover/40 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted disabled:cursor-not-allowed transition-colors"
+      :disabled="!canScrollLeft"
+      title="Scroll left"
+      aria-label="Scroll lists left"
+      @click="scrollByPage(-1)"
+    >
+      <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+      </svg>
+    </button>
+
+    <div ref="scroller" class="flex items-center gap-1 overflow-x-auto scrollbar-hide min-w-0 flex-1">
     <!-- List tabs -->
     <draggable
       v-model="draggableLists"
@@ -183,6 +231,22 @@ const draggableLists = computed({
         </svg>
       </button>
     </div>
+    </div>
+
+    <!-- Scroll-right arrow (only when overflowing) -->
+    <button
+      v-if="hasOverflow"
+      type="button"
+      class="shrink-0 p-1 rounded-md text-muted hover:text-text hover:bg-surface-hover/40 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-muted disabled:cursor-not-allowed transition-colors"
+      :disabled="!canScrollRight"
+      title="Scroll right"
+      aria-label="Scroll lists right"
+      @click="scrollByPage(1)"
+    >
+      <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+      </svg>
+    </button>
   </div>
 
   <!-- Delete confirmation -->

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Todo } from '../types/todo'
 import { Priority, Status } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
@@ -64,11 +64,10 @@ const isDueOverdue = computed(() => {
 const URL_RE = /https?:\/\/[^\s]+/g
 
 // For bookmarks use the stored url; for todos detect URL in title
-const faviconUrl = computed(() => {
+const faviconHost = computed(() => {
   if (isBookmark.value && props.todo.url) {
     try {
-      const domain = new URL(props.todo.url).hostname
-      return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+      return new URL(props.todo.url).hostname
     } catch {
       return null
     }
@@ -77,12 +76,68 @@ const faviconUrl = computed(() => {
   URL_RE.lastIndex = 0
   if (!match) return null
   try {
-    const domain = new URL(match[0]).hostname
-    return `https://www.google.com/s2/favicons?domain=${domain}&sz=16`
+    return new URL(match[0]).hostname
   } catch {
     return null
   }
 })
+
+const faviconDomain = computed(() =>
+  faviconHost.value ? faviconHost.value.replace(/^www\./, '') : null,
+)
+
+// Try the site's own /favicon.ico first (real 404 on miss), then fall back
+// to Google's service which parses HTML for `<link rel="icon">` declarations
+// — needed for SPAs like Bsky that don't expose /favicon.ico. Google serves
+// a default grey globe on miss; we detect that via @load dimensions below.
+const faviconSources = computed(() => {
+  const host = faviconHost.value
+  if (!host) return []
+  return [
+    `https://${host}/favicon.ico`,
+    `https://www.google.com/s2/favicons?domain=${host}&sz=64`,
+  ]
+})
+
+const faviconSrcIndex = ref(0)
+const faviconUrl = computed(() => faviconSources.value[faviconSrcIndex.value] ?? null)
+
+const tileLetter = computed(() =>
+  faviconDomain.value ? faviconDomain.value[0]!.toUpperCase() : '',
+)
+
+// Stable per-hostname hue so each site gets a recognizable colored tile.
+const tileColor = computed(() => {
+  const d = faviconDomain.value
+  if (!d) return ''
+  let h = 0
+  for (let i = 0; i < d.length; i++) h = (h * 31 + d.charCodeAt(i)) >>> 0
+  const hue = (h % 12) * 30
+  return `oklch(0.58 0.18 ${hue})`
+})
+
+const faviconFailed = ref(false)
+watch(faviconHost, () => {
+  faviconSrcIndex.value = 0
+  faviconFailed.value = false
+})
+
+function onFaviconError() {
+  if (faviconSrcIndex.value < faviconSources.value.length - 1) {
+    faviconSrcIndex.value++
+  } else {
+    faviconFailed.value = true
+  }
+}
+
+// Google's S2 favicons service returns a fixed small grey globe on miss
+// regardless of the requested sz=. A normally-sized icon arriving here
+// means a real favicon; a tiny one means we should fall through to the tile.
+function onFaviconLoad(e: Event) {
+  if (faviconSrcIndex.value !== faviconSources.value.length - 1) return
+  const img = e.target as HTMLImageElement
+  if (img.naturalWidth && img.naturalWidth <= 16) faviconFailed.value = true
+}
 
 const titleParts = computed(() => {
   const text = props.todo.title
@@ -142,17 +197,26 @@ async function handleDelete() {
     @click="openBookmark"
   >
     <!-- Favicon -->
-    <span
-      v-if="faviconUrl"
-      class="flex-shrink-0 inline-flex items-center justify-center size-9 rounded-lg bg-white/90"
-    >
-      <img
-        :src="faviconUrl"
-        class="size-7"
-        alt=""
-        @error="($event.target as HTMLImageElement).parentElement!.style.display = 'none'"
-      />
-    </span>
+    <template v-if="faviconUrl">
+      <span
+        v-if="!faviconFailed"
+        class="flex-shrink-0 inline-flex items-center justify-center size-9 rounded-lg bg-white/90"
+      >
+        <img
+          :src="faviconUrl"
+          class="size-7"
+          alt=""
+          @error="onFaviconError"
+          @load="onFaviconLoad"
+        />
+      </span>
+      <span
+        v-else
+        class="flex-shrink-0 inline-flex items-center justify-center size-9 rounded-lg text-white font-semibold text-base leading-none select-none"
+        :style="{ background: tileColor }"
+        :aria-label="faviconDomain ?? ''"
+      >{{ tileLetter }}</span>
+    </template>
     <span v-else class="flex-shrink-0 size-9 flex items-center justify-center text-muted">
       <svg class="size-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -165,7 +229,6 @@ async function handleDelete() {
       <div v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed truncate">
         {{ todo.description }}
       </div>
-      <div class="mt-0.5 text-xs text-accent truncate">{{ todo.url }}</div>
     </div>
 
     <!-- Actions (visible on hover) -->
@@ -277,17 +340,26 @@ async function handleDelete() {
         class="text-sm text-text leading-5 flex items-baseline gap-1.5 whitespace-nowrap"
         :class="isCompleted ? 'line-through text-muted' : ''"
       >
-        <span
-          v-if="faviconUrl"
-          class="inline-flex items-center justify-center size-5 rounded-full bg-white/90 flex-shrink-0 self-center"
-        >
-          <img
-            :src="faviconUrl"
-            class="size-3.5"
-            alt=""
-            @error="($event.target as HTMLImageElement).parentElement!.style.display = 'none'"
-          />
-        </span>
+        <template v-if="faviconUrl">
+          <span
+            v-if="!faviconFailed"
+            class="inline-flex items-center justify-center size-5 rounded-full bg-white/90 flex-shrink-0 self-center"
+          >
+            <img
+              :src="faviconUrl"
+              class="size-3.5"
+              alt=""
+              @error="onFaviconError"
+              @load="onFaviconLoad"
+            />
+          </span>
+          <span
+            v-else
+            class="inline-flex items-center justify-center size-5 rounded-full text-white font-semibold text-[10px] leading-none flex-shrink-0 self-center select-none"
+            :style="{ background: tileColor }"
+            :aria-label="faviconDomain ?? ''"
+          >{{ tileLetter }}</span>
+        </template>
         <template v-for="part in titleParts" :key="part.value">
           <a
             v-if="part.type === 'url'"

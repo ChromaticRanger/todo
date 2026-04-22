@@ -165,7 +165,7 @@ async function handleDelete() {
         v-if="props.layout === 'grid'"
         v-model="draggableCategories"
         tag="div"
-        class="grid gap-4 md:grid-cols-2 xl:grid-cols-3"
+        class="columns-1 md:columns-2 xl:columns-3 gap-4"
         :item-key="([cat]: [string, Todo[]]) => cat"
         :animation="150"
         handle=".category-drag-handle"
@@ -174,7 +174,7 @@ async function handleDelete() {
         ghost-class="opacity-40"
       >
         <template #item="{ element: [cat, todos] }">
-          <div :key="cat">
+          <div :key="cat" class="break-inside-avoid mb-4">
             <CategoryGroup
               :category="cat"
               :todos="todos"
