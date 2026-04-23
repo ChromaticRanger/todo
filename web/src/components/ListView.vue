@@ -72,7 +72,7 @@ function onPointerDown(e: PointerEvent) {
   // Scope drag to the main content area — header, tabs, modals are out
   if (!target.closest('main')) return
   // Let interactive elements handle their own clicks
-  if (target.closest('button, a, input, textarea, select, [contenteditable="true"], .category-drag-handle')) return
+  if (target.closest('button, a, input, textarea, select, [contenteditable="true"], .category-drag-handle, .select-text')) return
   dragState = {
     startX: e.clientX,
     startScroll: el.scrollLeft,
@@ -189,7 +189,7 @@ async function handleDelete() {
       <div
         v-else
         class="relative min-h-full"
-        :class="isDragging ? 'cursor-grabbing' : 'cursor-grab'"
+        :class="isDragging ? 'cursor-grabbing' : ''"
       >
         <!-- Left carousel button -->
         <button
@@ -207,7 +207,8 @@ async function handleDelete() {
           ref="kanbanRef"
           v-model="draggableCategories"
           tag="div"
-          class="flex gap-4 overflow-x-auto pb-4 items-start scrollbar-hide select-none"
+          class="flex gap-4 overflow-x-auto pb-4 items-start scrollbar-hide"
+          :class="isDragging ? 'select-none' : ''"
           :item-key="([cat]: [string, Todo[]]) => cat"
           :animation="150"
           handle=".category-drag-handle"
