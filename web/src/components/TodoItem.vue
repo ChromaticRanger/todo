@@ -159,6 +159,7 @@ const repeatStr = computed(() => {
 })
 
 function openBookmark() {
+  if (window.getSelection()?.toString()) return
   if (isBookmark.value && props.todo.url) {
     window.open(props.todo.url, '_blank', 'noopener')
   }
@@ -224,7 +225,7 @@ async function handleDelete() {
     </span>
 
     <!-- Content -->
-    <div class="flex-1 min-w-0">
+    <div class="flex-1 min-w-0 select-text">
       <div class="text-sm text-text leading-5 truncate">{{ todo.title }}</div>
       <div v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed truncate">
         {{ todo.description }}
@@ -277,7 +278,7 @@ async function handleDelete() {
     </span>
 
     <!-- Content -->
-    <div class="flex-1 min-w-0">
+    <div class="flex-1 min-w-0 select-text">
       <div class="text-sm text-text leading-5 font-medium">{{ todo.title }}</div>
       <pre v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed whitespace-pre-wrap font-sans">{{ todo.description }}</pre>
     </div>
@@ -335,7 +336,7 @@ async function handleDelete() {
     </button>
 
     <!-- Content -->
-    <div class="flex-1">
+    <div class="flex-1 select-text">
       <span
         class="text-sm text-text leading-5 flex items-baseline gap-1.5 whitespace-nowrap"
         :class="isCompleted ? 'line-through text-muted' : ''"
