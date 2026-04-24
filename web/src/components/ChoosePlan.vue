@@ -66,16 +66,16 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="min-h-dvh bg-bg flex items-center justify-center p-4 antialiased">
-    <div class="w-full max-w-3xl">
-      <div class="flex flex-col items-center gap-2 mb-8">
-        <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-16" />
+  <div class="min-h-dvh bg-bg flex items-center justify-center p-6 antialiased">
+    <div class="w-full max-w-5xl">
+      <div class="flex flex-col items-center gap-3 mb-12">
+        <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-20" />
         <h1
-          class="font-display italic text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
+          class="font-display italic text-4xl/12 sm:text-5xl/14 font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2 pb-2"
         >
           Choose your plan
         </h1>
-        <p class="text-sm text-muted text-center text-balance max-w-md">
+        <p class="text-base text-muted text-center text-balance max-w-md">
           Pick a plan to finish setting up your account. You can switch later.
         </p>
       </div>
@@ -88,23 +88,25 @@ onMounted(async () => {
         {{ error }}
       </div>
 
-      <div class="grid gap-4 sm:grid-cols-3">
+      <div class="grid gap-6 sm:grid-cols-3">
         <!-- Free -->
-        <div class="rounded-2xl bg-surface ring-1 ring-ring p-5 flex flex-col dark:inset-ring dark:inset-ring-white/5">
-          <h2 class="text-base font-semibold text-text">Free</h2>
-          <p class="mt-1 text-sm text-muted">For casual stashers.</p>
-          <p class="mt-4">
-            <span class="text-3xl font-semibold text-text">$0</span>
-            <span class="text-sm text-muted">/forever</span>
-          </p>
-          <ul class="mt-4 flex flex-col gap-1.5 text-sm text-text">
-            <li>• Up to 3 lists</li>
-            <li>• Up to 50 items</li>
-            <li>• All item types (todos, bookmarks, notes)</li>
-          </ul>
+        <div class="rounded-2xl bg-surface ring-1 ring-ring p-8 flex flex-col justify-between dark:inset-ring dark:inset-ring-white/5">
+          <div>
+            <h2 class="text-lg font-semibold text-text">Free</h2>
+            <p class="mt-1 text-sm text-muted">For casual stashers.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">$0</span>
+              <span class="text-sm text-muted">/forever</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
+              <li>• Up to 3 lists</li>
+              <li>• Up to 50 items</li>
+              <li>• All item types (todos, bookmarks, notes)</li>
+            </ul>
+          </div>
           <button
             type="button"
-            class="mt-6 rounded-lg bg-bg px-3 py-2 text-sm font-medium text-text ring-1 ring-ring transition-colors hover:bg-surface-hover disabled:opacity-50"
+            class="mt-8 rounded-lg bg-bg px-4 py-2.5 text-sm font-medium text-text ring-1 ring-ring transition-colors hover:bg-surface-hover disabled:opacity-50"
             :disabled="busy !== null"
             @click="chooseFree"
           >
@@ -113,21 +115,23 @@ onMounted(async () => {
         </div>
 
         <!-- Pro Monthly -->
-        <div class="rounded-2xl bg-surface ring-1 ring-accent/60 p-5 flex flex-col dark:inset-ring dark:inset-ring-white/5">
-          <h2 class="text-base font-semibold text-text">Pro · Monthly</h2>
-          <p class="mt-1 text-sm text-muted">For serious stashers.</p>
-          <p class="mt-4">
-            <span class="text-3xl font-semibold text-text">£6</span>
-            <span class="text-sm text-muted">/month</span>
-          </p>
-          <ul class="mt-4 flex flex-col gap-1.5 text-sm text-text">
-            <li>• Unlimited lists</li>
-            <li>• Unlimited items</li>
-            <li>• Cancel anytime</li>
-          </ul>
+        <div class="rounded-2xl bg-surface ring-1 ring-accent/60 p-8 flex flex-col justify-between dark:inset-ring dark:inset-ring-white/5">
+          <div>
+            <h2 class="text-lg font-semibold text-text">Pro · Monthly</h2>
+            <p class="mt-1 text-sm text-muted">For serious stashers.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">£6</span>
+              <span class="text-sm text-muted">/month</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
+              <li>• Unlimited lists</li>
+              <li>• Unlimited items</li>
+              <li>• Cancel anytime</li>
+            </ul>
+          </div>
           <button
             type="button"
-            class="mt-6 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-50"
+            class="mt-8 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-50"
             :disabled="busy !== null"
             @click="choosePro(false)"
           >
@@ -136,26 +140,28 @@ onMounted(async () => {
         </div>
 
         <!-- Pro Yearly -->
-        <div class="relative rounded-2xl bg-surface ring-1 ring-accent p-5 flex flex-col dark:inset-ring dark:inset-ring-white/5">
+        <div class="relative rounded-2xl bg-surface ring-1 ring-accent p-8 flex flex-col justify-between dark:inset-ring dark:inset-ring-white/5">
           <span
-            class="absolute -top-2.5 right-4 rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold text-accent-fg"
+            class="absolute -top-3 right-5 rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-accent-fg"
           >
             Save ~17%
           </span>
-          <h2 class="text-base font-semibold text-text">Pro · Yearly</h2>
-          <p class="mt-1 text-sm text-muted">Best value.</p>
-          <p class="mt-4">
-            <span class="text-3xl font-semibold text-text">£60</span>
-            <span class="text-sm text-muted">/year</span>
-          </p>
-          <ul class="mt-4 flex flex-col gap-1.5 text-sm text-text">
-            <li>• Everything in Pro Monthly</li>
-            <li>• 2 months free</li>
-            <li>• Cancel anytime</li>
-          </ul>
+          <div>
+            <h2 class="text-lg font-semibold text-text">Pro · Yearly</h2>
+            <p class="mt-1 text-sm text-muted">Best value.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">£60</span>
+              <span class="text-sm text-muted">/year</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
+              <li>• Everything in Pro Monthly</li>
+              <li>• 2 months free</li>
+              <li>• Cancel anytime</li>
+            </ul>
+          </div>
           <button
             type="button"
-            class="mt-6 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-50"
+            class="mt-8 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-50"
             :disabled="busy !== null"
             @click="choosePro(true)"
           >
