@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { Todo, ItemType } from '../types/todo'
 import TodoItem from './TodoItem.vue'
 import TodoForm from './TodoForm.vue'
+import DeleteCategoryDialog from './DeleteCategoryDialog.vue'
 import type { TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useListStore } from '../stores/listStore'
@@ -21,6 +22,7 @@ const addType = ref<ItemType>('todo')
 const showTypeMenu = ref(false)
 const editing = ref(false)
 const editName = ref('')
+const confirmDelete = ref(false)
 
 function openAddForm(type: ItemType) {
   addType.value = type
@@ -47,6 +49,16 @@ async function confirmRename() {
 
 function cancelEdit() {
   editing.value = false
+}
+
+async function handleDelete() {
+  confirmDelete.value = false
+  await store.deleteCategory(listStore.activeList, props.category)
+}
+
+async function handleMoveToGeneral() {
+  confirmDelete.value = false
+  await store.mergeCategory(listStore.activeList, props.category, 'General')
 }
 </script>
 
@@ -81,6 +93,18 @@ function cancelEdit() {
         >
           <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
             <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474ZM3.75 13.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z" />
+          </svg>
+        </button>
+
+        <!-- Delete category icon -->
+        <button
+          v-if="!editing"
+          class="p-1 rounded text-muted hover:text-danger hover:bg-danger-bg"
+          title="Delete category"
+          @click="confirmDelete = true"
+        >
+          <svg class="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </button>
 
@@ -164,5 +188,15 @@ function cancelEdit() {
     :initial-type="addType"
     @submit="handleAdd"
     @cancel="showAddForm = false"
+  />
+
+  <!-- Delete category dialog -->
+  <DeleteCategoryDialog
+    v-if="confirmDelete"
+    :category="category"
+    :item-count="todos.length"
+    @move="handleMoveToGeneral"
+    @delete="handleDelete"
+    @cancel="confirmDelete = false"
   />
 </template>

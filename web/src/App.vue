@@ -30,6 +30,7 @@ import ListTabs from './components/ListTabs.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
 import ListView from './components/ListView.vue'
 import TodoForm from './components/TodoForm.vue'
+import CategoryDialog from './components/CategoryDialog.vue'
 import LoginPage from './components/LoginPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
 
@@ -41,6 +42,36 @@ const settingsStore = useSettingsStore()
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
 const rateLimitMessage = ref('')
+const showCategoryDialog = ref(false)
+const categoryMenu = ref<{ x: number; y: number } | null>(null)
+
+function openCategoryDialog() {
+  categoryMenu.value = null
+  showCategoryDialog.value = true
+}
+
+async function handleCreateCategory(name: string) {
+  showCategoryDialog.value = false
+  await todoStore.createCategory(listStore.activeList, name)
+}
+
+function onMainContextMenu(e: MouseEvent) {
+  const target = e.target as HTMLElement | null
+  if (!target) return
+  // Only act on genuinely-blank list-page area; let the browser's native menu
+  // handle cards, text selections, links, form fields, etc.
+  if (target.closest('button, a, input, textarea, select, [contenteditable="true"]')) return
+  if (target.closest('.category-drag-handle, .select-text')) return
+  const sel = window.getSelection?.()
+  if (sel && sel.toString().length > 0) return
+  if (!isCategoryView.value) return
+  e.preventDefault()
+  categoryMenu.value = { x: e.clientX, y: e.clientY }
+}
+
+function closeCategoryMenu() {
+  categoryMenu.value = null
+}
 
 function handleRateLimit(e: Event) {
   const detail = (e as CustomEvent<{ retryAfter?: string | null }>).detail
@@ -154,8 +185,17 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
     <div class="px-4 py-1.5 border-b border-border/60 bg-surface/20 flex items-center justify-between gap-4">
       <ViewSwitcher :current="currentView" @change="onViewChange" />
 
+      <div v-if="isCategoryView" class="flex items-center gap-2 shrink-0">
+        <button
+          title="Create a new category"
+          class="px-2.5 py-1 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors whitespace-nowrap"
+          @click="openCategoryDialog"
+        >
+          + New Category
+        </button>
+
       <!-- Layout toggle (category views only) -->
-      <div v-if="isCategoryView" class="flex rounded-lg border border-border-strong overflow-hidden shrink-0">
+      <div class="flex rounded-lg border border-border-strong overflow-hidden shrink-0">
         <button
           title="Grid view"
           class="px-2.5 py-1.5 transition-colors"
@@ -177,10 +217,14 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
           </svg>
         </button>
       </div>
+      </div>
     </div>
 
     <!-- Main content -->
-    <main class="flex-1 flex flex-col min-h-0 overflow-hidden p-4">
+    <main
+      class="flex-1 flex flex-col min-h-0 overflow-hidden p-4"
+      @contextmenu="onMainContextMenu"
+    >
       <ListView :layout="layoutMode" />
     </main>
 
@@ -222,5 +266,31 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
       @submit="handleAdd"
       @cancel="showAddForm = false"
     />
+
+    <!-- New category dialog -->
+    <CategoryDialog
+      v-if="showCategoryDialog"
+      @submit="handleCreateCategory"
+      @cancel="showCategoryDialog = false"
+    />
+
+    <!-- Right-click context menu -->
+    <template v-if="categoryMenu">
+      <div class="fixed inset-0 z-40" @click="closeCategoryMenu" @contextmenu.prevent="closeCategoryMenu" />
+      <div
+        class="fixed z-50 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-44 dark:inset-ring dark:inset-ring-white/5"
+        :style="{ left: `${categoryMenu.x}px`, top: `${categoryMenu.y}px` }"
+      >
+        <button
+          class="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+          @click="openCategoryDialog"
+        >
+          <svg class="size-3.5 text-muted shrink-0" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
+          </svg>
+          New Category
+        </button>
+      </div>
+    </template>
   </div>
 </template>

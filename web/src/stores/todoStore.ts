@@ -11,7 +11,9 @@ export const useTodoStore = defineStore('todos', () => {
   const currentView = ref<ViewType>('all')
   const currentList = ref<string>('todos')
   const categoryOrder = ref<Record<string, string[]>>({})
+  const emptyCategories = ref<Record<string, string[]>>({})
   let categoryOrderLoaded = false
+  let emptyCategoriesLoaded = false
 
   // Per-list cache to avoid redundant DB calls
   const todosCache = new Map<string, Map<ViewType, Todo[]>>()
@@ -58,6 +60,31 @@ export const useTodoStore = defineStore('todos', () => {
     }
   }
 
+  async function loadEmptyCategories() {
+    if (emptyCategoriesLoaded) return
+    emptyCategoriesLoaded = true
+    try {
+      const res = await apiFetch('/api/settings/empty-categories')
+      if (!res.ok) return
+      const data = await res.json() as { empty: Record<string, string[]> }
+      emptyCategories.value = data.empty ?? {}
+    } catch {
+      // non-fatal
+    }
+  }
+
+  async function persistEmptyCategories() {
+    try {
+      await apiFetch('/api/settings/empty-categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empty: emptyCategories.value }),
+      })
+    } catch (e) {
+      error.value = String(e)
+    }
+  }
+
   /** Default sort: 'General' first, then alphabetical. */
   function defaultCategorySort(keys: string[]): string[] {
     return [...keys].sort((a, b) => {
@@ -76,6 +103,10 @@ export const useTodoStore = defineStore('todos', () => {
       if (!map.has(cat)) map.set(cat, [])
       map.get(cat)!.push(t)
     }
+    // Include explicitly-created empty categories so they render as empty cards.
+    for (const cat of emptyCategories.value[currentList.value] ?? []) {
+      if (!map.has(cat)) map.set(cat, [])
+    }
     const present = new Set(map.keys())
     const saved = categoryOrder.value[currentList.value] ?? []
     const ordered = saved.filter((c) => present.has(c))
@@ -85,6 +116,26 @@ export const useTodoStore = defineStore('todos', () => {
     for (const k of [...ordered, ...remaining]) sorted.set(k, map.get(k)!)
     return sorted
   })
+
+  async function createCategory(list: string, name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    const current = emptyCategories.value[list] ?? []
+    const existing = new Set([
+      ...current,
+      ...todos.value.filter((t) => t.list_name === list).map((t) => t.category || 'General'),
+    ])
+    if (existing.has(trimmed)) {
+      setErrorWithTimeout(`Category "${trimmed}" already exists in this list.`)
+      return
+    }
+    emptyCategories.value = {
+      ...emptyCategories.value,
+      [list]: [...current, trimmed],
+    }
+    registerCategory(list, trimmed)
+    await persistEmptyCategories()
+  }
 
   async function reorderCategories(list: string, newOrder: string[]) {
     categoryOrder.value = { ...categoryOrder.value, [list]: newOrder }
@@ -125,6 +176,7 @@ export const useTodoStore = defineStore('todos', () => {
     currentView.value = view
 
     loadCategoryOrder()
+    loadEmptyCategories()
 
     const cachedTodos = todosCache.get(list)?.get(view)
     if (cachedTodos !== undefined) {
@@ -340,6 +392,81 @@ export const useTodoStore = defineStore('todos', () => {
     }
   }
 
+  async function mergeCategory(list: string, fromName: string, toName: string) {
+    if (fromName === toName) return
+    const res = await apiFetch('/api/categories/move-items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ list, fromName, toName }),
+    })
+    if (!res.ok) {
+      setErrorWithTimeout(`Failed to move items: ${res.statusText}`)
+      return
+    }
+
+    // Drop fromName from persisted empty-categories / order settings.
+    const savedEmpty = emptyCategories.value[list] ?? []
+    if (savedEmpty.includes(fromName)) {
+      emptyCategories.value = {
+        ...emptyCategories.value,
+        [list]: savedEmpty.filter((c) => c !== fromName),
+      }
+      await persistEmptyCategories()
+    }
+    const savedOrder = categoryOrder.value[list]
+    if (savedOrder?.includes(fromName)) {
+      // Drop fromName; if toName is absent from order, drop it entirely too so
+      // it picks up the default sort position rather than inheriting fromName's slot.
+      const next = savedOrder.filter((c) => c !== fromName)
+      await reorderCategories(list, next)
+    }
+
+    // In-memory: reassign todos and drop the old category name.
+    if (list === currentList.value) {
+      for (const t of todos.value) {
+        if (t.category === fromName) t.category = toName
+      }
+      if (!categories.value.includes(toName)) categories.value = [...categories.value, toName]
+      categories.value = categories.value.filter((c) => c !== fromName)
+    }
+    invalidateList(list)
+  }
+
+  async function deleteCategory(list: string, name: string) {
+    // Remove all todos in this category (server-side bulk delete).
+    const res = await apiFetch('/api/categories', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ list, name }),
+    })
+    if (!res.ok) {
+      setErrorWithTimeout(`Failed to delete category: ${res.statusText}`)
+      return
+    }
+
+    // Drop from the persisted empty-categories set.
+    const savedEmpty = emptyCategories.value[list] ?? []
+    if (savedEmpty.includes(name)) {
+      const next = savedEmpty.filter((c) => c !== name)
+      emptyCategories.value = { ...emptyCategories.value, [list]: next }
+      await persistEmptyCategories()
+    }
+
+    // Drop from the persisted category order so it doesn't resurrect on reorder.
+    const savedOrder = categoryOrder.value[list]
+    if (savedOrder?.includes(name)) {
+      const next = savedOrder.filter((c) => c !== name)
+      await reorderCategories(list, next)
+    }
+
+    // Purge in-memory todos + caches (invalidateList drops todos/categories caches).
+    if (list === currentList.value) {
+      todos.value = todos.value.filter((t) => t.category !== name)
+    }
+    categories.value = categories.value.filter((c) => c !== name)
+    invalidateList(list)
+  }
+
   async function renameCategory(list: string, oldName: string, newName: string) {
     const res = await apiFetch('/api/categories', {
       method: 'PATCH',
@@ -351,6 +478,14 @@ export const useTodoStore = defineStore('todos', () => {
     if (saved) {
       const next = saved.map((c) => (c === oldName ? newName : c))
       await reorderCategories(list, next)
+    }
+    const savedEmpty = emptyCategories.value[list]
+    if (savedEmpty?.includes(oldName)) {
+      emptyCategories.value = {
+        ...emptyCategories.value,
+        [list]: savedEmpty.map((c) => (c === oldName ? newName : c)),
+      }
+      await persistEmptyCategories()
     }
     invalidateList(list)
     await fetchTodos(list, currentView.value)
@@ -368,6 +503,8 @@ export const useTodoStore = defineStore('todos', () => {
     currentList.value = 'todos'
     categoryOrder.value = {}
     categoryOrderLoaded = false
+    emptyCategories.value = {}
+    emptyCategoriesLoaded = false
     todosCache.clear()
     categoriesCache.clear()
   }
@@ -390,6 +527,9 @@ export const useTodoStore = defineStore('todos', () => {
     fetchCategoriesFor,
     renameCategory,
     reorderCategories,
+    createCategory,
+    deleteCategory,
+    mergeCategory,
     setView,
     reset,
   }

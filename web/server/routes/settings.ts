@@ -171,4 +171,47 @@ router.put('/category-order', async (req, res) => {
   }
 })
 
+// GET /api/settings/empty-categories
+router.get('/empty-categories', async (req, res) => {
+  const userId = req.userId!
+  try {
+    const result = await query<{ value: Record<string, string[]> }>(
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'empty_categories'`,
+      [userId]
+    )
+    res.json({ empty: result.rows[0]?.value ?? {} })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/settings/empty-categories
+router.put('/empty-categories', async (req, res) => {
+  const userId = req.userId!
+  const { empty } = req.body as { empty?: unknown }
+
+  if (
+    !empty ||
+    typeof empty !== 'object' ||
+    Array.isArray(empty) ||
+    !Object.values(empty).every(
+      (v) => Array.isArray(v) && v.every((s) => typeof s === 'string')
+    )
+  ) {
+    return res.status(400).json({ error: 'empty must be Record<string, string[]>' })
+  }
+
+  try {
+    await query(
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'empty_categories', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify(empty)]
+    )
+    res.json({ empty })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 export default router

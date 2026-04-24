@@ -150,7 +150,10 @@ async function handleDelete() {
 
 <template>
   <div class="flex-1 min-h-0 overflow-y-auto">
-    <EmptyState v-if="store.todos.length === 0 && !store.loading" :view="store.currentView" />
+    <EmptyState
+      v-if="store.todos.length === 0 && !store.loading && (showFlat || store.byCategory.size === 0)"
+      :view="store.currentView"
+    />
 
     <!-- Loading -->
     <div v-if="store.loading" class="flex items-center justify-center py-24">
@@ -158,7 +161,7 @@ async function handleDelete() {
     </div>
 
     <!-- Category view (All / Today / Week / Month) -->
-    <template v-else-if="!showFlat && store.todos.length > 0">
+    <template v-else-if="!showFlat && store.byCategory.size > 0">
 
       <!-- Grid layout -->
       <draggable
