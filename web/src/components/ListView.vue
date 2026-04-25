@@ -8,7 +8,21 @@ import CategoryGroup from './CategoryGroup.vue'
 import EmptyState from './EmptyState.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 
-const props = defineProps<{ layout?: 'grid' | 'kanban' }>()
+const props = withDefaults(
+  defineProps<{ layout?: 'grid' | 'kanban'; gridColumns?: 2 | 3 | 4 | 5 }>(),
+  { gridColumns: 3 }
+)
+
+// Full class strings (not concatenated) so Tailwind's JIT picks them up.
+// Mobile and tablet stay fixed at 1/2; the user's choice drives the lg/xl
+// breakpoints, so wide screens scale up without cramping smaller ones.
+const GRID_COLUMN_CLASSES: Record<2 | 3 | 4 | 5, string> = {
+  2: 'columns-1 sm:columns-2',
+  3: 'columns-1 md:columns-2 xl:columns-3',
+  4: 'columns-1 md:columns-2 lg:columns-3 xl:columns-4',
+  5: 'columns-1 md:columns-2 lg:columns-3 xl:columns-5',
+}
+const gridColumnClasses = computed(() => GRID_COLUMN_CLASSES[props.gridColumns])
 
 const store = useTodoStore()
 const listStore = useListStore()
@@ -168,7 +182,8 @@ async function handleDelete() {
         v-if="props.layout === 'grid'"
         v-model="draggableCategories"
         tag="div"
-        class="columns-1 md:columns-2 xl:columns-3 gap-4"
+        class="gap-4"
+        :class="gridColumnClasses"
         :item-key="([cat]: [string, Todo[]]) => cat"
         :animation="150"
         handle=".category-drag-handle"

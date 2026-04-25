@@ -7,6 +7,8 @@ import { useSettingsStore } from './stores/settingsStore'
 import type { ViewType, ItemType } from './types/todo'
 
 type LayoutMode = 'grid' | 'kanban'
+type GridColumns = 2 | 3 | 4 | 5
+const GRID_COLUMN_OPTIONS: GridColumns[] = [2, 3, 4, 5]
 
 function getStoredLayout(list: string): LayoutMode {
   try {
@@ -22,6 +24,24 @@ function storeLayout(list: string, mode: LayoutMode) {
     const stored = JSON.parse(localStorage.getItem('list-layouts') || '{}')
     stored[list] = mode
     localStorage.setItem('list-layouts', JSON.stringify(stored))
+  } catch {}
+}
+
+function getStoredColumns(list: string): GridColumns {
+  try {
+    const stored = JSON.parse(localStorage.getItem('list-grid-columns') || '{}')
+    const n = stored[list]
+    return GRID_COLUMN_OPTIONS.includes(n) ? n : 3
+  } catch {
+    return 3
+  }
+}
+
+function storeColumns(list: string, columns: GridColumns) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('list-grid-columns') || '{}')
+    stored[list] = columns
+    localStorage.setItem('list-grid-columns', JSON.stringify(stored))
   } catch {}
 }
 import { apiEvents } from './lib/api'
@@ -86,11 +106,24 @@ function openAddForm(type: ItemType) {
 }
 const currentView = ref<ViewType>('all')
 const layoutMode = ref<LayoutMode>(getStoredLayout(listStore.activeList))
+const gridColumns = ref<GridColumns>(getStoredColumns(listStore.activeList))
+const showColumnsMenu = ref(false)
 const isCategoryView = computed(() => currentView.value !== 'schedule' && currentView.value !== 'completed')
 
 function setLayout(mode: LayoutMode) {
   layoutMode.value = mode
   storeLayout(listStore.activeList, mode)
+}
+
+function setColumns(n: GridColumns) {
+  gridColumns.value = n
+  storeColumns(listStore.activeList, n)
+  showColumnsMenu.value = false
+  if (layoutMode.value !== 'grid') setLayout('grid')
+}
+
+function toggleColumnsMenu() {
+  showColumnsMenu.value = !showColumnsMenu.value
 }
 
 function handleKeydown(e: KeyboardEvent) {
@@ -149,6 +182,7 @@ onUnmounted(() => {
 watch(() => listStore.activeList, (list) => {
   todoStore.fetchTodos(list, currentView.value)
   layoutMode.value = getStoredLayout(list)
+  gridColumns.value = getStoredColumns(list)
 })
 
 async function onViewChange(view: ViewType) {
@@ -195,7 +229,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
         </button>
 
       <!-- Layout toggle (category views only) -->
-      <div class="flex rounded-lg border border-border-strong overflow-hidden shrink-0">
+      <div class="relative flex rounded-lg border border-border-strong overflow-visible shrink-0">
         <button
           title="Grid view"
           class="px-2.5 py-1.5 transition-colors"
@@ -204,6 +238,16 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
         >
           <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+          </svg>
+        </button>
+        <button
+          title="Choose number of grid columns"
+          class="px-1 border-l border-border-strong transition-colors"
+          :class="layoutMode === 'grid' ? 'bg-accent text-accent-fg hover:bg-accent/90' : 'text-muted hover:text-text hover:bg-surface-hover'"
+          @click="toggleColumnsMenu"
+        >
+          <svg class="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7" />
           </svg>
         </button>
         <button
@@ -216,6 +260,35 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
           </svg>
         </button>
+
+        <!-- Columns dropdown -->
+        <template v-if="showColumnsMenu">
+          <div class="fixed inset-0 z-40" @click="showColumnsMenu = false" @contextmenu.prevent="showColumnsMenu = false" />
+          <div
+            class="absolute z-50 top-full right-0 mt-1 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-36 dark:inset-ring dark:inset-ring-white/5"
+          >
+            <div class="px-3 pb-1 pt-0.5 text-[10px] font-semibold tracking-wider uppercase text-muted">
+              Grid columns
+            </div>
+            <button
+              v-for="n in GRID_COLUMN_OPTIONS"
+              :key="n"
+              class="w-full text-left px-3 py-1.5 text-sm hover:bg-surface-hover flex items-center justify-between"
+              :class="gridColumns === n && layoutMode === 'grid' ? 'text-accent' : 'text-text'"
+              @click="setColumns(n)"
+            >
+              <span>{{ n }} columns</span>
+              <svg
+                v-if="gridColumns === n && layoutMode === 'grid'"
+                class="size-3.5 shrink-0"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+              >
+                <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z" />
+              </svg>
+            </button>
+          </div>
+        </template>
       </div>
       </div>
     </div>
@@ -225,7 +298,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
       class="flex-1 flex flex-col min-h-0 overflow-hidden p-4"
       @contextmenu="onMainContextMenu"
     >
-      <ListView :layout="layoutMode" />
+      <ListView :layout="layoutMode" :grid-columns="gridColumns" />
     </main>
 
     <!-- Error toast -->
