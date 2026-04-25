@@ -171,6 +171,54 @@ router.put('/category-order', async (req, res) => {
   }
 })
 
+// GET /api/settings/list-prefs
+const VALID_LAYOUTS = ['grid', 'kanban'] as const
+const VALID_COLUMNS = [2, 3, 4, 5] as const
+type LayoutMode = (typeof VALID_LAYOUTS)[number]
+type GridColumns = (typeof VALID_COLUMNS)[number]
+interface ListPref { layout: LayoutMode; columns: GridColumns }
+
+router.get('/list-prefs', async (req, res) => {
+  const userId = req.userId!
+  try {
+    const result = await query<{ value: Record<string, ListPref> }>(
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'list_prefs'`,
+      [userId]
+    )
+    res.json({ prefs: result.rows[0]?.value ?? {} })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/settings/list-prefs
+router.put('/list-prefs', async (req, res) => {
+  const userId = req.userId!
+  const { prefs } = req.body as { prefs?: unknown }
+  if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+    return res.status(400).json({ error: 'prefs must be an object' })
+  }
+  const sanitized: Record<string, ListPref> = {}
+  for (const [list, val] of Object.entries(prefs as Record<string, unknown>)) {
+    if (!val || typeof val !== 'object') continue
+    const v = val as Partial<ListPref>
+    if (!(VALID_LAYOUTS as readonly string[]).includes(v.layout as string)) continue
+    if (!(VALID_COLUMNS as readonly number[]).includes(v.columns as number)) continue
+    sanitized[list] = { layout: v.layout as LayoutMode, columns: v.columns as GridColumns }
+  }
+  try {
+    await query(
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'list_prefs', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify(sanitized)]
+    )
+    res.json({ prefs: sanitized })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/settings/empty-categories
 router.get('/empty-categories', async (req, res) => {
   const userId = req.userId!
