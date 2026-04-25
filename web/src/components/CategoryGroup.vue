@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { Todo, ItemType } from '../types/todo'
 import TodoItem from './TodoItem.vue'
 import TodoForm from './TodoForm.vue'
@@ -23,9 +23,48 @@ const categoryPrefsStore = useCategoryPrefsStore()
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
 const showTypeMenu = ref(false)
+const addBtnRef = ref<HTMLElement | null>(null)
+const menuPos = ref({ top: 0, right: 0 })
 const editing = ref(false)
 const editName = ref('')
 const confirmDelete = ref(false)
+
+function positionTypeMenu() {
+  const el = addBtnRef.value
+  if (!el) return
+  const rect = el.getBoundingClientRect()
+  menuPos.value = {
+    top: rect.bottom + 4,
+    right: window.innerWidth - rect.right,
+  }
+}
+
+function toggleTypeMenu() {
+  if (!showTypeMenu.value) positionTypeMenu()
+  showTypeMenu.value = !showTypeMenu.value
+}
+
+// Position is captured at open-time from the button's viewport rect; if the
+// page scrolls while the menu is open the rect moves but the menu doesn't,
+// so close on scroll/resize rather than try to keep tracking.
+function closeOnViewportChange() {
+  showTypeMenu.value = false
+}
+
+watch(showTypeMenu, (open) => {
+  if (open) {
+    window.addEventListener('scroll', closeOnViewportChange, true)
+    window.addEventListener('resize', closeOnViewportChange)
+  } else {
+    window.removeEventListener('scroll', closeOnViewportChange, true)
+    window.removeEventListener('resize', closeOnViewportChange)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', closeOnViewportChange, true)
+  window.removeEventListener('resize', closeOnViewportChange)
+})
 
 const itemLayout = computed(
   () => categoryPrefsStore.get(listStore.activeList, props.category).itemLayout,
@@ -142,19 +181,21 @@ async function handleMoveToGeneral() {
         <!-- Add item button with type dropdown -->
         <div class="relative">
           <button
+            ref="addBtnRef"
             class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
             title="Add item"
-            @click="showTypeMenu = !showTypeMenu"
+            @click="toggleTypeMenu"
           >
             <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
               <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
             </svg>
           </button>
 
-          <!-- Type picker menu -->
+          <!-- Type picker menu — fixed-positioned so it escapes the card's overflow:hidden -->
           <div
             v-if="showTypeMenu"
-            class="absolute right-0 top-full mt-1 z-20 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-36"
+            class="fixed z-30 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-36"
+            :style="{ top: `${menuPos.top}px`, right: `${menuPos.right}px` }"
           >
             <button
               class="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
