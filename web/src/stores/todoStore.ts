@@ -104,8 +104,13 @@ export const useTodoStore = defineStore('todos', () => {
       map.get(cat)!.push(t)
     }
     // Include explicitly-created empty categories so they render as empty cards.
-    for (const cat of emptyCategories.value[currentList.value] ?? []) {
-      if (!map.has(cat)) map.set(cat, [])
+    // Only on the 'all' view — time-filtered views (today/week/month) hide items
+    // outside the window, so an empty placeholder there would be misleading
+    // (e.g. a category whose only item is a bookmark looks empty in Today).
+    if (currentView.value === 'all') {
+      for (const cat of emptyCategories.value[currentList.value] ?? []) {
+        if (!map.has(cat)) map.set(cat, [])
+      }
     }
     const present = new Set(map.keys())
     const saved = categoryOrder.value[currentList.value] ?? []
