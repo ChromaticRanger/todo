@@ -4,46 +4,13 @@ import { useListStore } from './stores/listStore'
 import { useTodoStore } from './stores/todoStore'
 import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
+import {
+  useListPrefsStore,
+  GRID_COLUMN_OPTIONS,
+  type LayoutMode,
+  type GridColumns,
+} from './stores/listPrefsStore'
 import type { ViewType, ItemType } from './types/todo'
-
-type LayoutMode = 'grid' | 'kanban'
-type GridColumns = 2 | 3 | 4 | 5
-const GRID_COLUMN_OPTIONS: GridColumns[] = [2, 3, 4, 5]
-
-function getStoredLayout(list: string): LayoutMode {
-  try {
-    const stored = JSON.parse(localStorage.getItem('list-layouts') || '{}')
-    return stored[list] === 'grid' ? 'grid' : 'kanban'
-  } catch {
-    return 'kanban'
-  }
-}
-
-function storeLayout(list: string, mode: LayoutMode) {
-  try {
-    const stored = JSON.parse(localStorage.getItem('list-layouts') || '{}')
-    stored[list] = mode
-    localStorage.setItem('list-layouts', JSON.stringify(stored))
-  } catch {}
-}
-
-function getStoredColumns(list: string): GridColumns {
-  try {
-    const stored = JSON.parse(localStorage.getItem('list-grid-columns') || '{}')
-    const n = stored[list]
-    return GRID_COLUMN_OPTIONS.includes(n) ? n : 3
-  } catch {
-    return 3
-  }
-}
-
-function storeColumns(list: string, columns: GridColumns) {
-  try {
-    const stored = JSON.parse(localStorage.getItem('list-grid-columns') || '{}')
-    stored[list] = columns
-    localStorage.setItem('list-grid-columns', JSON.stringify(stored))
-  } catch {}
-}
 import { apiEvents } from './lib/api'
 import AppHeader from './components/AppHeader.vue'
 import ListTabs from './components/ListTabs.vue'
@@ -58,6 +25,7 @@ const listStore = useListStore()
 const todoStore = useTodoStore()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
+const listPrefsStore = useListPrefsStore()
 
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
@@ -105,21 +73,19 @@ function openAddForm(type: ItemType) {
   showAddForm.value = true
 }
 const currentView = ref<ViewType>('all')
-const layoutMode = ref<LayoutMode>(getStoredLayout(listStore.activeList))
-const gridColumns = ref<GridColumns>(getStoredColumns(listStore.activeList))
 const showColumnsMenu = ref(false)
+const layoutMode = computed<LayoutMode>(() => listPrefsStore.get(listStore.activeList).layout)
+const gridColumns = computed<GridColumns>(() => listPrefsStore.get(listStore.activeList).columns)
 const isCategoryView = computed(() => currentView.value !== 'schedule' && currentView.value !== 'completed')
 
 function setLayout(mode: LayoutMode) {
-  layoutMode.value = mode
-  storeLayout(listStore.activeList, mode)
+  listPrefsStore.setLayout(listStore.activeList, mode)
 }
 
 function setColumns(n: GridColumns) {
-  gridColumns.value = n
-  storeColumns(listStore.activeList, n)
+  // A column pick implies grid view — bundle both into one update.
+  listPrefsStore.update(listStore.activeList, { layout: 'grid', columns: n })
   showColumnsMenu.value = false
-  if (layoutMode.value !== 'grid') setLayout('grid')
 }
 
 function toggleColumnsMenu() {
@@ -154,6 +120,7 @@ onMounted(async () => {
   if (authStore.isAuthenticated && !authStore.needsPlanChoice) {
     await loadData()
     await settingsStore.loadFromServer()
+    await listPrefsStore.loadFromServer()
   }
 })
 
@@ -166,9 +133,11 @@ watch(
     // User identity changed (including going to/from null). Purge per-user stores.
     listStore.reset()
     todoStore.reset()
+    listPrefsStore.reset()
     if (currentId) {
       await loadData()
       await settingsStore.loadFromServer()
+      await listPrefsStore.loadFromServer()
     }
   }
 )
@@ -178,11 +147,9 @@ onUnmounted(() => {
   apiEvents.removeEventListener('rate-limited', handleRateLimit)
 })
 
-// Re-fetch when active list changes and restore its layout preference
+// Re-fetch when active list changes; layout/columns track via computeds.
 watch(() => listStore.activeList, (list) => {
   todoStore.fetchTodos(list, currentView.value)
-  layoutMode.value = getStoredLayout(list)
-  gridColumns.value = getStoredColumns(list)
 })
 
 async function onViewChange(view: ViewType) {
