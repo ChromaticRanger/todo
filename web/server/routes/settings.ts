@@ -219,6 +219,59 @@ router.put('/list-prefs', async (req, res) => {
   }
 })
 
+// GET /api/settings/category-prefs
+const VALID_ITEM_LAYOUTS = ['list', 'grid'] as const
+type ItemLayout = (typeof VALID_ITEM_LAYOUTS)[number]
+interface CategoryPref { itemLayout: ItemLayout }
+type CategoryPrefsMap = Record<string, Record<string, CategoryPref>>
+
+router.get('/category-prefs', async (req, res) => {
+  const userId = req.userId!
+  try {
+    const result = await query<{ value: CategoryPrefsMap }>(
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'category_prefs'`,
+      [userId]
+    )
+    res.json({ prefs: result.rows[0]?.value ?? {} })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/settings/category-prefs
+router.put('/category-prefs', async (req, res) => {
+  const userId = req.userId!
+  const { prefs } = req.body as { prefs?: unknown }
+  if (!prefs || typeof prefs !== 'object' || Array.isArray(prefs)) {
+    return res.status(400).json({ error: 'prefs must be an object' })
+  }
+  const sanitized: CategoryPrefsMap = {}
+  for (const [list, cats] of Object.entries(prefs as Record<string, unknown>)) {
+    if (!cats || typeof cats !== 'object' || Array.isArray(cats)) continue
+    const catMap: Record<string, CategoryPref> = {}
+    for (const [category, val] of Object.entries(cats as Record<string, unknown>)) {
+      if (!val || typeof val !== 'object') continue
+      const v = val as Partial<CategoryPref>
+      if (!(VALID_ITEM_LAYOUTS as readonly string[]).includes(v.itemLayout as string)) continue
+      // 'list' is the default — no need to persist it.
+      if (v.itemLayout === 'list') continue
+      catMap[category] = { itemLayout: v.itemLayout as ItemLayout }
+    }
+    if (Object.keys(catMap).length > 0) sanitized[list] = catMap
+  }
+  try {
+    await query(
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'category_prefs', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify(sanitized)]
+    )
+    res.json({ prefs: sanitized })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/settings/empty-categories
 router.get('/empty-categories', async (req, res) => {
   const userId = req.userId!

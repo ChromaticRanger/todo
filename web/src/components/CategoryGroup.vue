@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { Todo, ItemType } from '../types/todo'
 import TodoItem from './TodoItem.vue'
 import TodoForm from './TodoForm.vue'
+import BookmarkTile from './BookmarkTile.vue'
 import DeleteCategoryDialog from './DeleteCategoryDialog.vue'
 import type { TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useListStore } from '../stores/listStore'
+import { useCategoryPrefsStore } from '../stores/categoryPrefsStore'
 
 const props = defineProps<{
   category: string
@@ -17,12 +19,27 @@ const props = defineProps<{
 
 const store = useTodoStore()
 const listStore = useListStore()
+const categoryPrefsStore = useCategoryPrefsStore()
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
 const showTypeMenu = ref(false)
 const editing = ref(false)
 const editName = ref('')
 const confirmDelete = ref(false)
+
+const itemLayout = computed(
+  () => categoryPrefsStore.get(listStore.activeList, props.category).itemLayout,
+)
+const bookmarks = computed(() => props.todos.filter(t => t.type === 'bookmark'))
+const nonBookmarks = computed(() => props.todos.filter(t => t.type !== 'bookmark'))
+
+function toggleItemLayout() {
+  categoryPrefsStore.setItemLayout(
+    listStore.activeList,
+    props.category,
+    itemLayout.value === 'grid' ? 'list' : 'grid',
+  )
+}
 
 function openAddForm(type: ItemType) {
   addType.value = type
@@ -84,6 +101,20 @@ async function handleMoveToGeneral() {
 
       <div class="flex items-center gap-2">
         <span class="text-xs text-muted">{{ todos.length }}</span>
+        <!-- Item layout toggle (list / grid) -->
+        <button
+          v-if="!editing"
+          class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
+          :title="itemLayout === 'grid' ? 'Switch to list layout' : 'Switch to grid layout'"
+          @click="toggleItemLayout"
+        >
+          <svg v-if="itemLayout === 'list'" class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 3a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3Zm7 0a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V3ZM2 10a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-3Zm7 0a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1v-3Z" />
+          </svg>
+          <svg v-else class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M2 4.25A.75.75 0 0 1 2.75 3.5h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.25Zm0 3.75A.75.75 0 0 1 2.75 7.25h10.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 8Zm.75 3a.75.75 0 0 0 0 1.5h10.5a.75.75 0 0 0 0-1.5H2.75Z" />
+          </svg>
+        </button>
         <!-- Edit / rename icon -->
         <button
           v-if="!editing"
@@ -164,15 +195,43 @@ async function handleMoveToGeneral() {
       </div>
     </div>
 
-    <!-- Items list -->
-    <div class="p-3 space-y-2 flex-1 overflow-y-auto scrollbar-thin">
-      <TodoItem
-        v-for="todo in todos"
-        :key="todo.id"
-        :todo="todo"
-        :categories="allCategories"
-        :current-list="listStore.activeList"
-      />
+    <!-- Items area -->
+    <div class="p-3 flex-1 overflow-y-auto scrollbar-thin">
+      <template v-if="itemLayout === 'list'">
+        <div class="space-y-2">
+          <TodoItem
+            v-for="todo in todos"
+            :key="todo.id"
+            :todo="todo"
+            :categories="allCategories"
+            :current-list="listStore.activeList"
+          />
+        </div>
+      </template>
+      <template v-else>
+        <div v-if="bookmarks.length > 0" class="flex flex-wrap gap-1.5">
+          <BookmarkTile
+            v-for="todo in bookmarks"
+            :key="todo.id"
+            :todo="todo"
+            :categories="allCategories"
+            :current-list="listStore.activeList"
+          />
+        </div>
+        <div
+          v-if="nonBookmarks.length > 0"
+          class="space-y-2"
+          :class="bookmarks.length > 0 ? 'mt-3' : ''"
+        >
+          <TodoItem
+            v-for="todo in nonBookmarks"
+            :key="todo.id"
+            :todo="todo"
+            :categories="allCategories"
+            :current-list="listStore.activeList"
+          />
+        </div>
+      </template>
 
       <div v-if="todos.length === 0" class="text-xs text-muted text-center py-2">
         No items
