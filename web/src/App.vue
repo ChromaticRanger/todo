@@ -10,6 +10,7 @@ import {
   type LayoutMode,
   type GridColumns,
 } from './stores/listPrefsStore'
+import { useCategoryPrefsStore } from './stores/categoryPrefsStore'
 import type { ViewType, ItemType } from './types/todo'
 import { apiEvents } from './lib/api'
 import AppHeader from './components/AppHeader.vue'
@@ -26,6 +27,7 @@ const todoStore = useTodoStore()
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const listPrefsStore = useListPrefsStore()
+const categoryPrefsStore = useCategoryPrefsStore()
 
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
@@ -121,6 +123,7 @@ onMounted(async () => {
     await loadData()
     await settingsStore.loadFromServer()
     await listPrefsStore.loadFromServer()
+    await categoryPrefsStore.loadFromServer()
   }
 })
 
@@ -134,10 +137,12 @@ watch(
     listStore.reset()
     todoStore.reset()
     listPrefsStore.reset()
+    categoryPrefsStore.reset()
     if (currentId) {
       await loadData()
       await settingsStore.loadFromServer()
       await listPrefsStore.loadFromServer()
+      await categoryPrefsStore.loadFromServer()
     }
   }
 )
