@@ -30,24 +30,8 @@ const priorityBorderClass = computed(() => {
   if (!isTodo.value) return 'border-l-border-strong'
   switch (props.todo.priority) {
     case Priority.HIGH: return 'border-l-danger'
-    case Priority.LOW: return 'border-l-success-fg'
-    default: return 'border-l-warning-fg'
-  }
-})
-
-const priorityLabel = computed(() => {
-  switch (props.todo.priority) {
-    case Priority.HIGH: return 'High'
-    case Priority.LOW: return 'Low'
-    default: return 'Med'
-  }
-})
-
-const priorityBadgeClass = computed(() => {
-  switch (props.todo.priority) {
-    case Priority.HIGH: return 'bg-danger-bg text-danger-fg'
-    case Priority.LOW: return 'bg-success-bg text-success-fg'
-    default: return 'bg-warning-bg text-warning-fg'
+    case Priority.LOW: return 'border-l-green-400'
+    default: return 'border-l-blue-500'
   }
 })
 
@@ -56,7 +40,7 @@ const isCompleted = computed(() => props.todo.status === Status.COMPLETED)
 const dueDateStr = computed(() => {
   if (!props.todo.due_date) return null
   const d = new Date(props.todo.due_date * 1000)
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
 })
 
 const isDueOverdue = computed(() => {
@@ -132,7 +116,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Bookmark item -->
   <div
     v-if="isBookmark"
-    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-4 bg-accent/5 hover:bg-accent/10 transition-colors group cursor-pointer"
+    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-accent/5 hover:bg-accent/10 dark:bg-accent/15 dark:hover:bg-accent/25 transition-colors group cursor-pointer"
     :class="priorityBorderClass"
     @click="openBookmark"
   >
@@ -192,7 +176,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Note item -->
   <div
     v-else-if="isNote"
-    class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-4 bg-warning-bg/30 hover:bg-warning-bg/50 transition-colors group"
+    class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-8 bg-warning-bg/30 hover:bg-warning-bg/50 dark:bg-warning-bg/60 dark:hover:bg-warning-bg/80 transition-colors group"
     :class="priorityBorderClass"
   >
     <span
@@ -253,7 +237,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Todo item (default) -->
   <div
     v-else
-    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-4 bg-surface-hover/40 hover:bg-surface-hover transition-colors group"
+    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-surface-hover/40 hover:bg-surface-hover dark:bg-surface-hover/80 transition-colors group"
     :class="[priorityBorderClass, isCompleted ? 'opacity-60' : '']"
   >
     <span
@@ -362,11 +346,6 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
         </svg>
       </button>
     </div>
-
-    <!-- Priority badge -->
-    <span class="flex-shrink-0 self-center text-xs px-1.5 py-0.5 rounded font-medium" :class="priorityBadgeClass">
-      {{ priorityLabel }}
-    </span>
   </div>
 
   <!-- Modals -->
