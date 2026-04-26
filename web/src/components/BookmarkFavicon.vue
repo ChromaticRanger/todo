@@ -38,7 +38,11 @@ const faviconDomain = computed(() =>
 // best-quality option for popular sites whose root /apple-touch-icon.png or
 // /favicon.ico are smaller than what's referenced in the HTML head (e.g.
 // YouTube). Falls through to apple-touch-icon and /favicon.ico for sites
-// Google hasn't indexed (grey-globe detected via @load dimensions below).
+// Google hasn't indexed (small-image detected via @load dimensions below).
+// DuckDuckGo last as the disambiguator: it 404s (not a placeholder) on miss,
+// so it tells us "real favicon exists, keep the chain alive" vs "truly nothing,
+// fall to tile letter" — needed because S2's 16px grey-globe is indistinguishable
+// from a legitimate 16px favicon by image dimensions alone.
 const faviconSources = computed(() => {
   const host = faviconHost.value
   if (!host) return []
@@ -46,6 +50,7 @@ const faviconSources = computed(() => {
     `https://www.google.com/s2/favicons?domain=${host}&sz=128`,
     `https://${host}/apple-touch-icon.png`,
     `https://${host}/favicon.ico`,
+    `https://icons.duckduckgo.com/ip3/${host}.ico`,
   ]
 })
 
