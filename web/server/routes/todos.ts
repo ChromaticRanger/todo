@@ -28,6 +28,7 @@ interface TodoRow {
   spawned_next: number
   type: string
   url: string | null
+  snoozed_until: number | null
 }
 
 // pg serializes BIGINT/NUMERIC as strings; coerce to numbers for the client
@@ -45,6 +46,7 @@ function coerceTodo(row: TodoRow) {
     spawned_next: Number(row.spawned_next),
     type: (row.type as string) || 'todo',
     url: row.url ?? null,
+    snoozed_until: row.snoozed_until != null ? Number(row.snoozed_until) : null,
   }
 }
 
@@ -102,7 +104,7 @@ function buildTodoSelect(extra = ''): string {
   return `SELECT id, list_name, title, description, category, priority, status,
     EXTRACT(EPOCH FROM created_at)::BIGINT AS created_at,
     EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at,
-    due_date, repeat_days, repeat_months, spawned_next, type, url
+    due_date, repeat_days, repeat_months, spawned_next, type, url, snoozed_until
   FROM todos ${extra}`
 }
 
@@ -130,6 +132,13 @@ router.get('/', async (req, res) => {
       params.push(category)
       conditions.push(`category = $${params.length}`)
     }
+
+    // Hide actively-snoozed todos from the category view. Time-based views
+    // (today/week/month/schedule) intentionally still surface them so an
+    // overdue item doesn't vanish entirely.
+    conditions.push(
+      '(snoozed_until IS NULL OR snoozed_until <= EXTRACT(EPOCH FROM NOW())::BIGINT)'
+    )
 
     const where = `WHERE ${conditions.join(' AND ')}`
     const result = await query<TodoRow>(
@@ -424,6 +433,36 @@ router.post('/:id/move', async (req, res) => {
       : await query(
           'UPDATE todos SET list_name = $1 WHERE id = $2 AND user_id = $3',
           [target_list, req.params.id, userId]
+        )
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/todos/:id/snooze
+router.post('/:id/snooze', async (req, res) => {
+  const userId = req.userId!
+  const { snoozed_until, due_date } = req.body as {
+    snoozed_until: number | null
+    due_date?: number | null
+  }
+  if (snoozed_until !== null && (typeof snoozed_until !== 'number' || !Number.isFinite(snoozed_until))) {
+    return res.status(400).json({ error: 'snoozed_until must be a number or null' })
+  }
+  try {
+    const hasDue = Object.prototype.hasOwnProperty.call(req.body, 'due_date')
+    const result = hasDue
+      ? await query(
+          `UPDATE todos SET snoozed_until = $1, due_date = $2
+           WHERE id = $3 AND user_id = $4`,
+          [snoozed_until, due_date ?? null, req.params.id, userId]
+        )
+      : await query(
+          `UPDATE todos SET snoozed_until = $1
+           WHERE id = $2 AND user_id = $3`,
+          [snoozed_until, req.params.id, userId]
         )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ ok: true })

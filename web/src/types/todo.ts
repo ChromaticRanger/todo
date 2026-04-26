@@ -33,6 +33,7 @@ export interface Todo {
   spawned_next: number
   type: ItemType
   url: string | null
+  snoozed_until: number | null
 }
 
 export interface TodoFormData {

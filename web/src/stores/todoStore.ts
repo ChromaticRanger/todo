@@ -272,10 +272,51 @@ export const useTodoStore = defineStore('todos', () => {
       spawned_next: 0,
       type: form.type,
       url: form.url,
+      snoozed_until: null,
     }
 
     if (list === currentList.value) todos.value.push(newTodo)
     registerCategory(list, cat)
+    invalidateOtherViews(list)
+  }
+
+  async function snoozeTodo(id: number, snoozedUntil: number | null, dueDate?: number | null) {
+    const list = currentList.value
+    const view = currentView.value
+    const index = todos.value.findIndex((t) => t.id === id)
+    const removed = index >= 0 ? todos.value[index] : null
+
+    // Optimistic: only the category ('all') view filters snoozed items server-side.
+    // Snoozing on 'all' removes the row; on time-based views the row stays visible
+    // and we just patch the field. Unsnoozing (snoozedUntil === null) just patches —
+    // the row was always visible on time-based views.
+    if (index >= 0) {
+      if (view === 'all' && snoozedUntil != null) {
+        todos.value.splice(index, 1)
+      } else {
+        todos.value[index].snoozed_until = snoozedUntil
+        if (dueDate !== undefined) todos.value[index].due_date = dueDate
+      }
+    }
+
+    const body: { snoozed_until: number | null; due_date?: number | null } = {
+      snoozed_until: snoozedUntil,
+    }
+    if (dueDate !== undefined) body.due_date = dueDate
+
+    try {
+      const res = await apiFetch(`/api/todos/${id}/snooze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error(await res.text())
+    } catch (e) {
+      if (removed && index >= 0 && view === 'all' && snoozedUntil != null) {
+        todos.value.splice(index, 0, removed)
+      }
+      throw e
+    }
     invalidateOtherViews(list)
   }
 
@@ -528,6 +569,7 @@ export const useTodoStore = defineStore('todos', () => {
     deleteTodo,
     completeTodo,
     uncompleteTodo,
+    snoozeTodo,
     moveTodo,
     fetchCategoriesFor,
     renameCategory,

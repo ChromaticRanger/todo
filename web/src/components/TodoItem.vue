@@ -6,6 +6,7 @@ import { useTodoStore } from '../stores/todoStore'
 import TodoForm from './TodoForm.vue'
 import MoveDialog from './MoveDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import SnoozeDialog from './SnoozeDialog.vue'
 import BookmarkFavicon from './BookmarkFavicon.vue'
 
 const props = defineProps<{
@@ -19,6 +20,7 @@ const store = useTodoStore()
 const showEdit = ref(false)
 const showMove = ref(false)
 const showConfirm = ref(false)
+const showSnooze = ref(false)
 
 const isTodo = computed(() => props.todo.type === 'todo' || !props.todo.type)
 const isBookmark = computed(() => props.todo.type === 'bookmark')
@@ -118,6 +120,11 @@ async function handleMove(payload: { targetList: string; targetCategory: string 
 async function handleDelete() {
   await store.deleteTodo(props.todo.id)
   showConfirm.value = false
+}
+
+async function handleSnooze(payload: { snoozed_until: number | null; due_date?: number | null }) {
+  await store.snoozeTodo(props.todo.id, payload.snoozed_until, payload.due_date)
+  showSnooze.value = false
 }
 </script>
 
@@ -296,6 +303,16 @@ async function handleDelete() {
         </svg>
       </button>
       <button
+        v-if="!isCompleted"
+        class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover transition-colors"
+        title="Remind me later"
+        @click="showSnooze = true"
+      >
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+      </button>
+      <button
         class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover transition-colors"
         title="Move to list"
         @click="showMove = true"
@@ -344,5 +361,12 @@ async function handleDelete() {
     :message="`Delete &quot;${todo.title}&quot;?`"
     @confirm="handleDelete"
     @cancel="showConfirm = false"
+  />
+
+  <SnoozeDialog
+    v-if="showSnooze"
+    :todo="todo"
+    @submit="handleSnooze"
+    @cancel="showSnooze = false"
   />
 </template>
