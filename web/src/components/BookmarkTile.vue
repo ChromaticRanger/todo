@@ -37,6 +37,18 @@ async function handleDelete() {
 
 <template>
   <div class="relative group">
+    <!-- Drag handle (hover-revealed, top-left) -->
+    <span
+      class="item-drag-handle absolute bottom-0 left-0 z-10 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm text-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+      title="Drag to reorder"
+      @click.stop.prevent
+    >
+      <svg class="size-3" viewBox="0 0 16 16" fill="currentColor">
+        <circle cx="6" cy="3" r="1.2" /><circle cx="10" cy="3" r="1.2" />
+        <circle cx="6" cy="8" r="1.2" /><circle cx="10" cy="8" r="1.2" />
+        <circle cx="6" cy="13" r="1.2" /><circle cx="10" cy="13" r="1.2" />
+      </svg>
+    </span>
     <!-- Action overlay (hover-revealed, top-right) -->
     <div
       class="absolute top-0 right-0 z-10 flex items-center gap-0.5 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"

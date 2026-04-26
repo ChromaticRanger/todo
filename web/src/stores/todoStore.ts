@@ -2,8 +2,10 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Todo, TodoFormData, ViewType } from '../types/todo'
 import { apiFetch } from '../lib/api'
+import { useCategoryPrefsStore } from './categoryPrefsStore'
 
 export const useTodoStore = defineStore('todos', () => {
+  const categoryPrefsStore = useCategoryPrefsStore()
   const todos = ref<Todo[]>([])
   const categories = ref<string[]>([])
   const loading = ref(false)
@@ -118,7 +120,25 @@ export const useTodoStore = defineStore('todos', () => {
     const seen = new Set(ordered)
     const remaining = defaultCategorySort([...present].filter((c) => !seen.has(c)))
     const sorted = new Map<string, Todo[]>()
-    for (const k of [...ordered, ...remaining]) sorted.set(k, map.get(k)!)
+    const listPrefs = categoryPrefsStore.prefs[currentList.value] ?? {}
+    for (const k of [...ordered, ...remaining]) {
+      const items = map.get(k)!
+      const order = listPrefs[k]?.itemOrder
+      if (!order || order.length === 0) {
+        sorted.set(k, items)
+        continue
+      }
+      const indexOf = new Map<number, number>()
+      for (let i = 0; i < order.length; i++) indexOf.set(order[i], i)
+      const known: Todo[] = []
+      const unknown: Todo[] = []
+      for (const t of items) {
+        if (indexOf.has(t.id)) known.push(t)
+        else unknown.push(t)
+      }
+      known.sort((a, b) => indexOf.get(a.id)! - indexOf.get(b.id)!)
+      sorted.set(k, [...known, ...unknown])
+    }
     return sorted
   })
 
@@ -399,30 +419,46 @@ export const useTodoStore = defineStore('todos', () => {
   async function moveTodo(id: number, targetList: string, targetCategory?: string) {
     const body: { target_list: string; target_category?: string } = { target_list: targetList }
     if (targetCategory && targetCategory.trim()) body.target_category = targetCategory.trim()
+
+    // Optimistic in-memory update first so drag-and-drop reflects instantly.
+    let revert: (() => void) | null = null
+    const item = todos.value.find((t) => t.id === id)
+    if (item) {
+      if (targetList === currentList.value) {
+        const cat = body.target_category
+        if (cat && cat !== item.category) {
+          const oldCategory = item.category
+          item.category = cat
+          const addedCat = !categories.value.includes(cat)
+          if (addedCat) categories.value = [...categories.value, cat]
+          revert = () => {
+            item.category = oldCategory
+            if (addedCat) categories.value = categories.value.filter((c) => c !== cat)
+          }
+        }
+      } else {
+        const idx = todos.value.indexOf(item)
+        todos.value = todos.value.filter((t) => t.id !== id)
+        revert = () => {
+          const next = [...todos.value]
+          next.splice(idx, 0, item)
+          todos.value = next
+        }
+      }
+    }
+
     const res = await apiFetch(`/api/todos/${id}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
     if (!res.ok) {
+      revert?.()
       await surfaceCapError(res)
       return
     }
     invalidateList(currentList.value)
     invalidateList(targetList)
-    if (targetList === currentList.value) {
-      // Same list, (possibly) different category — mutate in place so byCategory regroups.
-      const cat = body.target_category
-      if (cat) {
-        const item = todos.value.find((t) => t.id === id)
-        if (item) {
-          item.category = cat
-          if (!categories.value.includes(cat)) categories.value = [...categories.value, cat]
-        }
-      }
-    } else {
-      todos.value = todos.value.filter((t) => t.id !== id)
-    }
   }
 
   async function fetchCategoriesFor(list: string): Promise<string[]> {
@@ -466,6 +502,7 @@ export const useTodoStore = defineStore('todos', () => {
       const next = savedOrder.filter((c) => c !== fromName)
       await reorderCategories(list, next)
     }
+    await categoryPrefsStore.clearCategory(list, fromName)
 
     // In-memory: reassign todos and drop the old category name.
     if (list === currentList.value) {
@@ -504,6 +541,7 @@ export const useTodoStore = defineStore('todos', () => {
       const next = savedOrder.filter((c) => c !== name)
       await reorderCategories(list, next)
     }
+    await categoryPrefsStore.clearCategory(list, name)
 
     // Purge in-memory todos + caches (invalidateList drops todos/categories caches).
     if (list === currentList.value) {
@@ -533,6 +571,7 @@ export const useTodoStore = defineStore('todos', () => {
       }
       await persistEmptyCategories()
     }
+    await categoryPrefsStore.renamePrefCategory(list, oldName, newName)
     invalidateList(list)
     await fetchTodos(list, currentView.value)
   }

@@ -6,15 +6,34 @@ export type ItemLayout = 'list' | 'grid'
 
 export interface CategoryPref {
   itemLayout: ItemLayout
+  itemOrder?: number[]
 }
 
 const VALID_LAYOUTS: ItemLayout[] = ['list', 'grid']
 const DEFAULT_PREF: CategoryPref = { itemLayout: 'list' }
+const ITEM_ORDER_MAX = 500
 
 const STORAGE_KEY = 'category-prefs'
 
 type CategoryMap = Record<string, CategoryPref>
 type PrefsMap = Record<string, CategoryMap>
+
+function sanitizeItemOrder(input: unknown): number[] | undefined {
+  if (!Array.isArray(input)) return undefined
+  const seen = new Set<number>()
+  const out: number[] = []
+  for (const v of input) {
+    if (typeof v !== 'number' || !Number.isFinite(v) || seen.has(v)) continue
+    seen.add(v)
+    out.push(v)
+    if (out.length >= ITEM_ORDER_MAX) break
+  }
+  return out.length > 0 ? out : undefined
+}
+
+function isDefaultPref(p: CategoryPref): boolean {
+  return p.itemLayout === DEFAULT_PREF.itemLayout && (!p.itemOrder || p.itemOrder.length === 0)
+}
 
 function sanitize(input: unknown): PrefsMap {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return {}
@@ -28,9 +47,12 @@ function sanitize(input: unknown): PrefsMap {
       const itemLayout = VALID_LAYOUTS.includes(v.itemLayout as ItemLayout)
         ? (v.itemLayout as ItemLayout)
         : DEFAULT_PREF.itemLayout
+      const itemOrder = sanitizeItemOrder(v.itemOrder)
+      const pref: CategoryPref = { itemLayout }
+      if (itemOrder) pref.itemOrder = itemOrder
       // Skip storing the default to keep payload small.
-      if (itemLayout === DEFAULT_PREF.itemLayout) continue
-      catMap[cat] = { itemLayout }
+      if (isDefaultPref(pref)) continue
+      catMap[cat] = pref
     }
     if (Object.keys(catMap).length > 0) out[list] = catMap
   }
@@ -95,22 +117,7 @@ export const useCategoryPrefsStore = defineStore('categoryPrefs', () => {
     } catch {}
   }
 
-  async function update(list: string, category: string, patch: Partial<CategoryPref>) {
-    const previousMap = JSON.parse(JSON.stringify(prefs.value)) as PrefsMap
-    const prev = previousMap[list]?.[category] ?? DEFAULT_PREF
-    const merged: CategoryPref = { ...prev, ...patch }
-    const nextMap: PrefsMap = { ...previousMap }
-    const catMap: CategoryMap = { ...(nextMap[list] ?? {}) }
-    if (merged.itemLayout === DEFAULT_PREF.itemLayout) {
-      delete catMap[category]
-    } else {
-      catMap[category] = merged
-    }
-    if (Object.keys(catMap).length > 0) {
-      nextMap[list] = catMap
-    } else {
-      delete nextMap[list]
-    }
+  async function persist(nextMap: PrefsMap, previousMap: PrefsMap) {
     prefs.value = nextMap
     writeCache(nextMap)
     try {
@@ -121,9 +128,71 @@ export const useCategoryPrefsStore = defineStore('categoryPrefs', () => {
     }
   }
 
+  async function update(list: string, category: string, patch: Partial<CategoryPref>) {
+    const previousMap = JSON.parse(JSON.stringify(prefs.value)) as PrefsMap
+    const prev = previousMap[list]?.[category] ?? DEFAULT_PREF
+    const merged: CategoryPref = { ...prev, ...patch }
+    if (merged.itemOrder !== undefined) {
+      const cleaned = sanitizeItemOrder(merged.itemOrder)
+      if (cleaned) merged.itemOrder = cleaned
+      else delete merged.itemOrder
+    }
+    const nextMap: PrefsMap = { ...previousMap }
+    const catMap: CategoryMap = { ...(nextMap[list] ?? {}) }
+    if (isDefaultPref(merged)) {
+      delete catMap[category]
+    } else {
+      catMap[category] = merged
+    }
+    if (Object.keys(catMap).length > 0) {
+      nextMap[list] = catMap
+    } else {
+      delete nextMap[list]
+    }
+    await persist(nextMap, previousMap)
+  }
+
   function setItemLayout(list: string, category: string, itemLayout: ItemLayout) {
     return update(list, category, { itemLayout })
   }
 
-  return { prefs, loadFromCache, loadFromServer, reset, get, update, setItemLayout }
+  function setItemOrder(list: string, category: string, ids: number[]) {
+    return update(list, category, { itemOrder: ids })
+  }
+
+  async function clearCategory(list: string, category: string) {
+    const previousMap = JSON.parse(JSON.stringify(prefs.value)) as PrefsMap
+    if (!previousMap[list]?.[category]) return
+    const nextMap: PrefsMap = { ...previousMap }
+    const catMap: CategoryMap = { ...nextMap[list] }
+    delete catMap[category]
+    if (Object.keys(catMap).length > 0) nextMap[list] = catMap
+    else delete nextMap[list]
+    await persist(nextMap, previousMap)
+  }
+
+  async function renamePrefCategory(list: string, oldName: string, newName: string) {
+    const previousMap = JSON.parse(JSON.stringify(prefs.value)) as PrefsMap
+    const entry = previousMap[list]?.[oldName]
+    if (!entry) return
+    const nextMap: PrefsMap = { ...previousMap }
+    const catMap: CategoryMap = { ...nextMap[list] }
+    delete catMap[oldName]
+    catMap[newName] = entry
+    nextMap[list] = catMap
+    await persist(nextMap, previousMap)
+  }
+
+  return {
+    prefs,
+    loadFromCache,
+    loadFromServer,
+    reset,
+    get,
+    update,
+    setItemLayout,
+    setItemOrder,
+    clearCategory,
+    renamePrefCategory,
+  }
 })

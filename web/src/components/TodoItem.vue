@@ -136,6 +136,17 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     :class="priorityBorderClass"
     @click="openBookmark"
   >
+    <span
+      class="item-drag-handle flex-shrink-0 -ml-1 text-muted cursor-grab active:cursor-grabbing"
+      title="Drag to reorder"
+      @click.stop
+    >
+      <svg class="size-3.5" viewBox="0 0 16 16" fill="currentColor">
+        <circle cx="6" cy="3" r="1.2" /><circle cx="10" cy="3" r="1.2" />
+        <circle cx="6" cy="8" r="1.2" /><circle cx="10" cy="8" r="1.2" />
+        <circle cx="6" cy="13" r="1.2" /><circle cx="10" cy="13" r="1.2" />
+      </svg>
+    </span>
     <BookmarkFavicon :url="todo.url" :title="todo.title" size="md" />
 
     <!-- Content -->
@@ -184,6 +195,16 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-4 bg-warning-bg/30 hover:bg-warning-bg/50 transition-colors group"
     :class="priorityBorderClass"
   >
+    <span
+      class="item-drag-handle flex-shrink-0 self-center -ml-1 text-muted cursor-grab active:cursor-grabbing"
+      title="Drag to reorder"
+    >
+      <svg class="size-3.5" viewBox="0 0 16 16" fill="currentColor">
+        <circle cx="6" cy="3" r="1.2" /><circle cx="10" cy="3" r="1.2" />
+        <circle cx="6" cy="8" r="1.2" /><circle cx="10" cy="8" r="1.2" />
+        <circle cx="6" cy="13" r="1.2" /><circle cx="10" cy="13" r="1.2" />
+      </svg>
+    </span>
     <!-- Note icon -->
     <span class="mt-0.5 flex-shrink-0 size-5 flex items-center justify-center text-muted">
       <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -235,6 +256,16 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-4 bg-surface-hover/40 hover:bg-surface-hover transition-colors group"
     :class="[priorityBorderClass, isCompleted ? 'opacity-60' : '']"
   >
+    <span
+      class="item-drag-handle flex-shrink-0 -ml-1 text-muted cursor-grab active:cursor-grabbing"
+      title="Drag to reorder"
+    >
+      <svg class="size-3.5" viewBox="0 0 16 16" fill="currentColor">
+        <circle cx="6" cy="3" r="1.2" /><circle cx="10" cy="3" r="1.2" />
+        <circle cx="6" cy="8" r="1.2" /><circle cx="10" cy="8" r="1.2" />
+        <circle cx="6" cy="13" r="1.2" /><circle cx="10" cy="13" r="1.2" />
+      </svg>
+    </span>
     <!-- Complete toggle -->
     <button
       class="flex-shrink-0 size-5 rounded-full border-2 flex items-center justify-center transition-colors"

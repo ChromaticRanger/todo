@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import draggable from 'vuedraggable'
 import type { Todo, ItemType } from '../types/todo'
 import TodoItem from './TodoItem.vue'
 import TodoForm from './TodoForm.vue'
@@ -71,6 +72,64 @@ const itemLayout = computed(
 )
 const bookmarks = computed(() => props.todos.filter(t => t.type === 'bookmark'))
 const nonBookmarks = computed(() => props.todos.filter(t => t.type !== 'bookmark'))
+
+// Per-item drag is only meaningful in the All view. Time-filtered views sort by
+// due_date for an urgency-based read; flat views (schedule/completed) don't render cards.
+const dragEnabled = computed(() => store.currentView === 'all')
+
+function persistOrder(ids: number[]) {
+  void categoryPrefsStore.setItemOrder(listStore.activeList, props.category, ids)
+}
+
+// For any item in `newItems` that doesn't belong to this category yet, kick off
+// an optimistic move (moveTodo updates t.category synchronously before awaiting).
+function adoptIncoming(newItems: Todo[], previousIds: Set<number>) {
+  for (const t of newItems) {
+    if (!previousIds.has(t.id) && t.category !== props.category) {
+      void store.moveTodo(t.id, listStore.activeList, props.category)
+    }
+  }
+}
+
+function onListReorder(newOrder: Todo[]) {
+  if (!dragEnabled.value) return
+  adoptIncoming(newOrder, new Set(props.todos.map(t => t.id)))
+  persistOrder(newOrder.map(t => t.id))
+}
+
+function onBookmarksReorder(newBookmarks: Todo[]) {
+  if (!dragEnabled.value) return
+  adoptIncoming(newBookmarks, new Set(bookmarks.value.map(t => t.id)))
+  persistOrder([
+    ...newBookmarks.map(t => t.id),
+    ...nonBookmarks.value.map(t => t.id),
+  ])
+}
+
+function onNonBookmarksReorder(newNonBookmarks: Todo[]) {
+  if (!dragEnabled.value) return
+  adoptIncoming(newNonBookmarks, new Set(nonBookmarks.value.map(t => t.id)))
+  persistOrder([
+    ...bookmarks.value.map(t => t.id),
+    ...newNonBookmarks.map(t => t.id),
+  ])
+}
+
+// Group + put predicates: a single shared group lets items move between cards;
+// per-zone `put` predicates keep bookmarks out of non-bookmark zones (and v.v.).
+// List-mode zones accept anything since they render every type.
+const ITEM_GROUP = 'todo-items'
+const listGroup = { name: ITEM_GROUP, pull: true, put: true }
+const bookmarksGroup = {
+  name: ITEM_GROUP,
+  pull: true,
+  put: (_to: unknown, _from: unknown, el: HTMLElement) => el?.dataset?.type === 'bookmark',
+}
+const nonBookmarksGroup = {
+  name: ITEM_GROUP,
+  pull: true,
+  put: (_to: unknown, _from: unknown, el: HTMLElement) => el?.dataset?.type !== 'bookmark',
+}
 
 function toggleItemLayout() {
   categoryPrefsStore.setItemLayout(
@@ -237,41 +296,77 @@ async function handleMoveToGeneral() {
     </div>
 
     <!-- Items area -->
-    <div class="p-3 flex-1 overflow-y-auto scrollbar-thin">
+    <div
+      class="p-3 flex-1 overflow-y-auto scrollbar-thin"
+      :class="!dragEnabled ? '[&_.item-drag-handle]:hidden' : ''"
+    >
       <template v-if="itemLayout === 'list'">
-        <div class="space-y-2">
-          <TodoItem
-            v-for="todo in todos"
-            :key="todo.id"
-            :todo="todo"
-            :categories="allCategories"
-            :current-list="listStore.activeList"
-          />
-        </div>
+        <draggable
+          :model-value="todos"
+          item-key="id"
+          handle=".item-drag-handle"
+          :group="listGroup"
+          :animation="150"
+          ghost-class="opacity-40"
+          :disabled="!dragEnabled"
+          class="space-y-2 min-h-[1.5rem]"
+          @update:model-value="onListReorder"
+        >
+          <template #item="{ element: todo }">
+            <div :key="todo.id" :data-type="todo.type ?? 'todo'">
+              <TodoItem
+                :todo="todo"
+                :categories="allCategories"
+                :current-list="listStore.activeList"
+              />
+            </div>
+          </template>
+        </draggable>
       </template>
       <template v-else>
-        <div v-if="bookmarks.length > 0" class="flex flex-wrap gap-1.5">
-          <BookmarkTile
-            v-for="todo in bookmarks"
-            :key="todo.id"
-            :todo="todo"
-            :categories="allCategories"
-            :current-list="listStore.activeList"
-          />
-        </div>
-        <div
-          v-if="nonBookmarks.length > 0"
-          class="space-y-2"
-          :class="bookmarks.length > 0 ? 'mt-3' : ''"
+        <draggable
+          :model-value="bookmarks"
+          item-key="id"
+          handle=".item-drag-handle"
+          :group="bookmarksGroup"
+          :animation="150"
+          ghost-class="opacity-40"
+          :disabled="!dragEnabled"
+          class="flex flex-wrap gap-1.5 min-h-[1.5rem]"
+          @update:model-value="onBookmarksReorder"
         >
-          <TodoItem
-            v-for="todo in nonBookmarks"
-            :key="todo.id"
-            :todo="todo"
-            :categories="allCategories"
-            :current-list="listStore.activeList"
-          />
-        </div>
+          <template #item="{ element: todo }">
+            <div :key="todo.id" :data-type="todo.type ?? 'todo'">
+              <BookmarkTile
+                :todo="todo"
+                :categories="allCategories"
+                :current-list="listStore.activeList"
+              />
+            </div>
+          </template>
+        </draggable>
+        <draggable
+          :model-value="nonBookmarks"
+          item-key="id"
+          handle=".item-drag-handle"
+          :group="nonBookmarksGroup"
+          :animation="150"
+          ghost-class="opacity-40"
+          :disabled="!dragEnabled"
+          class="space-y-2 min-h-[1.5rem]"
+          :class="bookmarks.length > 0 ? 'mt-3' : ''"
+          @update:model-value="onNonBookmarksReorder"
+        >
+          <template #item="{ element: todo }">
+            <div :key="todo.id" :data-type="todo.type ?? 'todo'">
+              <TodoItem
+                :todo="todo"
+                :categories="allCategories"
+                :current-list="listStore.activeList"
+              />
+            </div>
+          </template>
+        </draggable>
       </template>
 
       <div v-if="todos.length === 0" class="text-xs text-muted text-center py-2">
