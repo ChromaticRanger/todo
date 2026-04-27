@@ -21,6 +21,7 @@ const showEdit = ref(false)
 const showMove = ref(false)
 const showConfirm = ref(false)
 const showSnooze = ref(false)
+const isDeleting = ref(false)
 
 const isTodo = computed(() => props.todo.type === 'todo' || !props.todo.type)
 const isBookmark = computed(() => props.todo.type === 'bookmark')
@@ -102,8 +103,10 @@ async function handleMove(payload: { targetList: string; targetCategory: string 
 }
 
 async function handleDelete() {
-  await store.deleteTodo(props.todo.id)
   showConfirm.value = false
+  isDeleting.value = true
+  await new Promise(r => setTimeout(r, 220))
+  await store.deleteTodo(props.todo.id)
 }
 
 async function handleSnooze(payload: { snoozed_until: number | null; due_date?: number | null }) {
@@ -116,8 +119,8 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Bookmark item -->
   <div
     v-if="isBookmark"
-    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-accent/5 hover:bg-accent/10 dark:bg-accent/15 dark:hover:bg-accent/25 transition-colors group cursor-pointer"
-    :class="priorityBorderClass"
+    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-accent/5 hover:bg-accent/10 dark:bg-accent/15 dark:hover:bg-accent/25 transition duration-200 ease-out group cursor-pointer"
+    :class="[priorityBorderClass, isDeleting ? 'opacity-0 scale-95 -translate-x-2 pointer-events-none' : '']"
     @click="openBookmark"
   >
     <span
@@ -176,8 +179,8 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Note item -->
   <div
     v-else-if="isNote"
-    class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-8 bg-warning-bg/30 hover:bg-warning-bg/50 dark:bg-warning-bg/60 dark:hover:bg-warning-bg/80 transition-colors group"
-    :class="priorityBorderClass"
+    class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-8 bg-warning-bg/30 hover:bg-warning-bg/50 dark:bg-warning-bg/60 dark:hover:bg-warning-bg/80 transition duration-200 ease-out group"
+    :class="[priorityBorderClass, isDeleting ? 'opacity-0 scale-95 -translate-x-2 pointer-events-none' : '']"
   >
     <span
       class="item-drag-handle flex-shrink-0 self-center -ml-1 text-muted cursor-grab active:cursor-grabbing"
@@ -237,8 +240,11 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Todo item (default) -->
   <div
     v-else
-    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-surface-hover/40 hover:bg-surface-hover dark:bg-surface-hover/80 transition-colors group"
-    :class="[priorityBorderClass, isCompleted ? 'opacity-60' : '']"
+    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-surface-hover/40 hover:bg-surface-hover dark:bg-surface-hover/80 transition duration-200 ease-out group"
+    :class="[
+      priorityBorderClass,
+      isDeleting ? 'opacity-0 scale-95 -translate-x-2 pointer-events-none' : (isCompleted ? 'opacity-60' : ''),
+    ]"
   >
     <span
       class="item-drag-handle flex-shrink-0 -ml-1 text-muted cursor-grab active:cursor-grabbing"
