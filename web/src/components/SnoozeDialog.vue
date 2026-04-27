@@ -14,7 +14,7 @@ function epochToDateStr(epoch: number): string {
 }
 
 function dateStrToEpoch(s: string): number {
-  return Math.floor(new Date(s + 'T00:00:00').getTime() / 1000)
+  return Math.floor(new Date(s + 'T00:00:00Z').getTime() / 1000)
 }
 
 function formatDate(epoch: number): string {
