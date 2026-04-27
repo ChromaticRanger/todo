@@ -161,8 +161,8 @@ router.get('/today', async (req, res) => {
       buildTodoSelect(
         `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
-         AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
-         AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '1 day')::BIGINT
+         AND due_date >= (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400)::BIGINT
+         AND due_date < (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400 + 86400)::BIGINT
          ORDER BY due_date ASC`
       ),
       [userId, list]
@@ -183,8 +183,8 @@ router.get('/week', async (req, res) => {
       buildTodoSelect(
         `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
-         AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
-         AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '7 days')::BIGINT
+         AND due_date >= (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400)::BIGINT
+         AND due_date < (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400 + 7 * 86400)::BIGINT
          ORDER BY due_date ASC`
       ),
       [userId, list]
@@ -205,8 +205,8 @@ router.get('/month', async (req, res) => {
       buildTodoSelect(
         `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
          AND due_date IS NOT NULL
-         AND due_date >= EXTRACT(EPOCH FROM CURRENT_DATE)::BIGINT
-         AND due_date < EXTRACT(EPOCH FROM CURRENT_DATE + INTERVAL '30 days')::BIGINT
+         AND due_date >= (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400)::BIGINT
+         AND due_date < (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400 + 30 * 86400)::BIGINT
          ORDER BY due_date ASC`
       ),
       [userId, list]

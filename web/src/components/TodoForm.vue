@@ -73,7 +73,7 @@ function submit() {
   if (!canSubmit.value) return
 
   const due_date = dueStr.value
-    ? Math.floor(new Date(dueStr.value + 'T00:00:00').getTime() / 1000)
+    ? Math.floor(new Date(dueStr.value + 'T00:00:00Z').getTime() / 1000)
     : null
 
   const rd = type.value === 'todo' ? (repeatUnit.value === 'days' ? repeatValue.value : 0) : 0
