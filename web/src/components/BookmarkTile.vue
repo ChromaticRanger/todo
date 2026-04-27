@@ -18,6 +18,7 @@ const store = useTodoStore()
 const showEdit = ref(false)
 const showMove = ref(false)
 const showConfirm = ref(false)
+const isDeleting = ref(false)
 
 async function handleEdit(form: Parameters<typeof store.updateTodo>[1]) {
   await store.updateTodo(props.todo.id, form)
@@ -30,13 +31,18 @@ async function handleMove(payload: { targetList: string; targetCategory: string 
 }
 
 async function handleDelete() {
-  await store.deleteTodo(props.todo.id)
   showConfirm.value = false
+  isDeleting.value = true
+  await new Promise(r => setTimeout(r, 220))
+  await store.deleteTodo(props.todo.id)
 }
 </script>
 
 <template>
-  <div class="relative group">
+  <div
+    class="relative group transition duration-200 ease-out"
+    :class="isDeleting ? 'opacity-0 scale-90 pointer-events-none' : ''"
+  >
     <!-- Drag handle (hover-revealed, top-left) -->
     <span
       class="item-drag-handle absolute bottom-0 left-0 z-10 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm text-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
