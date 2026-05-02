@@ -7,6 +7,7 @@ import { usePlanStore } from '../stores/planStore'
 import { authClient } from '../lib/auth-client'
 import ThemePicker from './ThemePicker.vue'
 import type { ItemType } from '../types/todo'
+import { appVersion } from 'virtual:app-version'
 
 const emit = defineEmits<{ add: [type: ItemType] }>()
 
@@ -151,11 +152,14 @@ async function upgradeTo(annual: boolean) {
   <header class="bg-surface border-b border-border px-4 py-3 flex items-center justify-between">
     <div class="flex items-center gap-2">
       <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-12" />
-      <h1
-        class="font-display italic text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
-      >
-        Stash Squirrel
-      </h1>
+      <div class="flex flex-col leading-none">
+        <h1
+          class="font-display italic text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
+        >
+          Stash Squirrel
+        </h1>
+        <span class="text-xs text-muted tracking-wide pl-1 mt-0.5">v{{ appVersion }}</span>
+      </div>
     </div>
     <div class="flex items-center gap-2">
       <!-- Add button with type dropdown -->
