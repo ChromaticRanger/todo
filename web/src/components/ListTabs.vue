@@ -140,6 +140,9 @@ onBeforeUnmount(() => {
       handle=".list-tab-handle"
       filter="input,.tab-action"
       :prevent-on-filter="false"
+      :delay="200"
+      :delay-on-touch-only="true"
+      :touch-start-threshold="5"
       ghost-class="opacity-40"
     >
       <template #item="{ element: list }">
