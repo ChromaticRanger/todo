@@ -117,18 +117,28 @@ function onNonBookmarksReorder(newNonBookmarks: Todo[]) {
 
 // Group + put predicates: a single shared group lets items move between cards;
 // per-zone `put` predicates keep bookmarks out of non-bookmark zones (and v.v.).
-// List-mode zones accept anything since they render every type.
+// `put` must also verify the source is the items group — otherwise a dragged
+// category card (from the outer ListView draggable) would be accepted here,
+// land in the items array as a non-Todo, and trigger moveTodo(undefined,...).
 const ITEM_GROUP = 'todo-items'
-const listGroup = { name: ITEM_GROUP, pull: true, put: true }
+type SortableLike = { options?: { group?: { name?: string } } }
+const fromItems = (from: SortableLike) => from?.options?.group?.name === ITEM_GROUP
+const listGroup = {
+  name: ITEM_GROUP,
+  pull: true,
+  put: (_to: unknown, from: SortableLike) => fromItems(from),
+}
 const bookmarksGroup = {
   name: ITEM_GROUP,
   pull: true,
-  put: (_to: unknown, _from: unknown, el: HTMLElement) => el?.dataset?.type === 'bookmark',
+  put: (_to: unknown, from: SortableLike, el: HTMLElement) =>
+    fromItems(from) && el?.dataset?.type === 'bookmark',
 }
 const nonBookmarksGroup = {
   name: ITEM_GROUP,
   pull: true,
-  put: (_to: unknown, _from: unknown, el: HTMLElement) => el?.dataset?.type !== 'bookmark',
+  put: (_to: unknown, from: SortableLike, el: HTMLElement) =>
+    fromItems(from) && el?.dataset?.type !== 'bookmark',
 }
 
 function toggleItemLayout() {
