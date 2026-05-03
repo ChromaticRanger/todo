@@ -7,9 +7,10 @@ import { usePlanStore } from '../stores/planStore'
 import { authClient } from '../lib/auth-client'
 import ThemePicker from './ThemePicker.vue'
 import type { ItemType } from '../types/todo'
-import { appVersion } from 'virtual:app-version'
 
 const emit = defineEmits<{ add: [type: ItemType] }>()
+
+const appVersion = __APP_VERSION__
 
 const authStore = useAuthStore()
 const todoStore = useTodoStore()
