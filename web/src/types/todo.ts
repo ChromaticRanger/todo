@@ -13,7 +13,7 @@ export const Status = {
 
 export type Status = (typeof Status)[keyof typeof Status]
 
-export type ViewType = 'all' | 'today' | 'week' | 'month' | 'schedule' | 'completed'
+export type ViewType = 'all' | 'today' | 'week' | 'month' | 'overdue' | 'schedule' | 'completed'
 
 export type ItemType = 'todo' | 'bookmark' | 'note'
 

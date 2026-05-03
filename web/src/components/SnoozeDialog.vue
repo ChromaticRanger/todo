@@ -17,9 +17,19 @@ function dateStrToEpoch(s: string): number {
   return Math.floor(new Date(s + 'T00:00:00Z').getTime() / 1000)
 }
 
+function epochToDatetimeLocalStr(epoch: number): string {
+  const d = new Date(epoch * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function datetimeLocalStrToEpoch(s: string): number {
+  return Math.floor(new Date(s).getTime() / 1000)
+}
+
 function formatDate(epoch: number): string {
-  return new Date(epoch * 1000).toLocaleDateString(undefined, {
-    day: 'numeric', month: 'short', year: 'numeric',
+  return new Date(epoch * 1000).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
   })
 }
 
@@ -37,7 +47,7 @@ const snoozeStr = ref(
 )
 
 const hasDueDate = computed(() => props.todo.due_date != null)
-const dueStr = ref(props.todo.due_date ? epochToDateStr(props.todo.due_date) : '')
+const dueStr = ref(props.todo.due_date ? epochToDatetimeLocalStr(props.todo.due_date) : '')
 const dueDirty = ref(false)
 
 const dueDateLabel = computed(() =>
@@ -47,7 +57,10 @@ const dueDateLabel = computed(() =>
 const canSubmit = computed(() => !!snoozeStr.value && snoozeStr.value >= minDate)
 
 function matchSnooze() {
-  dueStr.value = snoozeStr.value
+  // snoozeStr is a date-only "YYYY-MM-DD"; the due input is datetime-local,
+  // so keep any existing time-of-day, otherwise default to 09:00.
+  const time = dueStr.value.includes('T') ? dueStr.value.slice(11, 16) : '09:00'
+  dueStr.value = `${snoozeStr.value}T${time}`
   dueDirty.value = true
 }
 
@@ -61,7 +74,7 @@ function submit() {
     snoozed_until: dateStrToEpoch(snoozeStr.value),
   }
   if (dueDirty.value) {
-    payload.due_date = dueStr.value ? dateStrToEpoch(dueStr.value) : null
+    payload.due_date = dueStr.value ? datetimeLocalStrToEpoch(dueStr.value) : null
   }
   emit('submit', payload)
 }
@@ -127,7 +140,7 @@ useEscapeKey(() => emit('cancel'))
             </div>
             <input
               v-model="dueStr"
-              type="date"
+              type="datetime-local"
               class="mt-2 w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               @input="onDueInput"
             />

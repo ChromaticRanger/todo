@@ -12,6 +12,9 @@ export const useTodoStore = defineStore('todos', () => {
   const error = ref<string | null>(null)
   const currentView = ref<ViewType>('all')
   const currentList = ref<string>('todos')
+  const viewCounts = ref<{ today: number; week: number; month: number; overdue: number }>({
+    today: 0, week: 0, month: 0, overdue: 0,
+  })
   const categoryOrder = ref<Record<string, string[]>>({})
   const emptyCategories = ref<Record<string, string[]>>({})
   let categoryOrderLoaded = false
@@ -180,6 +183,19 @@ export const useTodoStore = defineStore('todos', () => {
     return `${base}?list=${encodeURIComponent(list)}`
   }
 
+  async function fetchViewCounts(list: string) {
+    try {
+      const res = await apiFetch(`/api/todos/counts?list=${encodeURIComponent(list)}`)
+      if (!res.ok) return
+      const data = await res.json() as {
+        counts: { today: number; week: number; month: number; overdue: number }
+      }
+      viewCounts.value = data.counts
+    } catch {
+      // non-fatal — leave previous counts
+    }
+  }
+
   async function fetchCategories(list: string) {
     if (categoriesCache.has(list)) {
       categories.value = categoriesCache.get(list)!
@@ -202,6 +218,7 @@ export const useTodoStore = defineStore('todos', () => {
 
     loadCategoryOrder()
     loadEmptyCategories()
+    fetchViewCounts(list)
 
     const cachedTodos = todosCache.get(list)?.get(view)
     if (cachedTodos !== undefined) {
@@ -298,6 +315,7 @@ export const useTodoStore = defineStore('todos', () => {
     if (list === currentList.value) todos.value.push(newTodo)
     registerCategory(list, cat)
     invalidateOtherViews(list)
+    fetchViewCounts(list)
   }
 
   async function snoozeTodo(id: number, snoozedUntil: number | null, dueDate?: number | null) {
@@ -338,6 +356,7 @@ export const useTodoStore = defineStore('todos', () => {
       throw e
     }
     invalidateOtherViews(list)
+    fetchViewCounts(list)
   }
 
   async function updateTodo(id: number, form: Partial<TodoFormData>) {
@@ -359,6 +378,18 @@ export const useTodoStore = defineStore('todos', () => {
     }
     if (form.category) registerCategory(currentList.value, form.category || 'General')
     invalidateOtherViews(currentList.value)
+
+    // Time-windowed views (today/week/month/overdue/schedule) filter by due_date,
+    // so a changed due_date may push the item in or out of view. Refetch silently.
+    const view = currentView.value
+    const list = currentList.value
+    const isWindowed = view === 'today' || view === 'week' || view === 'month'
+      || view === 'overdue' || view === 'schedule'
+    if ('due_date' in form && isWindowed) {
+      todosCache.get(list)?.delete(view)
+      await fetchTodos(list, view, { silent: true })
+    }
+    if ('due_date' in form) fetchViewCounts(list)
   }
 
   async function deleteTodo(id: number) {
@@ -366,6 +397,7 @@ export const useTodoStore = defineStore('todos', () => {
     if (!res.ok) throw new Error(await res.text())
     todos.value = todos.value.filter((t) => t.id !== id)
     invalidateList(currentList.value)
+    fetchViewCounts(currentList.value)
   }
 
   async function completeTodo(id: number) {
@@ -393,6 +425,7 @@ export const useTodoStore = defineStore('todos', () => {
       todosCache.get(list)?.delete(view)
       await fetchTodos(list, view, { silent: true })
     }
+    fetchViewCounts(list)
   }
 
   async function uncompleteTodo(id: number) {
@@ -414,6 +447,7 @@ export const useTodoStore = defineStore('todos', () => {
       throw e
     }
     invalidateOtherViews(list)
+    fetchViewCounts(list)
   }
 
   async function moveTodo(id: number, targetList: string, targetCategory?: string) {
@@ -459,6 +493,9 @@ export const useTodoStore = defineStore('todos', () => {
     }
     invalidateList(currentList.value)
     invalidateList(targetList)
+    // viewCounts tracks the active list — moving away or staying both affect its
+    // counts (item left, or category-only change is a no-op for counts).
+    fetchViewCounts(currentList.value)
   }
 
   async function fetchCategoriesFor(list: string): Promise<string[]> {
@@ -592,6 +629,7 @@ export const useTodoStore = defineStore('todos', () => {
     emptyCategoriesLoaded = false
     todosCache.clear()
     categoriesCache.clear()
+    viewCounts.value = { today: 0, week: 0, month: 0, overdue: 0 }
   }
 
   return {
@@ -601,6 +639,7 @@ export const useTodoStore = defineStore('todos', () => {
     error,
     currentView,
     currentList,
+    viewCounts,
     byCategory,
     fetchTodos,
     addTodo,

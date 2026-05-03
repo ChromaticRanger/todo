@@ -40,8 +40,9 @@ const isCompleted = computed(() => props.todo.status === Status.COMPLETED)
 
 const dueDateStr = computed(() => {
   if (!props.todo.due_date) return null
-  const d = new Date(props.todo.due_date * 1000)
-  return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+  return new Date(props.todo.due_date * 1000).toLocaleString(undefined, {
+    day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit',
+  })
 })
 
 const isDueOverdue = computed(() => {

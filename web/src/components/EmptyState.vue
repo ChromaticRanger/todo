@@ -14,6 +14,7 @@ defineProps<{ view: string }>()
       <span v-else-if="view === 'today'">Nothing due today</span>
       <span v-else-if="view === 'week'">Nothing due this week</span>
       <span v-else-if="view === 'month'">Nothing due this month</span>
+      <span v-else-if="view === 'overdue'">Nothing overdue</span>
       <span v-else-if="view === 'schedule'">No upcoming todos with due dates</span>
       <span v-else>No completed todos</span>
     </p>

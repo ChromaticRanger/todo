@@ -189,7 +189,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
 
     <!-- View switcher -->
     <div class="px-4 py-1.5 border-b border-border/60 bg-surface/20 flex items-center justify-between gap-4">
-      <ViewSwitcher :current="currentView" @change="onViewChange" />
+      <ViewSwitcher :current="currentView" :counts="todoStore.viewCounts" @change="onViewChange" />
 
       <div v-if="isCategoryView" class="flex items-center gap-2 shrink-0">
         <button

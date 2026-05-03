@@ -217,6 +217,65 @@ router.get('/month', async (req, res) => {
   }
 })
 
+// GET /api/todos/counts?list=X
+// Returns item counts per time-windowed view so the client can hint which
+// views have anything in them. Single query so we don't fan out four requests.
+router.get('/counts', async (req, res) => {
+  const userId = req.userId!
+  const list = (req.query.list as string) || 'todos'
+  try {
+    await spawnRepeatingTodos(userId, list)
+    const result = await query<{ today: string; week: string; month: string; overdue: string }>(
+      `WITH bounds AS (
+         SELECT
+           (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400)::BIGINT AS day_start,
+           EXTRACT(EPOCH FROM NOW())::BIGINT AS now_epoch
+       )
+       SELECT
+         COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 86400) AS today,
+         COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 7 * 86400) AS week,
+         COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 30 * 86400) AS month,
+         COUNT(*) FILTER (WHERE due_date < b.now_epoch) AS overdue
+       FROM todos, bounds b
+       WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
+         AND due_date IS NOT NULL`,
+      [userId, list]
+    )
+    const row = result.rows[0]
+    res.json({
+      counts: {
+        today: Number(row.today),
+        week: Number(row.week),
+        month: Number(row.month),
+        overdue: Number(row.overdue),
+      },
+    })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/todos/overdue?list=X
+router.get('/overdue', async (req, res) => {
+  const userId = req.userId!
+  const list = (req.query.list as string) || 'todos'
+  try {
+    await spawnRepeatingTodos(userId, list)
+    const result = await query<TodoRow>(
+      buildTodoSelect(
+        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
+         AND due_date IS NOT NULL
+         AND due_date < EXTRACT(EPOCH FROM NOW())::BIGINT
+         ORDER BY due_date ASC`
+      ),
+      [userId, list]
+    )
+    res.json({ todos: result.rows.map(coerceTodo) })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/todos/schedule?list=X
 router.get('/schedule', async (req, res) => {
   const userId = req.userId!

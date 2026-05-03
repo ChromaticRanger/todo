@@ -150,8 +150,9 @@ onUpdated(updateScrollState)
 
 function formatDate(epoch: number | null): string {
   if (!epoch) return 'Unknown'
-  return new Date(epoch * 1000).toLocaleDateString(undefined, {
+  return new Date(epoch * 1000).toLocaleString(undefined, {
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+    hour: 'numeric', minute: '2-digit',
   })
 }
 

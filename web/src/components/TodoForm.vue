@@ -21,10 +21,14 @@ const title = ref(props.initial?.title ?? '')
 const description = ref(props.initial?.description ?? '')
 const url = ref(props.initial?.url ?? '')
 const priority = ref<Priority>(props.initial?.priority ?? Priority.MEDIUM)
+function epochToDatetimeLocalStr(epoch: number): string {
+  const d = new Date(epoch * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 const dueStr = ref(
-  props.initial?.due_date
-    ? new Date(props.initial.due_date * 1000).toISOString().split('T')[0]
-    : ''
+  props.initial?.due_date ? epochToDatetimeLocalStr(props.initial.due_date) : ''
 )
 const repeatUnit = ref<'days' | 'months'>(
   (props.initial?.repeat_months ?? 0) > 0 ? 'months' : 'days'
@@ -73,7 +77,7 @@ function submit() {
   if (!canSubmit.value) return
 
   const due_date = dueStr.value
-    ? Math.floor(new Date(dueStr.value + 'T00:00:00Z').getTime() / 1000)
+    ? Math.floor(new Date(dueStr.value).getTime() / 1000)
     : null
 
   const rd = type.value === 'todo' ? (repeatUnit.value === 'days' ? repeatValue.value : 0) : 0
@@ -191,10 +195,10 @@ const priorityLabels = [
             </div>
 
             <div>
-              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Due Date</label>
+              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Due Date &amp; Time</label>
               <input
                 v-model="dueStr"
-                type="date"
+                type="datetime-local"
                 class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               />
             </div>
