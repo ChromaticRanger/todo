@@ -8,7 +8,12 @@ import { authClient } from '../lib/auth-client'
 import ThemePicker from './ThemePicker.vue'
 import type { ItemType } from '../types/todo'
 
-const emit = defineEmits<{ add: [type: ItemType] }>()
+const emit = defineEmits<{
+  add: [type: ItemType]
+  'toggle-calendar': []
+}>()
+
+const props = defineProps<{ calendarActive?: boolean }>()
 
 const appVersion = __APP_VERSION__
 
@@ -221,6 +226,23 @@ async function upgradeTo(annual: boolean) {
           @click="showTypeMenu = false"
         />
       </div>
+
+      <!-- Overall Schedule (Pro only) -->
+      <button
+        v-if="authStore.tier === 'pro'"
+        type="button"
+        class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors"
+        :class="props.calendarActive
+          ? 'bg-accent text-accent-fg'
+          : 'text-muted hover:text-text hover:bg-surface-hover'"
+        :title="props.calendarActive ? 'Back to lists' : 'Overall schedule'"
+        @click="emit('toggle-calendar')"
+      >
+        <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span class="max-md:hidden">Schedule</span>
+      </button>
 
       <ThemePicker />
 

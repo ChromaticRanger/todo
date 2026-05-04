@@ -17,6 +17,7 @@ import AppHeader from './components/AppHeader.vue'
 import ListTabs from './components/ListTabs.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
 import ListView from './components/ListView.vue'
+import OverallSchedule from './components/OverallSchedule.vue'
 import TodoForm from './components/TodoForm.vue'
 import CategoryDialog from './components/CategoryDialog.vue'
 import LoginPage from './components/LoginPage.vue'
@@ -75,7 +76,18 @@ function openAddForm(type: ItemType) {
   showAddForm.value = true
 }
 const currentView = ref<ViewType>('all')
+const mode = ref<'lists' | 'calendar'>('lists')
 const showColumnsMenu = ref(false)
+
+function toggleCalendar() {
+  if (authStore.tier !== 'pro') return
+  mode.value = mode.value === 'calendar' ? 'lists' : 'calendar'
+}
+
+// Plan downgrade safety: never strand a Free user on the Pro-only calendar.
+watch(() => authStore.tier, (tier) => {
+  if (tier !== 'pro' && mode.value === 'calendar') mode.value = 'lists'
+})
 const layoutMode = computed<LayoutMode>(() => listPrefsStore.get(listStore.activeList).layout)
 const gridColumns = computed<GridColumns>(() => listPrefsStore.get(listStore.activeList).columns)
 const isCategoryView = computed(() => currentView.value !== 'schedule' && currentView.value !== 'completed')
@@ -180,15 +192,19 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
   <LoginPage v-if="!authStore.isAuthenticated" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />
   <div v-else class="min-h-dvh bg-bg text-text flex flex-col isolate">
-    <AppHeader @add="openAddForm" />
+    <AppHeader
+      :calendar-active="mode === 'calendar'"
+      @add="openAddForm"
+      @toggle-calendar="toggleCalendar"
+    />
 
     <!-- List tabs -->
-    <div class="bg-surface/50 border-b border-border px-4 pt-1">
+    <div v-if="mode === 'lists'" class="bg-surface/50 border-b border-border px-4 pt-1">
       <ListTabs @select="onListSelect" />
     </div>
 
     <!-- View switcher -->
-    <div class="px-4 py-1.5 border-b border-border/60 bg-surface/20 flex items-center justify-between gap-4">
+    <div v-if="mode === 'lists'" class="px-4 py-1.5 border-b border-border/60 bg-surface/20 flex items-center justify-between gap-4">
       <ViewSwitcher :current="currentView" :counts="todoStore.viewCounts" @change="onViewChange" />
 
       <div v-if="isCategoryView" class="flex items-center gap-2 shrink-0">
@@ -267,10 +283,12 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
 
     <!-- Main content -->
     <main
-      class="flex-1 flex flex-col min-h-0 overflow-hidden p-4"
+      class="flex-1 flex flex-col min-h-0 overflow-hidden"
+      :class="mode === 'lists' ? 'p-4' : ''"
       @contextmenu="onMainContextMenu"
     >
-      <ListView :layout="layoutMode" :grid-columns="gridColumns" />
+      <ListView v-if="mode === 'lists'" :layout="layoutMode" :grid-columns="gridColumns" />
+      <OverallSchedule v-else />
     </main>
 
     <!-- Error toast -->
