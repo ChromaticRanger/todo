@@ -95,13 +95,17 @@ onMounted(async () => {
             <h2 class="text-lg font-semibold text-text">Free</h2>
             <p class="mt-1 text-sm text-muted">For casual stashers.</p>
             <p class="mt-6 tabular-nums">
-              <span class="text-5xl font-semibold text-text">$0</span>
+              <span class="text-5xl font-semibold text-text">£0</span>
               <span class="text-sm text-muted">/forever</span>
             </p>
             <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
               <li>• Up to 3 lists</li>
-              <li>• Up to 50 items</li>
-              <li>• All item types (todos, bookmarks, notes)</li>
+              <li>• Up to 50 items across all lists</li>
+              <li>• Todos, bookmarks &amp; notes</li>
+              <li>• Categories with drag-to-reorder</li>
+              <li>• Grid &amp; kanban layouts</li>
+              <li>• Today / Week / Month / Overdue views</li>
+              <li>• Light &amp; dark themes</li>
             </ul>
           </div>
           <button
@@ -124,8 +128,11 @@ onMounted(async () => {
               <span class="text-sm text-muted">/month</span>
             </p>
             <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
+              <li>• Everything in Free</li>
               <li>• Unlimited lists</li>
               <li>• Unlimited items</li>
+              <li>• Overall Schedule — every todo with a due date in one Calendar</li>
+              <li>• Global search across lists (Ctrl/⌘K)</li>
               <li>• Cancel anytime</li>
             </ul>
           </div>
