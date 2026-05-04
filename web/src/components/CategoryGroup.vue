@@ -189,6 +189,7 @@ async function handleMoveToGeneral() {
 
 <template>
   <div
+    data-item-type="category"
     class="flex flex-col bg-surface border border-border-strong/60 rounded-xl overflow-hidden max-h-[calc(100vh-14rem)] dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
     :class="layout === 'kanban' ? 'w-max min-w-52 shrink-0' : ''"
   >

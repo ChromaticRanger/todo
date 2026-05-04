@@ -113,7 +113,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex items-center gap-1 pb-1 shrink-0">
+  <div data-tour="list-tabs" class="flex items-center gap-1 pb-1 shrink-0">
     <!-- Scroll-left arrow (only when overflowing) -->
     <button
       v-if="hasOverflow"

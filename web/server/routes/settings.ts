@@ -56,6 +56,43 @@ router.put('/', async (req, res) => {
   }
 })
 
+// GET /api/settings/onboarding
+// Returns { hasSeenWelcome }. The row's *absence* (existing pre-feature users)
+// resolves to hasSeenWelcome=true so they don't get a tour they didn't sign up for.
+router.get('/onboarding', async (req, res) => {
+  const userId = req.userId!
+  try {
+    const result = await query<{ value: { hasSeenWelcome?: boolean } }>(
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'onboarding'`,
+      [userId]
+    )
+    const row = result.rows[0]?.value
+    res.json({ hasSeenWelcome: row ? row.hasSeenWelcome !== false : true })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/settings/onboarding
+router.put('/onboarding', async (req, res) => {
+  const userId = req.userId!
+  const { hasSeenWelcome } = req.body as { hasSeenWelcome?: unknown }
+  if (typeof hasSeenWelcome !== 'boolean') {
+    return res.status(400).json({ error: 'hasSeenWelcome must be a boolean' })
+  }
+  try {
+    await query(
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'onboarding', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify({ hasSeenWelcome })]
+    )
+    res.json({ hasSeenWelcome })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/settings/list-order
 router.get('/list-order', async (req, res) => {
   const userId = req.userId!
