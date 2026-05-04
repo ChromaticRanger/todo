@@ -10,6 +10,7 @@ import listsRouter from './routes/lists.js'
 import categoriesRouter from './routes/categories.js'
 import settingsRouter from './routes/settings.js'
 import planRouter from './routes/plan.js'
+import searchRouter from './routes/search.js'
 import { authMiddleware } from './middleware/auth.js'
 import { requirePlan } from './middleware/requirePlan.js'
 import { rateLimit } from './middleware/rateLimit.js'
@@ -51,6 +52,7 @@ app.use('/api/todos', todosRouter)
 app.use('/api/lists', listsRouter)
 app.use('/api/categories', categoriesRouter)
 app.use('/api/settings', settingsRouter)
+app.use('/api/search', searchRouter)
 
 // In production, serve the Vite build and let Vue Router handle the rest
 if (isProd) {
