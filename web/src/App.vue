@@ -4,6 +4,7 @@ import { useListStore } from './stores/listStore'
 import { useTodoStore } from './stores/todoStore'
 import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
+import { useSearchStore } from './stores/searchStore'
 import {
   useListPrefsStore,
   GRID_COLUMN_OPTIONS,
@@ -11,7 +12,7 @@ import {
   type GridColumns,
 } from './stores/listPrefsStore'
 import { useCategoryPrefsStore } from './stores/categoryPrefsStore'
-import type { ViewType, ItemType } from './types/todo'
+import type { ViewType, ItemType, Todo } from './types/todo'
 import { apiEvents } from './lib/api'
 import AppHeader from './components/AppHeader.vue'
 import ListTabs from './components/ListTabs.vue'
@@ -23,6 +24,7 @@ import CategoryDialog from './components/CategoryDialog.vue'
 import LoginPage from './components/LoginPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
+import SearchModal from './components/SearchModal.vue'
 
 const listStore = useListStore()
 const todoStore = useTodoStore()
@@ -30,6 +32,9 @@ const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
 const listPrefsStore = useListPrefsStore()
 const categoryPrefsStore = useCategoryPrefsStore()
+const searchStore = useSearchStore()
+
+const highlightItemId = ref<number | null>(null)
 
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
@@ -108,6 +113,15 @@ function toggleColumnsMenu() {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  // Cmd/Ctrl+K: open global search (Pro only). Independent from Alt+T/B/N.
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+    if (showAddForm.value) return
+    if (authStore.tier !== 'pro') return
+    e.preventDefault()
+    if (searchStore.open) searchStore.closeSearch()
+    else searchStore.openSearch()
+    return
+  }
   if (!e.altKey || e.ctrlKey || e.metaKey || showAddForm.value) return
   const key = e.key.toLowerCase()
   if (key === 't') {
@@ -120,6 +134,43 @@ function handleKeydown(e: KeyboardEvent) {
     e.preventDefault()
     openAddForm('note')
   }
+}
+
+async function onSearchSelect(item: Todo) {
+  searchStore.closeSearch()
+  if (mode.value !== 'lists') mode.value = 'lists'
+
+  const targetView: ViewType = item.status === 1 ? 'completed' : 'all'
+
+  if (item.list_name !== listStore.activeList) {
+    listStore.setActiveList(item.list_name)
+  }
+  if (targetView !== currentView.value) {
+    currentView.value = targetView
+    todoStore.setView(targetView)
+  }
+  await todoStore.fetchTodos(item.list_name, targetView)
+
+  // If the item is missing from the current view (snoozed items are filtered
+  // out of /api/todos in the 'all' view), surface a hint instead of silently
+  // failing to scroll.
+  const present = todoStore.todos.find((t) => t.id === item.id)
+  if (!present) {
+    const now = Math.floor(Date.now() / 1000)
+    if (item.snoozed_until && item.snoozed_until > now) {
+      const until = new Date(item.snoozed_until * 1000).toLocaleString()
+      todoStore.error = `"${item.title}" is snoozed until ${until} — unsnooze it to view it in the list.`
+    } else {
+      todoStore.error = `"${item.title}" isn't visible in the current view.`
+    }
+    return
+  }
+
+  highlightItemId.value = item.id
+}
+
+function clearHighlight() {
+  highlightItemId.value = null
 }
 
 async function loadData() {
@@ -151,6 +202,7 @@ watch(
     todoStore.reset()
     listPrefsStore.reset()
     categoryPrefsStore.reset()
+    searchStore.reset()
     if (currentId) {
       await loadData()
       await settingsStore.loadFromServer()
@@ -219,6 +271,7 @@ function onTourSkip() {
       :calendar-active="mode === 'calendar'"
       @add="openAddForm"
       @toggle-calendar="toggleCalendar"
+      @search="searchStore.openSearch()"
     />
 
     <!-- List tabs -->
@@ -310,7 +363,13 @@ function onTourSkip() {
       :class="mode === 'lists' ? 'p-4' : ''"
       @contextmenu="onMainContextMenu"
     >
-      <ListView v-if="mode === 'lists'" :layout="layoutMode" :grid-columns="gridColumns" />
+      <ListView
+        v-if="mode === 'lists'"
+        :layout="layoutMode"
+        :grid-columns="gridColumns"
+        :highlight-id="highlightItemId"
+        @highlight-cleared="clearHighlight"
+      />
       <OverallSchedule v-else />
     </main>
 
@@ -365,6 +424,13 @@ function onTourSkip() {
       v-if="showWelcomeTour"
       @done="onTourDone"
       @skip="onTourSkip"
+    />
+
+    <!-- Global search -->
+    <SearchModal
+      v-if="searchStore.open"
+      @select="onSearchSelect"
+      @close="searchStore.closeSearch()"
     />
 
     <!-- Right-click context menu -->

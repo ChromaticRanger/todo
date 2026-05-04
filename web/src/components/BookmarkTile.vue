@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { Todo } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import BookmarkFavicon from './BookmarkFavicon.vue'
@@ -11,6 +11,11 @@ const props = defineProps<{
   todo: Todo
   categories: string[]
   currentList: string
+  highlightId?: number | null
+}>()
+
+const emit = defineEmits<{
+  'highlight-cleared': []
 }>()
 
 const store = useTodoStore()
@@ -19,6 +24,32 @@ const showEdit = ref(false)
 const showMove = ref(false)
 const showConfirm = ref(false)
 const isDeleting = ref(false)
+
+const rootEl = ref<HTMLElement | null>(null)
+const flashing = ref(false)
+let flashTimer: ReturnType<typeof setTimeout> | null = null
+
+watch(
+  () => props.highlightId,
+  (id) => {
+    if (id == null || id !== props.todo.id) return
+    void nextTick(() => {
+      rootEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      flashing.value = true
+      if (flashTimer) clearTimeout(flashTimer)
+      flashTimer = setTimeout(() => {
+        flashing.value = false
+        flashTimer = null
+        emit('highlight-cleared')
+      }, 1500)
+    })
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  if (flashTimer) clearTimeout(flashTimer)
+})
 
 async function handleEdit(form: Parameters<typeof store.updateTodo>[1]) {
   await store.updateTodo(props.todo.id, form)
@@ -40,9 +71,13 @@ async function handleDelete() {
 
 <template>
   <div
+    ref="rootEl"
     data-item-type="bookmark"
-    class="relative group transition duration-200 ease-out"
-    :class="isDeleting ? 'opacity-0 scale-90 pointer-events-none' : ''"
+    class="relative group transition duration-200 ease-out rounded-lg"
+    :class="[
+      isDeleting ? 'opacity-0 scale-90 pointer-events-none' : '',
+      flashing ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : '',
+    ]"
   >
     <!-- Drag handle (hover-revealed, top-left) -->
     <span

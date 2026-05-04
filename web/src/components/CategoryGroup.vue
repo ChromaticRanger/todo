@@ -16,6 +16,11 @@ const props = defineProps<{
   todos: Todo[]
   allCategories: string[]
   layout?: 'grid' | 'kanban'
+  highlightId?: number | null
+}>()
+
+const emit = defineEmits<{
+  'highlight-cleared': []
 }>()
 
 const store = useTodoStore()
@@ -329,6 +334,8 @@ async function handleMoveToGeneral() {
                 :todo="todo"
                 :categories="allCategories"
                 :current-list="listStore.activeList"
+                :highlight-id="props.highlightId ?? null"
+                @highlight-cleared="emit('highlight-cleared')"
               />
             </div>
           </template>
@@ -352,6 +359,8 @@ async function handleMoveToGeneral() {
                 :todo="todo"
                 :categories="allCategories"
                 :current-list="listStore.activeList"
+                :highlight-id="props.highlightId ?? null"
+                @highlight-cleared="emit('highlight-cleared')"
               />
             </div>
           </template>
@@ -374,6 +383,8 @@ async function handleMoveToGeneral() {
                 :todo="todo"
                 :categories="allCategories"
                 :current-list="listStore.activeList"
+                :highlight-id="props.highlightId ?? null"
+                @highlight-cleared="emit('highlight-cleared')"
               />
             </div>
           </template>

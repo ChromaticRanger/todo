@@ -12,7 +12,7 @@ function addMonths(epochSecs: number, months: number): number {
   return Math.floor(d.getTime() / 1000)
 }
 
-interface TodoRow {
+export interface TodoRow {
   id: number
   list_name: string
   title: string
@@ -32,7 +32,7 @@ interface TodoRow {
 }
 
 // pg serializes BIGINT/NUMERIC as strings; coerce to numbers for the client
-function coerceTodo(row: TodoRow) {
+export function coerceTodo(row: TodoRow) {
   return {
     ...row,
     id: Number(row.id),
@@ -100,7 +100,7 @@ async function spawnRepeatingTodos(userId: string, listName: string) {
   }
 }
 
-function buildTodoSelect(extra = ''): string {
+export function buildTodoSelect(extra = ''): string {
   return `SELECT id, list_name, title, description, category, priority, status,
     EXTRACT(EPOCH FROM created_at)::BIGINT AS created_at,
     EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at,

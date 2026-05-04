@@ -9,9 +9,17 @@ import EmptyState from './EmptyState.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
 
 const props = withDefaults(
-  defineProps<{ layout?: 'grid' | 'kanban'; gridColumns?: 2 | 3 | 4 | 5 }>(),
-  { gridColumns: 3 }
+  defineProps<{
+    layout?: 'grid' | 'kanban'
+    gridColumns?: 2 | 3 | 4 | 5
+    highlightId?: number | null
+  }>(),
+  { gridColumns: 3, highlightId: null }
 )
+
+const emit = defineEmits<{
+  'highlight-cleared': []
+}>()
 
 // Full class strings (not concatenated) so Tailwind's JIT picks them up.
 // Mobile and tablet stay fixed at 1/2; the user's choice drives the lg/xl
@@ -199,6 +207,8 @@ async function handleDelete() {
               :todos="todos"
               :all-categories="allCategories"
               layout="grid"
+              :highlight-id="props.highlightId"
+              @highlight-cleared="emit('highlight-cleared')"
             />
           </div>
         </template>
@@ -243,6 +253,8 @@ async function handleDelete() {
                 :todos="todos"
                 :all-categories="allCategories"
                 layout="kanban"
+                :highlight-id="props.highlightId"
+                @highlight-cleared="emit('highlight-cleared')"
               />
             </div>
           </template>
