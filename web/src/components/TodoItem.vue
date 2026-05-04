@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import type { Todo } from '../types/todo'
-import { Priority, Status } from '../types/todo'
+import { Status } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
+import { priorityBorderClass as borderClassFor } from '../lib/priorityClass'
 import TodoForm from './TodoForm.vue'
 import MoveDialog from './MoveDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -27,14 +28,9 @@ const isTodo = computed(() => props.todo.type === 'todo' || !props.todo.type)
 const isBookmark = computed(() => props.todo.type === 'bookmark')
 const isNote = computed(() => props.todo.type === 'note')
 
-const priorityBorderClass = computed(() => {
-  if (!isTodo.value) return 'border-l-border-strong'
-  switch (props.todo.priority) {
-    case Priority.HIGH: return 'border-l-danger'
-    case Priority.LOW: return 'border-l-green-400'
-    default: return 'border-l-blue-500'
-  }
-})
+const priorityBorderClass = computed(() =>
+  isTodo.value ? borderClassFor(props.todo.priority) : 'border-l-border-strong'
+)
 
 const isCompleted = computed(() => props.todo.status === Status.COMPLETED)
 

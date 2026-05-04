@@ -217,6 +217,38 @@ router.get('/month', async (req, res) => {
   }
 })
 
+// GET /api/todos/calendar?from=<epoch>&to=<epoch>
+// Cross-list calendar feed for the Pro-only Overall Schedule view.
+// Returns dated, pending todos across every list the user owns.
+router.get('/calendar', async (req, res) => {
+  if (req.plan !== 'pro') return res.status(403).json({ error: 'pro_required' })
+  const userId = req.userId!
+  const from = Number(req.query.from)
+  const to = Number(req.query.to)
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) {
+    return res.status(400).json({ error: 'from and to must be epoch seconds, with to > from' })
+  }
+  // 6-week visible grid is ~42 days; 70 leaves headroom without inviting abuse.
+  const MAX_RANGE_SECONDS = 70 * 86400
+  if (to - from > MAX_RANGE_SECONDS) {
+    return res.status(400).json({ error: 'range_too_large', limit_days: 70 })
+  }
+  try {
+    const result = await query<TodoRow>(
+      buildTodoSelect(
+        `WHERE user_id = $1 AND status = 0 AND type = 'todo'
+         AND due_date IS NOT NULL
+         AND due_date >= $2 AND due_date < $3
+         ORDER BY due_date ASC`
+      ),
+      [userId, from, to]
+    )
+    res.json({ todos: result.rows.map(coerceTodo) })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/todos/counts?list=X
 // Returns item counts per time-windowed view so the client can hint which
 // views have anything in them. Single query so we don't fan out four requests.

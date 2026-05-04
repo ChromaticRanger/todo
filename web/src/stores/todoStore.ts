@@ -657,5 +657,6 @@ export const useTodoStore = defineStore('todos', () => {
     mergeCategory,
     setView,
     reset,
+    invalidateList,
   }
 })
