@@ -69,7 +69,7 @@ const themes: ThemeConfig[] = [
 </script>
 
 <template>
-  <div class="relative">
+  <div data-tour="theme-picker" class="relative">
     <!-- Trigger -->
     <button
       type="button"

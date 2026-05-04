@@ -43,6 +43,11 @@ function applyToDom(settings: UiSettings) {
 export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<ThemeName>(DEFAULT.theme)
   const mode = ref<ThemeMode>(DEFAULT.mode)
+  // Default true: existing users (no onboarding row) are treated as already
+  // onboarded. Only the post-signup hook writes hasSeenWelcome=false.
+  const hasSeenWelcome = ref(true)
+  // Transient flag — true while the user-menu replay is open. Not persisted.
+  const replayingWelcome = ref(false)
 
   /** Call synchronously before app.mount() to prevent flash. */
   function loadFromCache() {
@@ -68,6 +73,33 @@ export const useSettingsStore = defineStore('settings', () => {
         writeCache(data)
       }
     } catch {}
+    try {
+      const res = await apiFetch('/api/settings/onboarding')
+      if (res.ok) {
+        const data = (await res.json()) as { hasSeenWelcome?: boolean }
+        hasSeenWelcome.value = data.hasSeenWelcome !== false
+      }
+    } catch {}
+  }
+
+  async function completeWelcome() {
+    hasSeenWelcome.value = true
+    replayingWelcome.value = false
+    try {
+      await apiFetch('/api/settings/onboarding', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hasSeenWelcome: true }),
+      })
+    } catch {}
+  }
+
+  function replayWelcome() {
+    replayingWelcome.value = true
+  }
+
+  function dismissReplay() {
+    replayingWelcome.value = false
   }
 
   async function setTheme(newTheme: ThemeName, newMode: ThemeMode) {
@@ -92,5 +124,16 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
-  return { theme, mode, loadFromCache, loadFromServer, setTheme }
+  return {
+    theme,
+    mode,
+    hasSeenWelcome,
+    replayingWelcome,
+    loadFromCache,
+    loadFromServer,
+    setTheme,
+    completeWelcome,
+    replayWelcome,
+    dismissReplay,
+  }
 })

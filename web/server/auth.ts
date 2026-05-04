@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { betterAuth } from 'better-auth'
 import Stripe from 'stripe'
 import { stripe as stripePlugin } from '@better-auth/stripe'
-import { pool, query } from './db.js'
+import { pool, query, seedUserDefaults } from './db.js'
 import { sendVerificationEmailFor, sendPasswordResetEmailFor } from './lib/email.js'
 
 const {
@@ -81,6 +81,20 @@ export const auth = betterAuth({
         required: false,
         defaultValue: null,
         input: false,
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      create: {
+        after: async (user) => {
+          try {
+            await seedUserDefaults(user.id)
+          } catch (err) {
+            // Don't fail signup if seeding fails — user can still use the app.
+            console.error('[auth] seedUserDefaults failed for', user.id, err)
+          }
+        },
       },
     },
   },

@@ -25,7 +25,7 @@ function hasItems(key?: CountKey): boolean {
 </script>
 
 <template>
-  <div class="flex gap-1 flex-wrap">
+  <div data-tour="view-switcher" class="flex gap-1 flex-wrap">
     <button
       v-for="v in views"
       :key="v.key"

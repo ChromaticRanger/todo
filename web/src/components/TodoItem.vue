@@ -116,6 +116,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Bookmark item -->
   <div
     v-if="isBookmark"
+    data-item-type="bookmark"
     class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-accent/5 hover:bg-accent/10 dark:bg-accent/15 dark:hover:bg-accent/25 transition duration-200 ease-out group cursor-pointer"
     :class="[priorityBorderClass, isDeleting ? 'opacity-0 scale-95 -translate-x-2 pointer-events-none' : '']"
     @click="openBookmark"
@@ -176,6 +177,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Note item -->
   <div
     v-else-if="isNote"
+    data-item-type="note"
     class="flex items-start gap-3 px-3 py-2 rounded-lg border-l-8 bg-warning-bg/30 hover:bg-warning-bg/50 dark:bg-warning-bg/60 dark:hover:bg-warning-bg/80 transition duration-200 ease-out group"
     :class="[priorityBorderClass, isDeleting ? 'opacity-0 scale-95 -translate-x-2 pointer-events-none' : '']"
   >
@@ -237,6 +239,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
   <!-- Todo item (default) -->
   <div
     v-else
+    data-item-type="todo"
     class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-surface-hover/40 hover:bg-surface-hover dark:bg-surface-hover/80 transition duration-200 ease-out group"
     :class="[
       priorityBorderClass,

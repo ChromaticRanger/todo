@@ -40,3 +40,43 @@ export async function initDb(): Promise<void> {
     )
   `)
 }
+
+const WELCOME_NOTE_BODY =
+  "You're in! Stash Squirrel keeps your todos, bookmarks, and notes together " +
+  "in one tidy nest. Open the welcome tour anytime from the help button in the " +
+  "header — and check off the 'Take Tour' todo when you're done exploring."
+
+/**
+ * Inserts the starter list / category / todo / note / bookmark for a fresh
+ * user, plus an `onboarding` settings row whose presence signals the welcome
+ * tour should run once. Run as a single transaction so a partial signup
+ * never strands the user with half a Welcome category.
+ */
+export async function seedUserDefaults(userId: string): Promise<void> {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    await client.query(
+      `INSERT INTO todos
+         (user_id, list_name, title, description, category, priority, status,
+          due_date, repeat_days, repeat_months, spawned_next, type, url)
+       VALUES
+         ($1, 'Home', 'Take Tour', '', 'Welcome', 2, 0, NULL, 0, 0, 0, 'todo', NULL),
+         ($1, 'Home', 'Welcome to Stash Squirrel', $2, 'Welcome', 2, 0, NULL, 0, 0, 0, 'note', NULL),
+         ($1, 'Home', 'You Tube', '', 'Welcome', 2, 0, NULL, 0, 0, 0, 'bookmark', 'https://www.youtube.com')`,
+      [userId, WELCOME_NOTE_BODY]
+    )
+    await client.query(
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'onboarding', $2::jsonb, NOW())
+       ON CONFLICT (user_id, key) DO NOTHING`,
+      [userId, JSON.stringify({ hasSeenWelcome: false })]
+    )
+    await client.query('COMMIT')
+  } catch (err) {
+    await client.query('ROLLBACK')
+    throw err
+  } finally {
+    client.release()
+  }
+}

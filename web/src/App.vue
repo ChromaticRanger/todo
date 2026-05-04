@@ -22,6 +22,7 @@ import TodoForm from './components/TodoForm.vue'
 import CategoryDialog from './components/CategoryDialog.vue'
 import LoginPage from './components/LoginPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
+import WelcomeTour from './components/WelcomeTour.vue'
 
 const listStore = useListStore()
 const todoStore = useTodoStore()
@@ -186,6 +187,28 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
   await listStore.fetchLists()
 }
 
+// Welcome tour: show automatically the first time, or whenever the help button
+// triggers a replay. Wait for lists to load so item-type targets exist.
+const showWelcomeTour = computed(
+  () =>
+    authStore.isAuthenticated &&
+    !authStore.needsPlanChoice &&
+    listStore.lists.length > 0 &&
+    (settingsStore.replayingWelcome || !settingsStore.hasSeenWelcome)
+)
+
+function onTourDone() {
+  settingsStore.completeWelcome()
+}
+
+function onTourSkip() {
+  if (settingsStore.replayingWelcome) {
+    settingsStore.dismissReplay()
+  } else {
+    settingsStore.completeWelcome()
+  }
+}
+
 </script>
 
 <template>
@@ -217,7 +240,7 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
         </button>
 
       <!-- Layout toggle (category views only) -->
-      <div class="relative flex rounded-lg border border-border-strong overflow-visible shrink-0">
+      <div data-tour="layout-controls" class="relative flex rounded-lg border border-border-strong overflow-visible shrink-0">
         <button
           title="Grid view"
           class="px-2.5 py-1.5 transition-colors"
@@ -335,6 +358,13 @@ async function handleAdd(form: Parameters<typeof todoStore.addTodo>[1]) {
       v-if="showCategoryDialog"
       @submit="handleCreateCategory"
       @cancel="showCategoryDialog = false"
+    />
+
+    <!-- Welcome tour -->
+    <WelcomeTour
+      v-if="showWelcomeTour"
+      @done="onTourDone"
+      @skip="onTourSkip"
     />
 
     <!-- Right-click context menu -->

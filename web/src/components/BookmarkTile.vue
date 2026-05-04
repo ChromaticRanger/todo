@@ -40,6 +40,7 @@ async function handleDelete() {
 
 <template>
   <div
+    data-item-type="bookmark"
     class="relative group transition duration-200 ease-out"
     :class="isDeleting ? 'opacity-0 scale-90 pointer-events-none' : ''"
   >
