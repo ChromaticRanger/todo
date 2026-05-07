@@ -37,6 +37,7 @@ router.get('/', async (req, res) => {
     const result = await query<TodoRow>(
       buildTodoSelect(
         `WHERE user_id = $1
+           AND type <> 'event'
            AND (title ILIKE $2 OR description ILIKE $2 OR url ILIKE $2)
          ORDER BY
            (CASE WHEN title ILIKE $2 THEN 0

@@ -17,6 +17,9 @@ export const useTodoStore = defineStore('todos', () => {
   })
   const categoryOrder = ref<Record<string, string[]>>({})
   const emptyCategories = ref<Record<string, string[]>>({})
+  // Bumped whenever an event is created so the Overall Schedule can refetch
+  // its calendar feed without depending on view/list state.
+  const eventsVersion = ref(0)
   let categoryOrderLoaded = false
   let emptyCategoriesLoaded = false
 
@@ -27,6 +30,23 @@ export const useTodoStore = defineStore('todos', () => {
   function invalidateList(list: string) {
     todosCache.delete(list)
     categoriesCache.delete(list)
+  }
+
+  // Events surface across every list's time-windowed views, so a mutation
+  // (add/edit/delete) has to invalidate those views for *every* cached list,
+  // not just the active one. Bumps eventsVersion so the calendar refetches,
+  // refreshes counts, and silently refetches the current view if it's one of
+  // the time-windowed views.
+  const TIME_WINDOWED_VIEWS: ViewType[] = ['today', 'week', 'month', 'overdue', 'schedule']
+  function notifyEventChanged() {
+    eventsVersion.value++
+    for (const listCache of todosCache.values()) {
+      for (const view of TIME_WINDOWED_VIEWS) listCache.delete(view)
+    }
+    if (TIME_WINDOWED_VIEWS.includes(currentView.value)) {
+      void fetchTodos(currentList.value, currentView.value, { silent: true })
+    }
+    void fetchViewCounts(currentList.value)
   }
 
   function setErrorWithTimeout(msg: string, ms = 6000) {
@@ -99,11 +119,17 @@ export const useTodoStore = defineStore('todos', () => {
     })
   }
 
+  // Events surface on time-windowed views (today/week/month/overdue/schedule)
+  // but live outside any list-and-category scheme — render them in a dedicated
+  // Events block above the category grid, never inside a category card.
+  const eventsInView = computed(() => todos.value.filter((t) => t.type === 'event'))
+
   // Group todos by category, ordered by user preference (with reconciliation
   // for new categories not yet in the saved order).
   const byCategory = computed(() => {
     const map = new Map<string, Todo[]>()
     for (const t of todos.value) {
+      if (t.type === 'event') continue
       const cat = t.category || 'General'
       if (!map.has(cat)) map.set(cat, [])
       map.get(cat)!.push(t)
@@ -287,6 +313,13 @@ export const useTodoStore = defineStore('todos', () => {
       return
     }
     const { id } = await res.json() as { id: number }
+
+    // Events live outside lists — purge time-windowed view caches across
+    // every list, refresh counts, and nudge the calendar to refetch.
+    if (form.type === 'event') {
+      notifyEventChanged()
+      return
+    }
 
     const now = Math.floor(Date.now() / 1000)
     // Mirrors server default: a repeating todo with no due date starts today.
@@ -640,7 +673,10 @@ export const useTodoStore = defineStore('todos', () => {
     currentView,
     currentList,
     viewCounts,
+    eventsVersion,
+    eventsInView,
     byCategory,
+    notifyEventChanged,
     fetchTodos,
     addTodo,
     updateTodo,

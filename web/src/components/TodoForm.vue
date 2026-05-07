@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   submit: [form: TodoFormData]
   cancel: []
+  delete: []
 }>()
 
 const type = ref<ItemType>(props.initial?.type ?? props.initialType ?? 'todo')
@@ -45,6 +46,7 @@ const formTitle = computed(() => {
   const action = isEdit.value ? 'Edit' : 'Add'
   if (type.value === 'bookmark') return `${action} Bookmark`
   if (type.value === 'note') return `${action} Note`
+  if (type.value === 'event') return `${action} Event`
   return `${action} Todo`
 })
 
@@ -70,6 +72,7 @@ const effectiveCategory = computed(() =>
 const canSubmit = computed(() => {
   if (!title.value.trim()) return false
   if (type.value === 'bookmark' && !url.value.trim()) return false
+  if (type.value === 'event' && !dueStr.value) return false
   return true
 })
 
@@ -88,7 +91,7 @@ function submit() {
     description: description.value.trim(),
     category: effectiveCategory.value,
     priority: priority.value,
-    due_date: type.value === 'todo' ? due_date : null,
+    due_date: type.value === 'todo' || type.value === 'event' ? due_date : null,
     repeat_days: rd,
     repeat_months: rm,
     type: type.value,
@@ -161,8 +164,19 @@ const priorityLabels = [
             />
           </div>
 
-          <!-- Category (all types) -->
-          <div>
+          <!-- Event-only: Date & Time (required) -->
+          <div v-if="type === 'event'">
+            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Date &amp; Time *</label>
+            <input
+              v-model="dueStr"
+              type="datetime-local"
+              required
+              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+
+          <!-- Category (todos / bookmarks / notes only — events live outside lists) -->
+          <div v-if="type !== 'event'">
             <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Category</label>
             <select
               v-model="selectedCategory"
@@ -227,7 +241,16 @@ const priorityLabels = [
             </div>
           </template>
 
-          <div class="flex gap-3 justify-end mt-6">
+          <div class="flex gap-3 items-center mt-6">
+            <button
+              v-if="isEdit && type === 'event'"
+              type="button"
+              class="px-3 py-2 rounded-lg text-danger hover:bg-danger-bg transition-colors text-sm"
+              @click="emit('delete')"
+            >
+              Delete
+            </button>
+            <div class="flex-1" />
             <button
               type="button"
               class="px-4 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"

@@ -8,7 +8,9 @@ router.get('/', async (req, res) => {
   const userId = req.userId!
   try {
     const result = await query<{ list_name: string }>(
-      'SELECT DISTINCT list_name FROM todos WHERE user_id = $1 ORDER BY list_name',
+      `SELECT DISTINCT list_name FROM todos
+       WHERE user_id = $1 AND type <> 'event'
+       ORDER BY list_name`,
       [userId]
     )
     res.json({ lists: result.rows.map((r) => r.list_name) })

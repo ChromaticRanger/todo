@@ -133,6 +133,11 @@ router.get('/', async (req, res) => {
       conditions.push(`category = $${params.length}`)
     }
 
+    // Events live only on the Overall Schedule calendar — never surface them
+    // in the per-list category view, even if they share a list_name with
+    // a real list.
+    conditions.push(`type <> 'event'`)
+
     // Hide actively-snoozed todos from the category view. Time-based views
     // (today/week/month/schedule) intentionally still surface them so an
     // overdue item doesn't vanish entirely.
@@ -151,6 +156,11 @@ router.get('/', async (req, res) => {
   }
 })
 
+// Events live outside any user list, but should still surface on every
+// time-windowed view (Today / Week / Month / Overdue / Schedule) regardless
+// of which list is active.
+const TIME_WINDOWED_SCOPE = `(list_name = $2 AND type = 'todo') OR type = 'event'`
+
 // GET /api/todos/today?list=X
 router.get('/today', async (req, res) => {
   const userId = req.userId!
@@ -159,7 +169,8 @@ router.get('/today', async (req, res) => {
     await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND status = 0
+         AND (${TIME_WINDOWED_SCOPE})
          AND due_date IS NOT NULL
          AND due_date >= (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400)::BIGINT
          AND due_date < (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400 + 86400)::BIGINT
@@ -181,7 +192,8 @@ router.get('/week', async (req, res) => {
     await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND status = 0
+         AND (${TIME_WINDOWED_SCOPE})
          AND due_date IS NOT NULL
          AND due_date >= (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400)::BIGINT
          AND due_date < (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400 + 7 * 86400)::BIGINT
@@ -203,7 +215,8 @@ router.get('/month', async (req, res) => {
     await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND status = 0
+         AND (${TIME_WINDOWED_SCOPE})
          AND due_date IS NOT NULL
          AND due_date >= (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400)::BIGINT
          AND due_date < (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400 + 30 * 86400)::BIGINT
@@ -236,7 +249,7 @@ router.get('/calendar', async (req, res) => {
   try {
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE user_id = $1 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND status = 0 AND type IN ('todo','event')
          AND due_date IS NOT NULL
          AND due_date >= $2 AND due_date < $3
          ORDER BY due_date ASC`
@@ -269,7 +282,8 @@ router.get('/counts', async (req, res) => {
          COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 30 * 86400) AS month,
          COUNT(*) FILTER (WHERE due_date < b.now_epoch) AS overdue
        FROM todos, bounds b
-       WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
+       WHERE user_id = $1 AND status = 0
+         AND ((list_name = $2 AND type = 'todo') OR type = 'event')
          AND due_date IS NOT NULL`,
       [userId, list]
     )
@@ -295,7 +309,8 @@ router.get('/overdue', async (req, res) => {
     await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND status = 0
+         AND (${TIME_WINDOWED_SCOPE})
          AND due_date IS NOT NULL
          AND due_date < EXTRACT(EPOCH FROM NOW())::BIGINT
          ORDER BY due_date ASC`
@@ -316,7 +331,8 @@ router.get('/schedule', async (req, res) => {
     await spawnRepeatingTodos(userId, list)
     const result = await query<TodoRow>(
       buildTodoSelect(
-        `WHERE user_id = $1 AND list_name = $2 AND status = 0 AND type = 'todo'
+        `WHERE user_id = $1 AND status = 0
+         AND (${TIME_WINDOWED_SCOPE})
          AND due_date IS NOT NULL
          ORDER BY due_date ASC`
       ),
@@ -392,10 +408,22 @@ router.post('/', async (req, res) => {
 
   if (!title) return res.status(400).json({ error: 'Title is required' })
   if (type === 'bookmark' && !url) return res.status(400).json({ error: 'URL is required for bookmarks' })
+  if (type === 'event') {
+    if (req.plan !== 'pro') return res.status(403).json({ error: 'pro_required' })
+    if (due_date == null) return res.status(400).json({ error: 'Date is required for events' })
+  }
+
+  // Events live outside any user list — pin them to a sentinel name and
+  // skip list/category metadata so they can't accidentally surface in lists.
+  const effectiveList = type === 'event' ? '__events__' : list_name
+  const effectiveCategory = type === 'event' ? 'General' : category
+  const effectiveRepeatDays = type === 'event' ? 0 : repeat_days
+  const effectiveRepeatMonths = type === 'event' ? 0 : repeat_months
+  const effectiveUrl = type === 'event' ? null : url
 
   try {
     if (req.plan === 'free') {
-      if (!(await userHasList(userId, list_name))) {
+      if (!(await userHasList(userId, effectiveList))) {
         if ((await countUserLists(userId)) >= LIMITS.maxLists) {
           return res.status(403).json({ error: 'free_tier_list_limit', limit: LIMITS.maxLists })
         }
@@ -406,14 +434,14 @@ router.post('/', async (req, res) => {
     }
 
     const effectiveDue =
-      due_date ?? ((repeat_days > 0 || repeat_months > 0) ? Math.floor(Date.now() / 1000) : null)
+      due_date ?? ((effectiveRepeatDays > 0 || effectiveRepeatMonths > 0) ? Math.floor(Date.now() / 1000) : null)
 
     const result = await query<{ id: number }>(
       `INSERT INTO todos
          (user_id, list_name, title, description, category, priority, status,
           due_date, repeat_days, repeat_months, spawned_next, type, url)
        VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0,$10,$11) RETURNING id`,
-      [userId, list_name, title, description, category, priority, effectiveDue, repeat_days, repeat_months, type, url]
+      [userId, effectiveList, title, description, effectiveCategory, priority, effectiveDue, effectiveRepeatDays, effectiveRepeatMonths, type, effectiveUrl]
     )
     res.status(201).json({ id: Number(result.rows[0].id) })
   } catch (err) {

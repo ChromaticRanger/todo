@@ -220,6 +220,17 @@ async function upgradeTo(annual: boolean) {
             <span class="flex-1">Note</span>
             <kbd class="text-[11px] text-muted font-mono tracking-tight">Alt+N</kbd>
           </button>
+          <button
+            v-if="authStore.tier === 'pro'"
+            class="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-hover flex items-center gap-2 border-t border-border/60 mt-1 pt-1.5"
+            @click="openAdd('event')"
+          >
+            <svg class="size-3.5 text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span class="flex-1">Event</span>
+            <span class="rounded-full bg-accent/15 text-accent text-[10px] font-semibold px-1.5 py-0.5 tracking-wide">Pro</span>
+          </button>
         </div>
 
         <!-- Click-outside overlay -->
