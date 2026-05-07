@@ -13,6 +13,7 @@ const emit = defineEmits<{
   add: [type: ItemType]
   'toggle-calendar': []
   search: []
+  import: []
 }>()
 
 const props = defineProps<{ calendarActive?: boolean }>()
@@ -271,6 +272,20 @@ async function upgradeTo(annual: boolean) {
       >
         <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z" />
+        </svg>
+      </button>
+
+      <!-- Import bookmarks (Pro only) -->
+      <button
+        v-if="authStore.tier === 'pro'"
+        type="button"
+        class="flex items-center justify-center size-9 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
+        title="Import bookmarks from a browser export"
+        aria-label="Import bookmarks"
+        @click="emit('import')"
+      >
+        <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V3" />
         </svg>
       </button>
 

@@ -25,6 +25,7 @@ import LoginPage from './components/LoginPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
 import SearchModal from './components/SearchModal.vue'
+import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
 
 const listStore = useListStore()
 const todoStore = useTodoStore()
@@ -40,6 +41,7 @@ const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
 const rateLimitMessage = ref('')
 const showCategoryDialog = ref(false)
+const showImportDialog = ref(false)
 const categoryMenu = ref<{ x: number; y: number } | null>(null)
 
 function openCategoryDialog() {
@@ -272,6 +274,7 @@ function onTourSkip() {
       @add="openAddForm"
       @toggle-calendar="toggleCalendar"
       @search="searchStore.openSearch()"
+      @import="showImportDialog = true"
     />
 
     <!-- List tabs -->
@@ -431,6 +434,12 @@ function onTourSkip() {
       v-if="searchStore.open"
       @select="onSearchSelect"
       @close="searchStore.closeSearch()"
+    />
+
+    <!-- Import bookmarks (Pro) -->
+    <ImportBookmarksDialog
+      v-if="showImportDialog"
+      @close="showImportDialog = false"
     />
 
     <!-- Right-click context menu -->
