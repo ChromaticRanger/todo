@@ -11,6 +11,7 @@ router.get('/', async (req, res) => {
     const result = await query<{ category: string }>(
       `SELECT DISTINCT category FROM todos
        WHERE user_id = $1 AND list_name = $2 AND status = 0
+         AND type <> 'event'
        ORDER BY category`,
       [userId, list]
     )

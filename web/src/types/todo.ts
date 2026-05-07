@@ -15,7 +15,7 @@ export type Status = (typeof Status)[keyof typeof Status]
 
 export type ViewType = 'all' | 'today' | 'week' | 'month' | 'overdue' | 'schedule' | 'completed'
 
-export type ItemType = 'todo' | 'bookmark' | 'note'
+export type ItemType = 'todo' | 'bookmark' | 'note' | 'event'
 
 export interface Todo {
   id: number

@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, onMounted, onUnmounted, onUpdated } from 'vue'
 import draggable from 'vuedraggable'
-import type { Todo } from '../types/todo'
+import type { Todo, TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useListStore } from '../stores/listStore'
+import { apiFetch } from '../lib/api'
 import CategoryGroup from './CategoryGroup.vue'
 import EmptyState from './EmptyState.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import TodoForm from './TodoForm.vue'
 
 const props = withDefaults(
   defineProps<{
@@ -164,17 +166,67 @@ function formatDate(epoch: number | null): string {
   })
 }
 
+function formatEventTime(epoch: number | null): string {
+  if (!epoch) return ''
+  return new Date(epoch * 1000).toLocaleString(undefined, {
+    weekday: 'short', day: 'numeric', month: 'short',
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
 async function handleDelete() {
   if (confirmDeleteId.value === null) return
   await store.deleteTodo(confirmDeleteId.value)
   confirmDeleteId.value = null
+}
+
+// Event editing — events are list-less, so we hit the API directly and ask
+// the store to refresh time-windowed caches and the calendar.
+const editingEvent = ref<Todo | null>(null)
+
+function openEditEvent(event: Todo) {
+  editingEvent.value = event
+}
+
+async function handleEventEditSubmit(form: TodoFormData) {
+  const target = editingEvent.value
+  if (!target) return
+  editingEvent.value = null
+  try {
+    const res = await apiFetch(`/api/todos/${target.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    store.notifyEventChanged()
+  } catch (e) {
+    store.error = String(e)
+  }
+}
+
+async function handleEventEditDelete() {
+  const target = editingEvent.value
+  if (!target) return
+  editingEvent.value = null
+  try {
+    const res = await apiFetch(`/api/todos/${target.id}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error(await res.text())
+    store.notifyEventChanged()
+  } catch (e) {
+    store.error = String(e)
+  }
 }
 </script>
 
 <template>
   <div class="flex-1 min-h-0 overflow-y-auto">
     <EmptyState
-      v-if="store.todos.length === 0 && !store.loading && (showFlat || store.byCategory.size === 0)"
+      v-if="
+        store.todos.length === 0 &&
+        !store.loading &&
+        (showFlat || (store.byCategory.size === 0 && store.eventsInView.length === 0))
+      "
       :view="store.currentView"
     />
 
@@ -183,8 +235,33 @@ async function handleDelete() {
       <div class="size-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
     </div>
 
-    <!-- Category view (All / Today / Week / Month) -->
-    <template v-else-if="!showFlat && store.byCategory.size > 0">
+    <!-- Events block (time-windowed category views only — events live outside
+         any list/category, so they sit above the category grid). -->
+    <div
+      v-if="!store.loading && !showFlat && store.eventsInView.length > 0"
+      class="mb-4 bg-surface border border-border-strong/60 rounded-xl p-3 dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
+    >
+      <div class="flex items-center gap-2 mb-2 text-xs uppercase tracking-wider text-muted">
+        <svg class="size-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        Events
+      </div>
+      <div class="flex flex-col gap-1.5">
+        <button
+          v-for="ev in store.eventsInView"
+          :key="ev.id"
+          class="text-left flex items-center gap-2 rounded-lg px-2 py-1.5 bg-accent/10 hover:bg-accent/20 border-l-4 border-accent transition-colors"
+          @click="openEditEvent(ev)"
+        >
+          <span class="flex-1 truncate text-sm text-text">{{ ev.title }}</span>
+          <span class="text-xs text-muted shrink-0">{{ formatEventTime(ev.due_date) }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Category view (All / Today / Week / Month / Overdue) -->
+    <template v-if="!store.loading && !showFlat && store.byCategory.size > 0">
 
       <!-- Grid layout -->
       <draggable
@@ -276,21 +353,31 @@ async function handleDelete() {
 
     <!-- Flat view (Schedule / Completed) -->
     <div v-else-if="showFlat && store.todos.length > 0" class="space-y-3 max-w-2xl">
-      <div
+      <component
+        :is="todo.type === 'event' ? 'button' : 'div'"
         v-for="todo in store.todos"
         :key="todo.id"
-        class="bg-surface border border-border-strong/60 rounded-xl p-4 group dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
+        :class="[
+          'w-full text-left bg-surface border border-border-strong/60 rounded-xl p-4 group dark:inset-ring dark:inset-ring-white/5 dark:shadow-none',
+          todo.type === 'event' ? 'border-l-4 border-l-accent hover:bg-surface-hover transition-colors' : '',
+        ]"
+        @click="todo.type === 'event' ? openEditEvent(todo) : null"
       >
         <div class="flex items-start justify-between gap-3">
           <div class="flex-1">
             <div class="flex items-center gap-2 mb-1">
-              <span class="text-xs text-muted uppercase tracking-wider">{{ todo.category }}</span>
+              <span
+                class="text-xs uppercase tracking-wider"
+                :class="todo.type === 'event' ? 'text-accent font-semibold' : 'text-muted'"
+              >
+                {{ todo.type === 'event' ? 'Event' : todo.category }}
+              </span>
             </div>
             <p class="text-sm text-text" :class="todo.status === 1 ? 'line-through text-muted' : ''">
               {{ todo.title }}
             </p>
             <p v-if="store.currentView === 'schedule' && todo.due_date" class="text-xs text-accent mt-1">
-              Due: {{ formatDate(todo.due_date) }}
+              {{ todo.type === 'event' ? 'Starts' : 'Due' }}: {{ formatDate(todo.due_date) }}
             </p>
             <p v-if="store.currentView === 'completed' && todo.completed_at" class="text-xs text-muted mt-1">
               Completed: {{ formatDate(todo.completed_at) }}
@@ -300,14 +387,14 @@ async function handleDelete() {
             v-if="store.currentView === 'completed'"
             class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors opacity-0 group-hover:opacity-100 shrink-0"
             title="Delete"
-            @click="confirmDeleteId = todo.id"
+            @click.stop="confirmDeleteId = todo.id"
           >
             <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
         </div>
-      </div>
+      </component>
     </div>
   </div>
 
@@ -316,5 +403,14 @@ async function handleDelete() {
     :message="`Delete this completed item?`"
     @confirm="handleDelete"
     @cancel="confirmDeleteId = null"
+  />
+
+  <TodoForm
+    v-if="editingEvent"
+    :initial="editingEvent"
+    :categories="[]"
+    @submit="handleEventEditSubmit"
+    @cancel="editingEvent = null"
+    @delete="handleEventEditDelete"
   />
 </template>

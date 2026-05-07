@@ -121,6 +121,8 @@ async function fetchCalendar() {
 }
 
 watch(viewMonth, fetchCalendar, { deep: true })
+// Refetch when an event is added from the +Add menu while the calendar is open.
+watch(() => todoStore.eventsVersion, () => { fetchCalendar() })
 onMounted(fetchCalendar)
 
 function prevMonth() {
@@ -172,6 +174,7 @@ async function handleEditSubmit(form: TodoFormData) {
   if (!editing.value) return
   const id = editing.value.id
   const list = editing.value.list_name
+  const isEvent = editing.value.type === 'event'
   editing.value = null
   try {
     // Bypass todoStore.updateTodo: it scopes its in-memory patch / cache
@@ -185,9 +188,13 @@ async function handleEditSubmit(form: TodoFormData) {
       body: JSON.stringify(form),
     })
     if (!res.ok) throw new Error(await res.text())
-    todoStore.invalidateList(list)
-    if (list === todoStore.currentList) {
-      await todoStore.fetchTodos(list, todoStore.currentView, { silent: true })
+    if (isEvent) {
+      todoStore.notifyEventChanged()
+    } else {
+      todoStore.invalidateList(list)
+      if (list === todoStore.currentList) {
+        await todoStore.fetchTodos(list, todoStore.currentView, { silent: true })
+      }
     }
   } catch (e) {
     error.value = String(e)
@@ -199,6 +206,21 @@ function handleEditCancel() {
   editing.value = null
 }
 
+async function handleEditDelete() {
+  if (!editing.value) return
+  const id = editing.value.id
+  const wasEvent = editing.value.type === 'event'
+  editing.value = null
+  try {
+    const res = await apiFetch(`/api/todos/${id}`, { method: 'DELETE' })
+    if (!res.ok) throw new Error(await res.text())
+    if (wasEvent) todoStore.notifyEventChanged()
+  } catch (e) {
+    error.value = String(e)
+  }
+  await fetchCalendar()
+}
+
 function todayClass(date: Date): string {
   return isSameDay(date, today) ? 'ring-1 ring-accent' : ''
 }
@@ -206,10 +228,20 @@ function todayClass(date: Date): string {
 function chipBaseClass(t: Todo): string {
   return [
     'flex items-center gap-1.5 rounded px-1.5 py-1 text-sm leading-tight',
-    'bg-surface-hover/60 hover:bg-surface-hover border-l-4 cursor-pointer truncate',
-    priorityBorderClass(t.priority),
+    'border-l-4 cursor-pointer truncate',
+    t.type === 'event'
+      ? 'bg-accent/15 hover:bg-accent/25 border-accent text-text'
+      : 'bg-surface-hover/60 hover:bg-surface-hover ' + priorityBorderClass(t.priority),
     isSnoozed(t) ? 'opacity-50' : '',
   ].filter(Boolean).join(' ')
+}
+
+function formatEventTime(epoch: number | null): string {
+  if (epoch == null) return ''
+  return new Date(epoch * 1000).toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -288,11 +320,20 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             v-for="t in chipsFor(cell.date).visible"
             :key="t.id"
             class="text-left"
-            :title="`${t.list_name} : ${t.category}`"
+            :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}` : `${t.list_name} : ${t.category}`"
             @click="openEdit(t)"
           >
             <span :class="chipBaseClass(t)">
-              <span class="size-1.5 rounded-full shrink-0" :class="listColour(t.list_name)" />
+              <svg
+                v-if="t.type === 'event'"
+                class="size-3 shrink-0 text-accent"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span v-else class="size-1.5 rounded-full shrink-0" :class="listColour(t.list_name)" />
               <span class="truncate flex-1">{{ t.title }}</span>
             </span>
           </button>
@@ -318,11 +359,20 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               v-for="t in dayItems(cell.date)"
               :key="t.id"
               class="block w-full text-left"
-              :title="`${t.list_name} : ${t.category}`"
+              :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}` : `${t.list_name} : ${t.category}`"
               @click="openEdit(t)"
             >
               <span :class="chipBaseClass(t)">
-                <span class="size-1.5 rounded-full shrink-0" :class="listColour(t.list_name)" />
+                <svg
+                  v-if="t.type === 'event'"
+                  class="size-3 shrink-0 text-accent"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span v-else class="size-1.5 rounded-full shrink-0" :class="listColour(t.list_name)" />
                 <span class="truncate flex-1">{{ t.title }}</span>
               </span>
             </button>
@@ -357,13 +407,22 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             v-for="t in day.items"
             :key="t.id"
             class="w-full text-left"
-            :title="`${t.list_name} : ${t.category}`"
+            :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}` : `${t.list_name} : ${t.category}`"
             @click="openEdit(t)"
           >
             <span :class="chipBaseClass(t)">
-              <span class="size-2 rounded-full shrink-0" :class="listColour(t.list_name)" />
+              <svg
+                v-if="t.type === 'event'"
+                class="size-3 shrink-0 text-accent"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span v-else class="size-2 rounded-full shrink-0" :class="listColour(t.list_name)" />
               <span class="truncate flex-1">{{ t.title }}</span>
-              <span class="text-[10px] text-muted shrink-0">{{ t.list_name }}</span>
+              <span class="text-[10px] text-muted shrink-0">{{ t.type === 'event' ? formatEventTime(t.due_date) : t.list_name }}</span>
             </span>
           </button>
         </div>
@@ -385,6 +444,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
       :categories="editingCategories"
       @submit="handleEditSubmit"
       @cancel="handleEditCancel"
+      @delete="handleEditDelete"
     />
   </div>
 </template>
