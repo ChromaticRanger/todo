@@ -26,6 +26,8 @@ import ChoosePlan from './components/ChoosePlan.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
 import SearchModal from './components/SearchModal.vue'
 import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
+import DiscoverView from './components/DiscoverView.vue'
+import { useDiscoverStore } from './stores/discoverStore'
 
 const listStore = useListStore()
 const todoStore = useTodoStore()
@@ -34,6 +36,7 @@ const settingsStore = useSettingsStore()
 const listPrefsStore = useListPrefsStore()
 const categoryPrefsStore = useCategoryPrefsStore()
 const searchStore = useSearchStore()
+const discoverStore = useDiscoverStore()
 
 const highlightItemId = ref<number | null>(null)
 
@@ -84,7 +87,7 @@ function openAddForm(type: ItemType) {
   showAddForm.value = true
 }
 const currentView = ref<ViewType>('all')
-const mode = ref<'lists' | 'calendar'>('lists')
+const mode = ref<'lists' | 'calendar' | 'discover'>('lists')
 const showColumnsMenu = ref(false)
 
 function toggleCalendar() {
@@ -92,9 +95,27 @@ function toggleCalendar() {
   mode.value = mode.value === 'calendar' ? 'lists' : 'calendar'
 }
 
-// Plan downgrade safety: never strand a Free user on the Pro-only calendar.
+function toggleDiscover() {
+  if (authStore.tier !== 'pro') return
+  if (mode.value === 'discover') {
+    mode.value = 'lists'
+  } else {
+    mode.value = 'discover'
+    discoverStore.selectSlug(null)
+  }
+}
+
+function handleClonedToList() {
+  // Switch back to Lists so the user lands on their new clone.
+  mode.value = 'lists'
+  discoverStore.selectSlug(null)
+}
+
+// Plan downgrade safety: never strand a Free user on a Pro-only mode.
 watch(() => authStore.tier, (tier) => {
-  if (tier !== 'pro' && mode.value === 'calendar') mode.value = 'lists'
+  if (tier !== 'pro' && (mode.value === 'calendar' || mode.value === 'discover')) {
+    mode.value = 'lists'
+  }
 })
 const layoutMode = computed<LayoutMode>(() => listPrefsStore.get(listStore.activeList).layout)
 const gridColumns = computed<GridColumns>(() => listPrefsStore.get(listStore.activeList).columns)
@@ -205,6 +226,7 @@ watch(
     listPrefsStore.reset()
     categoryPrefsStore.reset()
     searchStore.reset()
+    discoverStore.reset()
     if (currentId) {
       await loadData()
       await settingsStore.loadFromServer()
@@ -271,8 +293,10 @@ function onTourSkip() {
   <div v-else class="min-h-dvh bg-bg text-text flex flex-col isolate">
     <AppHeader
       :calendar-active="mode === 'calendar'"
+      :discover-active="mode === 'discover'"
       @add="openAddForm"
       @toggle-calendar="toggleCalendar"
+      @toggle-discover="toggleDiscover"
       @search="searchStore.openSearch()"
       @import="showImportDialog = true"
     />
@@ -372,6 +396,10 @@ function onTourSkip() {
         :grid-columns="gridColumns"
         :highlight-id="highlightItemId"
         @highlight-cleared="clearHighlight"
+      />
+      <DiscoverView
+        v-else-if="mode === 'discover'"
+        @cloned-to-list="handleClonedToList"
       />
       <OverallSchedule v-else />
     </main>

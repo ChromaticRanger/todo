@@ -4,11 +4,23 @@ import draggable from 'vuedraggable'
 import { useListStore } from '../stores/listStore'
 import { usePlanStore } from '../stores/planStore'
 import { useTodoStore } from '../stores/todoStore'
+import { useAuthStore } from '../stores/authStore'
 import ConfirmDialog from './ConfirmDialog.vue'
+import PublishListModal from './PublishListModal.vue'
 
 const listStore = useListStore()
 const planStore = usePlanStore()
 const todoStore = useTodoStore()
+const authStore = useAuthStore()
+const publishingList = ref<string | null>(null)
+const publishToast = ref('')
+
+function showPublishToast(msg: string) {
+  publishToast.value = msg
+  setTimeout(() => {
+    if (publishToast.value === msg) publishToast.value = ''
+  }, 4000)
+}
 
 const maxLists = computed(() => planStore.limits?.maxLists ?? null)
 const atListCap = computed(() => {
@@ -180,6 +192,18 @@ onBeforeUnmount(() => {
               d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H7v-3a2 2 0 01.586-1.414z" />
           </svg>
         </span>
+        <!-- Publish icon (Pro only) -->
+        <span
+          v-if="authStore.tier === 'pro'"
+          class="tab-action opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-surface-hover hover:text-accent transition-all"
+          title="Publish to community"
+          @click.stop="publishingList = list"
+        >
+          <svg class="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M16 6l-4-4m0 0L8 6m4-4v14" />
+          </svg>
+        </span>
         <!-- Delete icon -->
         <span
           class="tab-action opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-danger-bg hover:text-danger transition-all"
@@ -259,4 +283,20 @@ onBeforeUnmount(() => {
     @confirm="deleteList"
     @cancel="confirmDelete = null"
   />
+
+  <!-- Publish to community -->
+  <PublishListModal
+    v-if="publishingList"
+    :list-name="publishingList"
+    @close="publishingList = null"
+    @published="(r) => { publishingList = null; showPublishToast(r.updated ? 'Community copy updated.' : 'List published to community.') }"
+    @unpublished="() => { publishingList = null; showPublishToast('Removed from community.') }"
+  />
+
+  <div
+    v-if="publishToast"
+    class="fixed bottom-4 right-4 z-50 bg-surface border border-border-strong text-text px-4 py-3 rounded-xl text-sm shadow-xl dark:shadow-none"
+  >
+    {{ publishToast }}
+  </div>
 </template>

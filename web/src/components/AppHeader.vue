@@ -12,11 +12,12 @@ import type { ItemType } from '../types/todo'
 const emit = defineEmits<{
   add: [type: ItemType]
   'toggle-calendar': []
+  'toggle-discover': []
   search: []
   import: []
 }>()
 
-const props = defineProps<{ calendarActive?: boolean }>()
+const props = defineProps<{ calendarActive?: boolean; discoverActive?: boolean }>()
 
 const appVersion = __APP_VERSION__
 
@@ -241,6 +242,23 @@ async function upgradeTo(annual: boolean) {
           @click="showTypeMenu = false"
         />
       </div>
+
+      <!-- Discover (Pro only) -->
+      <button
+        v-if="authStore.tier === 'pro'"
+        type="button"
+        class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors"
+        :class="props.discoverActive
+          ? 'bg-accent text-accent-fg'
+          : 'text-muted hover:text-text hover:bg-surface-hover'"
+        :title="props.discoverActive ? 'Back to lists' : 'Discover community lists'"
+        @click="emit('toggle-discover')"
+      >
+        <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16zm-1-11l3 3-3 3m4-6l-3 3 3 3" />
+        </svg>
+        <span class="max-md:hidden">Discover</span>
+      </button>
 
       <!-- Overall Schedule (Pro only) -->
       <button
