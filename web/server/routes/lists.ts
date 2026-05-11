@@ -28,9 +28,15 @@ router.patch('/:name', async (req, res) => {
     return
   }
   try {
+    const trimmed = newName.trim()
     await query(
       'UPDATE todos SET list_name = $1 WHERE list_name = $2 AND user_id = $3',
-      [newName.trim(), req.params.name, userId]
+      [trimmed, req.params.name, userId]
+    )
+    await query(
+      `UPDATE shared_lists SET original_list_name = $1
+        WHERE owner_user_id = $2 AND original_list_name = $3`,
+      [trimmed, userId, req.params.name]
     )
     res.json({ ok: true })
   } catch (err) {
