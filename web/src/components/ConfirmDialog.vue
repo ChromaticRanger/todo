@@ -2,7 +2,10 @@
 import { ref, onMounted } from 'vue'
 import { useEscapeKey } from '../composables/useEscapeKey'
 
-defineProps<{ message: string }>()
+withDefaults(
+  defineProps<{ message: string; confirmLabel?: string }>(),
+  { confirmLabel: 'Delete' }
+)
 const emit = defineEmits<{
   confirm: []
   cancel: []
@@ -29,7 +32,7 @@ useEscapeKey(() => emit('cancel'))
           class="px-4 py-2 rounded-lg bg-danger hover:opacity-85 text-white font-medium transition-colors"
           @click="emit('confirm')"
         >
-          Delete
+          {{ confirmLabel }}
         </button>
       </div>
     </div>

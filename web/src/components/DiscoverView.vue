@@ -4,7 +4,9 @@ import { useDiscoverStore } from '../stores/discoverStore'
 import { useAuthStore } from '../stores/authStore'
 import { useListStore } from '../stores/listStore'
 import { useTodoStore } from '../stores/todoStore'
+import { LIST_CATEGORIES } from '../shared/listCategories'
 import SharedItemTile from './SharedItemTile.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const emit = defineEmits<{ 'cloned-to-list': [name: string] }>()
 
@@ -15,6 +17,7 @@ const todoStore = useTodoStore()
 
 const cloning = ref(false)
 const cloneError = ref('')
+const showUnpublishConfirm = ref(false)
 
 onMounted(() => {
   void discover.fetchLists()
@@ -28,6 +31,41 @@ watch(
     }
   }
 )
+
+const publisherInput = ref(discover.filterPublisher)
+let publisherDebounce: ReturnType<typeof setTimeout> | null = null
+watch(publisherInput, (val) => {
+  if (publisherDebounce) clearTimeout(publisherDebounce)
+  publisherDebounce = setTimeout(() => {
+    discover.filterPublisher = val
+  }, 250)
+})
+
+watch(
+  [() => discover.filterCategory, () => discover.filterPublisher],
+  () => {
+    if (!discover.selectedSlug) void discover.fetchLists()
+  }
+)
+
+const hasActiveFilters = computed(
+  () => discover.filterCategory !== null || discover.filterPublisher.trim() !== ''
+)
+
+function clearFilters() {
+  discover.filterCategory = null
+  discover.filterPublisher = ''
+  publisherInput.value = ''
+}
+
+function filterByCategory(category: string) {
+  discover.filterCategory = category as typeof discover.filterCategory
+}
+
+function filterByPublisher(publisher: string) {
+  publisherInput.value = publisher
+  discover.filterPublisher = publisher
+}
 
 const isOwner = computed(
   () => discover.detail?.list.owner_user_id === authStore.user?.id
@@ -60,13 +98,22 @@ async function cloneCurrentList() {
   }
 }
 
-async function unpublishCurrentList() {
+function unpublishCurrentList() {
   if (!discover.detail) return
+  showUnpublishConfirm.value = true
+}
+
+async function confirmUnpublish() {
+  if (!discover.detail) {
+    showUnpublishConfirm.value = false
+    return
+  }
   const slug = discover.detail.list.slug
-  if (!confirm('Remove this list from the community catalogue? Existing clones in other users\' accounts are unaffected.')) return
+  showUnpublishConfirm.value = false
   const ok = await discover.unpublish(slug)
   if (ok) {
     await discover.fetchLists()
+    void discover.fetchPublications()
     discover.selectSlug(null)
   }
 }
@@ -92,6 +139,36 @@ function formatDate(iso: string): string {
           </p>
         </div>
 
+        <div class="mb-6 flex flex-col sm:flex-row gap-2 sm:items-center">
+          <label class="sm:flex-1 min-w-0">
+            <span class="sr-only">Category</span>
+            <select
+              v-model="discover.filterCategory"
+              class="w-full bg-surface border border-border-strong rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
+            >
+              <option :value="null">All categories</option>
+              <option v-for="c in LIST_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+            </select>
+          </label>
+          <label class="sm:flex-1 min-w-0">
+            <span class="sr-only">Publisher</span>
+            <input
+              v-model="publisherInput"
+              type="search"
+              placeholder="Search by publisher…"
+              class="w-full bg-surface border border-border-strong rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
+            />
+          </label>
+          <button
+            v-if="hasActiveFilters"
+            type="button"
+            class="shrink-0 px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors"
+            @click="clearFilters"
+          >
+            Clear
+          </button>
+        </div>
+
         <div v-if="discover.loading && discover.lists.length === 0" class="flex justify-center py-16">
           <div class="size-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
         </div>
@@ -107,16 +184,31 @@ function formatDate(iso: string): string {
           v-else-if="discover.lists.length === 0"
           class="rounded-xl border border-border-strong/40 bg-surface px-6 py-12 text-center text-muted"
         >
-          No community lists yet. Be the first — publish one of your own lists.
+          <template v-if="hasActiveFilters">
+            <p>No lists match these filters.</p>
+            <button
+              type="button"
+              class="mt-3 px-3 py-1.5 rounded-lg text-sm text-accent hover:bg-surface-hover transition-colors"
+              @click="clearFilters"
+            >
+              Clear filters
+            </button>
+          </template>
+          <template v-else>
+            No community lists yet. Be the first — publish one of your own lists.
+          </template>
         </div>
 
         <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <button
+          <div
             v-for="list in discover.lists"
             :key="list.slug"
-            type="button"
-            class="text-left bg-surface border border-border-strong/60 rounded-xl p-5 hover:border-accent/60 hover:bg-surface-hover/40 transition-colors dark:inset-ring dark:inset-ring-white/5"
+            role="button"
+            tabindex="0"
+            class="text-left bg-surface border border-border-strong/60 rounded-xl p-5 hover:border-accent/60 hover:bg-surface-hover/40 transition-colors cursor-pointer dark:inset-ring dark:inset-ring-white/5 focus:outline-none focus:border-accent"
             @click="selectList(list.slug)"
+            @keydown.enter.prevent="selectList(list.slug)"
+            @keydown.space.prevent="selectList(list.slug)"
           >
             <div class="flex items-start justify-between gap-3 mb-2">
               <div class="flex items-center gap-2 min-w-0">
@@ -137,12 +229,29 @@ function formatDate(iso: string): string {
             <p v-if="list.description" class="text-sm text-muted line-clamp-3">
               {{ list.description }}
             </p>
-            <div class="flex items-center gap-3 mt-3 text-xs text-muted">
+            <div class="flex items-center gap-x-2 gap-y-1 mt-3 text-xs text-muted flex-wrap">
               <span>{{ list.item_count }} item{{ list.item_count === 1 ? '' : 's' }}</span>
               <span aria-hidden="true">·</span>
-              <span>by {{ list.owner_name }}</span>
+              <span>by</span>
+              <button
+                type="button"
+                :title="`Show lists by ${list.owner_name}`"
+                class="text-accent hover:underline truncate max-w-[10rem]"
+                @click.stop="filterByPublisher(list.owner_name)"
+                @keydown.enter.stop
+                @keydown.space.stop
+              >{{ list.owner_name }}</button>
+              <span aria-hidden="true">·</span>
+              <button
+                type="button"
+                :title="`Show lists in ${list.category}`"
+                class="text-accent hover:underline truncate max-w-[10rem]"
+                @click.stop="filterByCategory(list.category)"
+                @keydown.enter.stop
+                @keydown.space.stop
+              >{{ list.category }}</button>
             </div>
-          </button>
+          </div>
         </div>
       </div>
     </template>
@@ -242,5 +351,13 @@ function formatDate(iso: string): string {
         </template>
       </div>
     </template>
+
+    <ConfirmDialog
+      v-if="showUnpublishConfirm"
+      message="Remove this list from the community catalogue? Existing clones in other users' accounts are unaffected."
+      confirm-label="Unpublish"
+      @confirm="confirmUnpublish"
+      @cancel="showUnpublishConfirm = false"
+    />
   </div>
 </template>

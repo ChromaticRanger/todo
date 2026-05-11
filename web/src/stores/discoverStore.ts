@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { apiFetch } from '../lib/api'
+import type { ListCategory } from '../shared/listCategories'
 
 export interface SharedListMeta {
   id: number
@@ -8,6 +9,7 @@ export interface SharedListMeta {
   name: string
   description: string
   icon: string
+  category: ListCategory
   owner_user_id: string
   owner_name: string
   owner_is_system: boolean
@@ -37,6 +39,12 @@ export interface PublicationStatus {
   published: boolean
   slug?: string
   updated_at?: string
+  category?: ListCategory
+}
+
+export interface PublicationSummary {
+  slug: string
+  updated_at: string
 }
 
 export const useDiscoverStore = defineStore('discover', () => {
@@ -46,11 +54,55 @@ export const useDiscoverStore = defineStore('discover', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
 
+  const filterCategory = ref<ListCategory | null>(null)
+  const filterPublisher = ref('')
+
+  // Map of the caller's own listName → publication summary (only their published lists)
+  const publications = ref<Record<string, PublicationSummary>>({})
+
+  async function fetchPublications() {
+    try {
+      const res = await apiFetch('/api/shared/publications')
+      if (!res.ok) return
+      const data = (await res.json()) as {
+        publications: { list_name: string; slug: string; updated_at: string }[]
+      }
+      const next: Record<string, PublicationSummary> = {}
+      for (const p of data.publications) {
+        next[p.list_name] = { slug: p.slug, updated_at: p.updated_at }
+      }
+      publications.value = next
+    } catch {
+      // best-effort; leave previous state intact
+    }
+  }
+
+  function renamePublication(oldName: string, newName: string) {
+    const entry = publications.value[oldName]
+    if (!entry) return
+    const next = { ...publications.value }
+    delete next[oldName]
+    next[newName] = entry
+    publications.value = next
+  }
+
+  function clearPublication(listName: string) {
+    if (!(listName in publications.value)) return
+    const next = { ...publications.value }
+    delete next[listName]
+    publications.value = next
+  }
+
   async function fetchLists() {
     loading.value = true
     error.value = null
     try {
-      const res = await apiFetch('/api/shared/lists')
+      const params = new URLSearchParams()
+      if (filterCategory.value) params.set('category', filterCategory.value)
+      const pub = filterPublisher.value.trim()
+      if (pub) params.set('publisher', pub)
+      const qs = params.toString()
+      const res = await apiFetch(`/api/shared/lists${qs ? `?${qs}` : ''}`)
       if (!res.ok) {
         error.value = `Failed to load Discover (${res.status})`
         return
@@ -102,7 +154,7 @@ export const useDiscoverStore = defineStore('discover', () => {
 
   async function publish(
     listName: string,
-    meta: { name?: string; description?: string; icon?: string }
+    meta: { name?: string; description?: string; icon?: string; category?: ListCategory }
   ): Promise<{ slug: string; item_count: number; updated: boolean } | null> {
     try {
       const res = await apiFetch('/api/shared/publish', {
@@ -164,6 +216,7 @@ export const useDiscoverStore = defineStore('discover', () => {
     detail.value = null
     selectedSlug.value = null
     error.value = null
+    publications.value = {}
   }
 
   return {
@@ -172,12 +225,18 @@ export const useDiscoverStore = defineStore('discover', () => {
     selectedSlug,
     loading,
     error,
+    filterCategory,
+    filterPublisher,
+    publications,
     fetchLists,
     fetchDetail,
     clone,
     publish,
     unpublish,
     publicationStatus,
+    fetchPublications,
+    renamePublication,
+    clearPublication,
     selectSlug,
     reset,
   }

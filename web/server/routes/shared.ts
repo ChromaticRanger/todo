@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { pool, query } from '../db.js'
+import { isListCategory } from '../sharedCategories.js'
 
 const router = Router()
 
@@ -11,6 +12,7 @@ interface SharedListRow {
   name: string
   description: string
   icon: string
+  category: string
   owner_user_id: string
   original_list_name: string
   sort_order: number
@@ -62,6 +64,7 @@ function shapeListMeta(row: SharedListRow) {
     name: row.name,
     description: row.description,
     icon: row.icon,
+    category: row.category,
     owner_user_id: row.owner_user_id,
     owner_name: row.owner_name ?? 'Unknown',
     owner_is_system: row.owner_user_id === STASH_SQUIRREL_USER_ID,
@@ -71,20 +74,36 @@ function shapeListMeta(row: SharedListRow) {
   }
 }
 
-// GET /api/shared/lists — catalogue
+// GET /api/shared/lists — catalogue (optional ?category=X&publisher=Y filters)
 router.get('/lists', async (req, res) => {
   if (!ensurePro(req, res)) return
   try {
+    const params: unknown[] = []
+    const where: string[] = ['sl.is_published = TRUE']
+
+    const rawCategory = (req.query.category as string | undefined)?.trim()
+    if (rawCategory && isListCategory(rawCategory)) {
+      params.push(rawCategory)
+      where.push(`sl.category = $${params.length}`)
+    }
+
+    const rawPublisher = (req.query.publisher as string | undefined)?.trim()
+    if (rawPublisher) {
+      params.push(`%${rawPublisher}%`)
+      where.push(`u.name ILIKE $${params.length}`)
+    }
+
     const result = await query<SharedListRow>(
-      `SELECT sl.id, sl.slug, sl.name, sl.description, sl.icon,
+      `SELECT sl.id, sl.slug, sl.name, sl.description, sl.icon, sl.category,
               sl.owner_user_id, sl.original_list_name, sl.sort_order,
               sl.published_at, sl.updated_at,
               u.name AS owner_name,
               (SELECT COUNT(*) FROM shared_items si WHERE si.shared_list_id = sl.id) AS item_count
          FROM shared_lists sl
          LEFT JOIN "user" u ON u.id = sl.owner_user_id
-         WHERE sl.is_published = TRUE
-         ORDER BY sl.sort_order DESC, sl.published_at DESC`
+         WHERE ${where.join(' AND ')}
+         ORDER BY sl.sort_order DESC, sl.published_at DESC`,
+      params
     )
     res.json({ lists: result.rows.map(shapeListMeta) })
   } catch (err) {
@@ -98,7 +117,7 @@ router.get('/lists/:slug', async (req, res) => {
   if (!ensurePro(req, res)) return
   try {
     const meta = await query<SharedListRow>(
-      `SELECT sl.id, sl.slug, sl.name, sl.description, sl.icon,
+      `SELECT sl.id, sl.slug, sl.name, sl.description, sl.icon, sl.category,
               sl.owner_user_id, sl.original_list_name, sl.sort_order,
               sl.published_at, sl.updated_at,
               u.name AS owner_name,
@@ -254,6 +273,7 @@ interface PublishBody {
   name?: string
   description?: string
   icon?: string
+  category?: string
 }
 
 // POST /api/shared/publish — snapshot the user's list to the community catalogue
@@ -265,12 +285,13 @@ router.post('/publish', async (req, res) => {
     return
   }
 
-  const { listName, name, description, icon } = (req.body ?? {}) as PublishBody
+  const { listName, name, description, icon, category } = (req.body ?? {}) as PublishBody
   if (!listName || !listName.trim()) {
     res.status(400).json({ error: 'listName_required' })
     return
   }
   const trimmedListName = listName.trim()
+  const finalCategory = isListCategory(category) ? category : 'Other'
 
   const client = await pool.connect()
   try {
@@ -318,10 +339,10 @@ router.post('/publish', async (req, res) => {
       slug = existing.rows[0].slug
       await client.query(
         `UPDATE shared_lists
-            SET name = $1, description = $2, icon = $3,
+            SET name = $1, description = $2, icon = $3, category = $4,
                 is_published = TRUE, updated_at = NOW()
-          WHERE id = $4`,
-        [finalName, finalDescription, finalIcon, sharedListId]
+          WHERE id = $5`,
+        [finalName, finalDescription, finalIcon, finalCategory, sharedListId]
       )
       await client.query(`DELETE FROM shared_items WHERE shared_list_id = $1`, [sharedListId])
     } else {
@@ -339,10 +360,10 @@ router.post('/publish', async (req, res) => {
       }
       const insertResult = await client.query<{ id: number }>(
         `INSERT INTO shared_lists
-           (slug, name, description, icon, owner_user_id, original_list_name, sort_order)
-         VALUES ($1, $2, $3, $4, $5, $6, 0)
+           (slug, name, description, icon, category, owner_user_id, original_list_name, sort_order)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 0)
          RETURNING id`,
-        [slug, finalName, finalDescription, finalIcon, userId, trimmedListName]
+        [slug, finalName, finalDescription, finalIcon, finalCategory, userId, trimmedListName]
       )
       sharedListId = insertResult.rows[0].id
     }
@@ -399,6 +420,33 @@ router.delete('/lists/:slug', async (req, res) => {
   }
 })
 
+// GET /api/shared/publications — community copies of all the caller's lists
+router.get('/publications', async (req, res) => {
+  if (!ensurePro(req, res)) return
+  const userId = req.userId!
+  try {
+    const result = await query<{
+      original_list_name: string
+      slug: string
+      updated_at: Date | string
+    }>(
+      `SELECT original_list_name, slug, updated_at FROM shared_lists
+        WHERE owner_user_id = $1 AND is_published = TRUE`,
+      [userId]
+    )
+    res.json({
+      publications: result.rows.map((r) => ({
+        list_name: r.original_list_name,
+        slug: r.slug,
+        updated_at: typeof r.updated_at === 'string' ? r.updated_at : r.updated_at.toISOString(),
+      })),
+    })
+  } catch (err) {
+    console.error('[shared/publications] failed:', err)
+    res.status(500).json({ error: 'publications_lookup_failed' })
+  }
+})
+
 // GET /api/shared/publication-status?listName=X — does the caller have a community copy of this list?
 router.get('/publication-status', async (req, res) => {
   if (!ensurePro(req, res)) return
@@ -409,8 +457,8 @@ router.get('/publication-status', async (req, res) => {
     return
   }
   try {
-    const result = await query<{ slug: string; updated_at: Date | string }>(
-      `SELECT slug, updated_at FROM shared_lists
+    const result = await query<{ slug: string; updated_at: Date | string; category: string }>(
+      `SELECT slug, updated_at, category FROM shared_lists
         WHERE owner_user_id = $1 AND original_list_name = $2`,
       [userId, listName]
     )
@@ -422,6 +470,7 @@ router.get('/publication-status', async (req, res) => {
     res.json({
       published: true,
       slug: row.slug,
+      category: row.category,
       updated_at: typeof row.updated_at === 'string' ? row.updated_at : row.updated_at.toISOString(),
     })
   } catch (err) {

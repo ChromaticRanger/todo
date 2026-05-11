@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { useDiscoverStore, type PublicationStatus } from '../stores/discoverStore'
+import { LIST_CATEGORIES, type ListCategory } from '../shared/listCategories'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 // Curated palette covering the most common list themes. Users can still type
 // their own into the input — this is just the no-friction path.
@@ -31,13 +33,16 @@ const loadingStatus = ref(true)
 const name = ref(props.listName)
 const description = ref('')
 const icon = ref('')
+const category = ref<ListCategory>('Other')
 
 const submitting = ref(false)
 const submitError = ref('')
+const showUnpublishConfirm = ref(false)
 
 onMounted(async () => {
   loadingStatus.value = true
   status.value = await discover.publicationStatus(props.listName)
+  if (status.value.category) category.value = status.value.category
   loadingStatus.value = false
 })
 
@@ -49,6 +54,7 @@ async function submit() {
       name: name.value.trim() || undefined,
       description: description.value.trim() || undefined,
       icon: icon.value.trim() || undefined,
+      category: category.value,
     })
     if (!result) {
       submitError.value = discover.error || 'Publish failed'
@@ -60,9 +66,17 @@ async function submit() {
   }
 }
 
-async function unpublish() {
+function unpublish() {
   if (!status.value.slug) return
-  if (!confirm('Remove this list from the community catalogue? Existing clones in other users\' accounts are unaffected.')) return
+  showUnpublishConfirm.value = true
+}
+
+async function confirmUnpublish() {
+  if (!status.value.slug) {
+    showUnpublishConfirm.value = false
+    return
+  }
+  showUnpublishConfirm.value = false
   submitting.value = true
   try {
     const ok = await discover.unpublish(status.value.slug)
@@ -133,6 +147,17 @@ function formatDate(iso: string | undefined): string {
             class="w-full bg-surface border border-border-strong rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent resize-none"
             placeholder="What's this list for?"
           />
+        </label>
+        <label class="block">
+          <span class="block text-xs font-medium text-muted uppercase tracking-wider mb-1">
+            Category
+          </span>
+          <select
+            v-model="category"
+            class="w-full bg-surface border border-border-strong rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
+          >
+            <option v-for="c in LIST_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+          </select>
         </label>
         <div>
           <div class="flex items-baseline justify-between mb-1.5">
@@ -208,5 +233,13 @@ function formatDate(iso: string | undefined): string {
         </div>
       </form>
     </div>
+
+    <ConfirmDialog
+      v-if="showUnpublishConfirm"
+      message="Remove this list from the community catalogue? Existing clones in other users' accounts are unaffected."
+      confirm-label="Unpublish"
+      @confirm="confirmUnpublish"
+      @cancel="showUnpublishConfirm = false"
+    />
   </div>
 </template>

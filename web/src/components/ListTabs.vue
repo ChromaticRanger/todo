@@ -5,6 +5,7 @@ import { useListStore } from '../stores/listStore'
 import { usePlanStore } from '../stores/planStore'
 import { useTodoStore } from '../stores/todoStore'
 import { useAuthStore } from '../stores/authStore'
+import { useDiscoverStore } from '../stores/discoverStore'
 import ConfirmDialog from './ConfirmDialog.vue'
 import PublishListModal from './PublishListModal.vue'
 
@@ -12,6 +13,7 @@ const listStore = useListStore()
 const planStore = usePlanStore()
 const todoStore = useTodoStore()
 const authStore = useAuthStore()
+const discover = useDiscoverStore()
 const publishingList = ref<string | null>(null)
 const publishToast = ref('')
 
@@ -71,7 +73,9 @@ async function confirmRename() {
   const trimmed = editName.value.trim()
   if (!trimmed || !editingList.value) { editingList.value = null; return }
   if (trimmed !== editingList.value) {
-    await listStore.renameList(editingList.value, trimmed)
+    const oldName = editingList.value
+    await listStore.renameList(oldName, trimmed)
+    discover.renamePublication(oldName, trimmed)
   }
   editingList.value = null
 }
@@ -82,7 +86,9 @@ function cancelEdit() {
 
 async function deleteList() {
   if (!confirmDelete.value) return
-  await listStore.deleteList(confirmDelete.value)
+  const name = confirmDelete.value
+  await listStore.deleteList(name)
+  discover.clearPublication(name)
   confirmDelete.value = null
 }
 
@@ -116,7 +122,23 @@ onMounted(() => {
   scroller.value?.addEventListener('scroll', updateScrollState, { passive: true })
   ro = new ResizeObserver(updateScrollState)
   if (scroller.value) ro.observe(scroller.value)
+  if (authStore.tier === 'pro') void discover.fetchPublications()
 })
+
+function publishedTooltip(list: string): string {
+  const pub = discover.publications[list]
+  if (!pub) return ''
+  try {
+    const formatted = new Date(pub.updated_at).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+    return `Last published on ${formatted}`
+  } catch {
+    return `Last published on ${pub.updated_at}`
+  }
+}
 onUpdated(updateScrollState)
 onBeforeUnmount(() => {
   scroller.value?.removeEventListener('scroll', updateScrollState)
@@ -178,7 +200,15 @@ onBeforeUnmount(() => {
         @keydown.esc="cancelEdit"
         @blur="confirmRename"
       />
-      <span v-else>{{ list }}</span>
+      <template v-else>
+        <span
+          v-if="discover.publications[list]"
+          class="inline-block size-2 rounded-full bg-emerald-500 shrink-0"
+          aria-label="Published to community"
+          :title="publishedTooltip(list)"
+        />
+        <span>{{ list }}</span>
+      </template>
 
       <template v-if="editingList !== list">
         <!-- Edit / rename icon -->
@@ -289,8 +319,8 @@ onBeforeUnmount(() => {
     v-if="publishingList"
     :list-name="publishingList"
     @close="publishingList = null"
-    @published="(r) => { publishingList = null; showPublishToast(r.updated ? 'Community copy updated.' : 'List published to community.') }"
-    @unpublished="() => { publishingList = null; showPublishToast('Removed from community.') }"
+    @published="(r) => { publishingList = null; showPublishToast(r.updated ? 'Community copy updated.' : 'List published to community.'); void discover.fetchPublications() }"
+    @unpublished="() => { publishingList = null; showPublishToast('Removed from community.'); void discover.fetchPublications() }"
   />
 
   <div
