@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted, onUpdated } from 'vue'
 import draggable from 'vuedraggable'
 import type { Todo, TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
+import { describeRecurrence } from '../lib/recurrence'
 import { useListStore } from '../stores/listStore'
 import { apiFetch } from '../lib/api'
 import CategoryGroup from './CategoryGroup.vue'
@@ -174,6 +175,18 @@ function formatEventTime(epoch: number | null): string {
   })
 }
 
+function eventRecurrenceLabel(t: Todo): string {
+  if (t.type !== 'event') return ''
+  return describeRecurrence(t.repeat_days, t.repeat_months)
+}
+
+// Recurring event series expand to many virtual rows that share the series id,
+// so calendar/list views must key on (id, due_date) to avoid Vue collapsing
+// occurrences into a single DOM node.
+function eventRowKey(t: Todo): string {
+  return `${t.id}-${t.due_date ?? 0}`
+}
+
 async function handleDelete() {
   if (confirmDeleteId.value === null) return
   await store.deleteTodo(confirmDeleteId.value)
@@ -250,11 +263,12 @@ async function handleEventEditDelete() {
       <div class="flex flex-col gap-1.5">
         <button
           v-for="ev in store.eventsInView"
-          :key="ev.id"
+          :key="eventRowKey(ev)"
           class="text-left flex items-center gap-2 rounded-lg px-2 py-1.5 bg-accent/10 hover:bg-accent/20 border-l-4 border-accent transition-colors"
           @click="openEditEvent(ev)"
         >
           <span class="flex-1 truncate text-sm text-text">{{ ev.title }}</span>
+          <span v-if="eventRecurrenceLabel(ev)" class="text-[10px] text-accent/80 shrink-0" :title="eventRecurrenceLabel(ev)">↻ {{ eventRecurrenceLabel(ev) }}</span>
           <span class="text-xs text-muted shrink-0">{{ formatEventTime(ev.due_date) }}</span>
         </button>
       </div>
@@ -356,7 +370,7 @@ async function handleEventEditDelete() {
       <component
         :is="todo.type === 'event' ? 'button' : 'div'"
         v-for="todo in store.todos"
-        :key="todo.id"
+        :key="todo.type === 'event' ? eventRowKey(todo) : todo.id"
         :class="[
           'w-full text-left bg-surface border border-border-strong/60 rounded-xl p-4 group dark:inset-ring dark:inset-ring-white/5 dark:shadow-none',
           todo.type === 'event' ? 'border-l-4 border-l-accent hover:bg-surface-hover transition-colors' : '',
@@ -371,6 +385,9 @@ async function handleEventEditDelete() {
                 :class="todo.type === 'event' ? 'text-accent font-semibold' : 'text-muted'"
               >
                 {{ todo.type === 'event' ? 'Event' : todo.category }}
+              </span>
+              <span v-if="todo.type === 'event' && eventRecurrenceLabel(todo)" class="text-[11px] text-accent/80">
+                ↻ {{ eventRecurrenceLabel(todo) }}
               </span>
             </div>
             <p class="text-sm text-text" :class="todo.status === 1 ? 'line-through text-muted' : ''">

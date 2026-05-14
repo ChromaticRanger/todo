@@ -34,6 +34,7 @@ export interface Todo {
   type: ItemType
   url: string | null
   snoozed_until: number | null
+  recur_until: number | null
 }
 
 export interface TodoFormData {
@@ -46,4 +47,5 @@ export interface TodoFormData {
   repeat_months: number
   type: ItemType
   url: string | null
+  recur_until?: number | null
 }

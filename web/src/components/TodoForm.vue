@@ -40,6 +40,37 @@ const repeatValue = ref(
     : props.initial?.repeat_days ?? 0
 )
 
+// Events recur via a small preset list (Weekly / Monthly / Yearly) plus an
+// optional end date. The presets map to the same repeat_days / repeat_months
+// columns todos use, so a series is one row regardless of how many times it
+// will fire — the server expands occurrences on read.
+type EventRecur = 'none' | 'weekly' | 'monthly' | 'yearly'
+function inferEventRecur(rd: number, rm: number): EventRecur {
+  if (rd === 7 && rm === 0) return 'weekly'
+  if (rd === 0 && rm === 1) return 'monthly'
+  if (rd === 0 && rm === 12) return 'yearly'
+  return 'none'
+}
+function presetToRepeat(p: EventRecur): { days: number; months: number } {
+  if (p === 'weekly') return { days: 7, months: 0 }
+  if (p === 'monthly') return { days: 0, months: 1 }
+  if (p === 'yearly') return { days: 0, months: 12 }
+  return { days: 0, months: 0 }
+}
+const eventRepeat = ref<EventRecur>(
+  inferEventRecur(props.initial?.repeat_days ?? 0, props.initial?.repeat_months ?? 0)
+)
+
+function epochToDateStr(epoch: number): string {
+  return new Date(epoch * 1000).toISOString().split('T')[0]
+}
+function dateStrToEpoch(s: string): number {
+  return Math.floor(new Date(s + 'T00:00:00Z').getTime() / 1000)
+}
+const recurUntilStr = ref(
+  props.initial?.recur_until != null ? epochToDateStr(props.initial.recur_until) : ''
+)
+
 const isEdit = computed(() => !!props.initial)
 
 const formTitle = computed(() => {
@@ -83,8 +114,20 @@ function submit() {
     ? Math.floor(new Date(dueStr.value).getTime() / 1000)
     : null
 
-  const rd = type.value === 'todo' ? (repeatUnit.value === 'days' ? repeatValue.value : 0) : 0
-  const rm = type.value === 'todo' ? (repeatUnit.value === 'months' ? repeatValue.value : 0) : 0
+  let rd = 0
+  let rm = 0
+  let recurUntil: number | null = null
+  if (type.value === 'todo') {
+    rd = repeatUnit.value === 'days' ? repeatValue.value : 0
+    rm = repeatUnit.value === 'months' ? repeatValue.value : 0
+  } else if (type.value === 'event') {
+    const preset = presetToRepeat(eventRepeat.value)
+    rd = preset.days
+    rm = preset.months
+    if (eventRepeat.value !== 'none' && recurUntilStr.value) {
+      recurUntil = dateStrToEpoch(recurUntilStr.value)
+    }
+  }
 
   emit('submit', {
     title: title.value.trim(),
@@ -96,6 +139,7 @@ function submit() {
     repeat_months: rm,
     type: type.value,
     url: type.value === 'bookmark' ? url.value.trim() : null,
+    recur_until: type.value === 'event' ? recurUntil : null,
   })
 }
 
@@ -171,6 +215,32 @@ const priorityLabels = [
               v-model="dueStr"
               type="datetime-local"
               required
+              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+            />
+          </div>
+
+          <!-- Event-only: Recurrence -->
+          <div v-if="type === 'event'">
+            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Repeats</label>
+            <select
+              v-model="eventRepeat"
+              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+            >
+              <option value="none">Does not repeat</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+            </select>
+            <p v-if="isEdit && eventRepeat !== 'none'" class="text-xs text-muted mt-1">
+              Edits apply to the whole series.
+            </p>
+          </div>
+
+          <div v-if="type === 'event' && eventRepeat !== 'none'">
+            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Ends on (optional)</label>
+            <input
+              v-model="recurUntilStr"
+              type="date"
               class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
             />
           </div>

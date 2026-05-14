@@ -343,6 +343,7 @@ export const useTodoStore = defineStore('todos', () => {
       type: form.type,
       url: form.url,
       snoozed_until: null,
+      recur_until: null,
     }
 
     if (list === currentList.value) todos.value.push(newTodo)
