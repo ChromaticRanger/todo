@@ -1,19 +1,9 @@
 <script setup lang="ts">
 import BookmarkFavicon from './BookmarkFavicon.vue'
 import type { SharedItem } from '../stores/discoverStore'
+import { describeRecurrence } from '../lib/recurrence'
 
 defineProps<{ item: SharedItem }>()
-
-function describeRecurrence(days: number, months: number): string {
-  if (days === 1) return 'Daily'
-  if (days === 7) return 'Weekly'
-  if (days === 14) return 'Fortnightly'
-  if (days > 0) return `Every ${days} days`
-  if (months === 1) return 'Monthly'
-  if (months === 12) return 'Yearly'
-  if (months > 0) return `Every ${months} months`
-  return ''
-}
 </script>
 
 <template>

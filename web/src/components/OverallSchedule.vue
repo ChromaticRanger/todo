@@ -4,6 +4,7 @@ import type { Todo, TodoFormData } from '../types/todo'
 import { apiFetch } from '../lib/api'
 import { useTodoStore } from '../stores/todoStore'
 import { priorityBorderClass } from '../lib/priorityClass'
+import { describeRecurrence } from '../lib/recurrence'
 import TodoForm from './TodoForm.vue'
 
 const todoStore = useTodoStore()
@@ -244,6 +245,17 @@ function formatEventTime(epoch: number | null): string {
   })
 }
 
+function eventRecurrenceLabel(t: Todo): string {
+  if (t.type !== 'event') return ''
+  return describeRecurrence(t.repeat_days, t.repeat_months)
+}
+
+// Recurring events expand to multiple rows with the same series id; key the
+// list on (id, due_date) so Vue treats each occurrence as a distinct entry.
+function eventKey(t: Todo): string {
+  return `${t.id}-${t.due_date ?? 0}`
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     if (editing.value) return // TodoForm handles its own escape
@@ -318,9 +330,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
           <button
             v-for="t in chipsFor(cell.date).visible"
-            :key="t.id"
+            :key="t.type === 'event' ? eventKey(t) : t.id"
             class="text-left"
-            :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}` : `${t.list_name} : ${t.category}`"
+            :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
             @click="openEdit(t)"
           >
             <span :class="chipBaseClass(t)">
@@ -335,6 +347,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               </svg>
               <span v-else class="size-1.5 rounded-full shrink-0" :class="listColour(t.list_name)" />
               <span class="truncate flex-1">{{ t.title }}</span>
+              <span v-if="t.type === 'event' && eventRecurrenceLabel(t)" class="text-[10px] text-accent/80 shrink-0" aria-label="Recurring">↻</span>
             </span>
           </button>
 
@@ -357,9 +370,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
             </div>
             <button
               v-for="t in dayItems(cell.date)"
-              :key="t.id"
+              :key="t.type === 'event' ? eventKey(t) : t.id"
               class="block w-full text-left"
-              :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}` : `${t.list_name} : ${t.category}`"
+              :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
               @click="openEdit(t)"
             >
               <span :class="chipBaseClass(t)">
@@ -374,6 +387,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
                 </svg>
                 <span v-else class="size-1.5 rounded-full shrink-0" :class="listColour(t.list_name)" />
                 <span class="truncate flex-1">{{ t.title }}</span>
+                <span v-if="t.type === 'event' && eventRecurrenceLabel(t)" class="text-[10px] text-accent/80 shrink-0" aria-label="Recurring">↻</span>
               </span>
             </button>
           </div>
@@ -405,9 +419,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <div class="space-y-1.5">
           <button
             v-for="t in day.items"
-            :key="t.id"
+            :key="t.type === 'event' ? eventKey(t) : t.id"
             class="w-full text-left"
-            :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}` : `${t.list_name} : ${t.category}`"
+            :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
             @click="openEdit(t)"
           >
             <span :class="chipBaseClass(t)">
@@ -422,6 +436,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               </svg>
               <span v-else class="size-2 rounded-full shrink-0" :class="listColour(t.list_name)" />
               <span class="truncate flex-1">{{ t.title }}</span>
+              <span v-if="t.type === 'event' && eventRecurrenceLabel(t)" class="text-[10px] text-accent/80 shrink-0" aria-label="Recurring">↻</span>
               <span class="text-[10px] text-muted shrink-0">{{ t.type === 'event' ? formatEventTime(t.due_date) : t.list_name }}</span>
             </span>
           </button>
