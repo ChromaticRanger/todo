@@ -420,7 +420,7 @@ onMounted(async () => {
         class="text-muted underline-offset-2 transition-colors hover:text-text hover:underline"
         @click="openWebApp"
       >
-        Open dashboard
+        Open Stash
       </button>
       <button
         type="button"

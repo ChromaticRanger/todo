@@ -27,6 +27,10 @@
   --font-sans:           ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 
+:root {
+  color-scheme: light;
+}
+
 html, body {
   margin: 0;
   width: 360px;
@@ -35,4 +39,17 @@ html, body {
   background: var(--color-bg);
   color: var(--color-text);
   color-scheme: light;
+}
+
+/* Chrome's native <datalist> popup samples color-scheme from the input that
+ * owns it, not always from :root — pin it explicitly so the dropdown panel
+ * stays light even when the OS / browser theme is dark. */
+input, textarea, select {
+  color-scheme: light;
+}
+
+/* Hide Chrome's auto-added "show suggestions" chevron on <input list="…">
+ * fields — we render our own SVG chevron and don't want both. */
+input::-webkit-calendar-picker-indicator {
+  display: none !important;
 }
