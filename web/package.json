@@ -15,7 +15,9 @@
     "preview": "vite preview",
     "auth:migrate": "npx @better-auth/cli@latest migrate -y --config server/auth.ts",
     "db:migrate": "tsx server/scripts/run-migrations.ts",
-    "db:backfill-user": "tsx server/scripts/backfill-user.ts"
+    "db:backfill-user": "tsx server/scripts/backfill-user.ts",
+    "ext:dev": "npm --prefix extension run dev",
+    "ext:build": "npm --prefix extension run build"
   },
   "dependencies": {
     "@better-auth/stripe": "^1.6.5",

@@ -3,19 +3,32 @@ import { query } from '../db.js'
 
 const router = Router()
 
-// GET /api/categories?list=X
+// GET /api/categories?list=X — distinct categories for incomplete todos in
+// that list, unioned with any user-created empty categories for the list
+// (kept in app_settings.empty_categories so they survive a refresh).
 router.get('/', async (req, res) => {
   const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
   try {
-    const result = await query<{ category: string }>(
-      `SELECT DISTINCT category FROM todos
-       WHERE user_id = $1 AND list_name = $2 AND status = 0
-         AND type <> 'event'
-       ORDER BY category`,
-      [userId, list]
-    )
-    res.json({ categories: result.rows.map((r) => r.category) })
+    const [catsResult, emptyResult] = await Promise.all([
+      query<{ category: string }>(
+        `SELECT DISTINCT category FROM todos
+         WHERE user_id = $1 AND list_name = $2 AND status = 0
+           AND type <> 'event'`,
+        [userId, list]
+      ),
+      query<{ value: Record<string, string[]> }>(
+        `SELECT value FROM app_settings
+         WHERE user_id = $1 AND key = 'empty_categories'`,
+        [userId]
+      ),
+    ])
+    const real = catsResult.rows.map((r) => r.category)
+    const realSet = new Set(real)
+    const emptyForList = emptyResult.rows[0]?.value?.[list] ?? []
+    const stillEmpty = emptyForList.filter((c) => !realSet.has(c))
+    const all = [...real, ...stillEmpty].sort((a, b) => a.localeCompare(b))
+    res.json({ categories: all })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }

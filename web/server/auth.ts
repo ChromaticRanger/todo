@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import { betterAuth } from 'better-auth'
+import { bearer } from 'better-auth/plugins'
 import Stripe from 'stripe'
 import { stripe as stripePlugin } from '@better-auth/stripe'
 import { pool, query, seedUserDefaults } from './db.js'
@@ -99,37 +100,40 @@ export const auth = betterAuth({
     },
   },
   socialProviders,
-  plugins: stripeEnabled && stripeClient
-    ? [
-        stripePlugin({
-          stripeClient,
-          stripeWebhookSecret: STRIPE_WEBHOOK_SECRET!,
-          createCustomerOnSignUp: false,
-          subscription: {
-            enabled: true,
-            plans: [
-              {
-                name: 'pro',
-                priceId: STRIPE_PRICE_PRO_MONTHLY!,
-                annualDiscountPriceId: STRIPE_PRICE_PRO_YEARLY || undefined,
+  plugins: [
+    bearer(),
+    ...(stripeEnabled && stripeClient
+      ? [
+          stripePlugin({
+            stripeClient,
+            stripeWebhookSecret: STRIPE_WEBHOOK_SECRET!,
+            createCustomerOnSignUp: false,
+            subscription: {
+              enabled: true,
+              plans: [
+                {
+                  name: 'pro',
+                  priceId: STRIPE_PRICE_PRO_MONTHLY!,
+                  annualDiscountPriceId: STRIPE_PRICE_PRO_YEARLY || undefined,
+                },
+              ],
+              onSubscriptionComplete: async ({ subscription }) => {
+                await query('UPDATE "user" SET tier = $1 WHERE id = $2', [
+                  'pro',
+                  subscription.referenceId,
+                ])
               },
-            ],
-            onSubscriptionComplete: async ({ subscription }) => {
-              await query('UPDATE "user" SET tier = $1 WHERE id = $2', [
-                'pro',
-                subscription.referenceId,
-              ])
+              onSubscriptionDeleted: async ({ subscription }) => {
+                await query('UPDATE "user" SET tier = $1 WHERE id = $2', [
+                  'free',
+                  subscription.referenceId,
+                ])
+              },
             },
-            onSubscriptionDeleted: async ({ subscription }) => {
-              await query('UPDATE "user" SET tier = $1 WHERE id = $2', [
-                'free',
-                subscription.referenceId,
-              ])
-            },
-          },
-        }),
-      ]
-    : [],
+          }),
+        ]
+      : []),
+  ],
   trustedOrigins: [
     'http://localhost:5173',
     'http://localhost:3001',
