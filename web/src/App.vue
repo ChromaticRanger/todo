@@ -23,6 +23,7 @@ import TodoForm from './components/TodoForm.vue'
 import CategoryDialog from './components/CategoryDialog.vue'
 import LoginPage from './components/LoginPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
+import ConnectExtension from './components/ConnectExtension.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
 import SearchModal from './components/SearchModal.vue'
 import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
@@ -39,6 +40,13 @@ const searchStore = useSearchStore()
 const discoverStore = useDiscoverStore()
 
 const highlightItemId = ref<number | null>(null)
+
+// Path-based branch for the browser-extension connect flow. No router today,
+// and this page is opened only by the extension, so reading location once on
+// mount is enough — no need to react to pushState.
+const isConnectFlow = ref(
+  typeof window !== 'undefined' && window.location.pathname === '/connect-extension'
+)
 
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
@@ -206,7 +214,11 @@ async function loadData() {
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   apiEvents.addEventListener('rate-limited', handleRateLimit)
-  if (authStore.isAuthenticated && !authStore.needsPlanChoice) {
+  if (
+    authStore.isAuthenticated &&
+    !authStore.needsPlanChoice &&
+    !isConnectFlow.value
+  ) {
     await loadData()
     await settingsStore.loadFromServer()
     await listPrefsStore.loadFromServer()
@@ -290,6 +302,7 @@ function onTourSkip() {
 <template>
   <LoginPage v-if="!authStore.isAuthenticated" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />
+  <ConnectExtension v-else-if="isConnectFlow" />
   <div v-else class="min-h-dvh bg-bg text-text flex flex-col isolate">
     <AppHeader
       :calendar-active="mode === 'calendar'"

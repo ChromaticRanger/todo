@@ -13,6 +13,7 @@ import planRouter from './routes/plan.js'
 import searchRouter from './routes/search.js'
 import importRouter from './routes/import.js'
 import sharedRouter from './routes/shared.js'
+import extensionRouter from './routes/extension.js'
 import { authMiddleware } from './middleware/auth.js'
 import { requirePlan } from './middleware/requirePlan.js'
 import { rateLimit } from './middleware/rateLimit.js'
@@ -45,6 +46,10 @@ app.use('/api', authMiddleware)
 // Plan selection lives outside requirePlan — a tier-less user must be able
 // to reach /api/plan/select-free on first login.
 app.use('/api/plan', planRouter)
+
+// Extension token mint/revoke also bypasses requirePlan so the connect flow
+// doesn't break for a user who hasn't picked a plan yet.
+app.use('/api/extension', extensionRouter)
 
 // Everything below requires the user to have chosen a plan.
 app.use('/api', requirePlan)

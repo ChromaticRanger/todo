@@ -4,6 +4,10 @@ import { apiFetch } from '../lib/api'
 
 export const useListStore = defineStore('lists', () => {
   const lists = ref<string[]>([])
+  // Lists with no todos yet — server can't materialize them via DISTINCT, so
+  // we keep them in app_settings.empty_lists and union them in on fetch.
+  // Entries self-clean once the list gets a real item.
+  const emptyLists = ref<string[]>([])
   const activeList = ref<string>('todos')
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -21,10 +25,11 @@ export const useListStore = defineStore('lists', () => {
     loading.value = true
     error.value = null
     try {
-      const [listsRes, orderRes, activeRes] = await Promise.all([
+      const [listsRes, orderRes, activeRes, emptyRes] = await Promise.all([
         apiFetch('/api/lists'),
         apiFetch('/api/settings/list-order'),
         apiFetch('/api/settings/active-list'),
+        apiFetch('/api/settings/empty-lists'),
       ])
       if (!listsRes.ok) return
       const { lists: fetched } = await listsRes.json() as { lists: string[] }
@@ -34,7 +39,24 @@ export const useListStore = defineStore('lists', () => {
       const savedActive = activeRes.ok
         ? ((await activeRes.json()) as { activeList: string | null }).activeList
         : null
-      lists.value = applyOrder(fetched, savedOrder)
+      const savedEmpty = emptyRes.ok
+        ? ((await emptyRes.json()) as { empty: string[] }).empty
+        : []
+
+      // Any name in saved-empty that now has todos on the server should be
+      // pruned — the empty-lists set is only for lists with no real items.
+      const fetchedSet = new Set(fetched)
+      const pruned = savedEmpty.filter((n) => !fetchedSet.has(n))
+      emptyLists.value = pruned
+      if (pruned.length !== savedEmpty.length) {
+        void persistEmptyLists()
+      }
+
+      // Merge: real lists + still-empty lists, then apply saved order.
+      const seen = new Set(fetched)
+      const combined = [...fetched, ...pruned.filter((n) => !seen.has(n))]
+      lists.value = applyOrder(combined, savedOrder)
+
       if (savedActive && lists.value.includes(savedActive)) {
         activeList.value = savedActive
       } else if (lists.value.length > 0 && !lists.value.includes(activeList.value)) {
@@ -44,6 +66,18 @@ export const useListStore = defineStore('lists', () => {
       error.value = String(e)
     } finally {
       loading.value = false
+    }
+  }
+
+  async function persistEmptyLists() {
+    try {
+      await apiFetch('/api/settings/empty-lists', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ empty: emptyLists.value }),
+      })
+    } catch (e) {
+      error.value = String(e)
     }
   }
 
@@ -97,6 +131,11 @@ export const useListStore = defineStore('lists', () => {
         activeList.value = newName
         void saveActiveList()
       }
+      const emptyIdx = emptyLists.value.indexOf(oldName)
+      if (emptyIdx !== -1) {
+        emptyLists.value[emptyIdx] = newName
+        void persistEmptyLists()
+      }
       await saveOrder()
     } catch (e) {
       error.value = String(e)
@@ -107,6 +146,10 @@ export const useListStore = defineStore('lists', () => {
     try {
       await apiFetch(`/api/lists/${encodeURIComponent(name)}`, { method: 'DELETE' })
       lists.value = lists.value.filter((l) => l !== name)
+      if (emptyLists.value.includes(name)) {
+        emptyLists.value = emptyLists.value.filter((l) => l !== name)
+        void persistEmptyLists()
+      }
       if (activeList.value === name) {
         activeList.value = lists.value[0] ?? 'todos'
         void saveActiveList()
@@ -117,18 +160,24 @@ export const useListStore = defineStore('lists', () => {
     }
   }
 
-  // Creates a list by adding a placeholder todo then deleting it, but in practice
-  // we rely on the server creating the list when a todo is added to it.
-  // Just update the local list for immediate UI feedback.
+  // Server can't create a list without a todo (lists are derived from
+  // DISTINCT list_name), so we add the name to lists for immediate UI
+  // feedback AND persist it in app_settings.empty_lists so it survives a
+  // refresh. fetchLists prunes the entry once the list has real items.
   function addListLocally(name: string) {
     if (!lists.value.includes(name)) {
       lists.value.push(name)
       void saveOrder()
     }
+    if (!emptyLists.value.includes(name)) {
+      emptyLists.value.push(name)
+      void persistEmptyLists()
+    }
   }
 
   function reset() {
     lists.value = []
+    emptyLists.value = []
     activeList.value = 'todos'
     error.value = null
   }

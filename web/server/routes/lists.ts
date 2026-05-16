@@ -3,17 +3,31 @@ import { query } from '../db.js'
 
 const router = Router()
 
-// GET /api/lists — all distinct list names for this user
+// GET /api/lists — all distinct list names for this user, unioned with any
+// user-created empty lists (which app_settings.empty_lists tracks so they
+// survive a refresh even though no todo references them yet).
 router.get('/', async (req, res) => {
   const userId = req.userId!
   try {
-    const result = await query<{ list_name: string }>(
-      `SELECT DISTINCT list_name FROM todos
-       WHERE user_id = $1 AND type <> 'event'
-       ORDER BY list_name`,
-      [userId]
+    const [listsResult, emptyResult] = await Promise.all([
+      query<{ list_name: string }>(
+        `SELECT DISTINCT list_name FROM todos
+         WHERE user_id = $1 AND type <> 'event'`,
+        [userId]
+      ),
+      query<{ value: string[] }>(
+        `SELECT value FROM app_settings
+         WHERE user_id = $1 AND key = 'empty_lists'`,
+        [userId]
+      ),
+    ])
+    const real = listsResult.rows.map((r) => r.list_name)
+    const realSet = new Set(real)
+    const stillEmpty = (emptyResult.rows[0]?.value ?? []).filter(
+      (n) => !realSet.has(n)
     )
-    res.json({ lists: result.rows.map((r) => r.list_name) })
+    const all = [...real, ...stillEmpty].sort((a, b) => a.localeCompare(b))
+    res.json({ lists: all })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }

@@ -309,6 +309,46 @@ router.put('/category-prefs', async (req, res) => {
   }
 })
 
+// GET /api/settings/empty-lists
+// Lists exist server-side as DISTINCT list_name FROM todos, so a list with no
+// todos has no first-class identity. We persist user-created empty lists here
+// and union them in client-side on fetchLists so the UI doesn't lose them
+// across refreshes. Cleared once the list gets a real item.
+router.get('/empty-lists', async (req, res) => {
+  const userId = req.userId!
+  try {
+    const result = await query<{ value: string[] }>(
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'empty_lists'`,
+      [userId]
+    )
+    res.json({ empty: result.rows[0]?.value ?? [] })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/settings/empty-lists
+router.put('/empty-lists', async (req, res) => {
+  const userId = req.userId!
+  const { empty } = req.body as { empty?: unknown }
+
+  if (!Array.isArray(empty) || !empty.every((v) => typeof v === 'string')) {
+    return res.status(400).json({ error: 'empty must be a string array' })
+  }
+
+  try {
+    await query(
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'empty_lists', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify(empty)]
+    )
+    res.json({ empty })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/settings/empty-categories
 router.get('/empty-categories', async (req, res) => {
   const userId = req.userId!
