@@ -2,18 +2,18 @@ import { defineManifest } from '@crxjs/vite-plugin'
 
 // Branch on Vite mode so the dev build also activates on the local Vite dev
 // server (http://localhost:5173) and lets the popup hit the local API server
-// on :3001. Production builds only know about https://stashsquirrel.com.
+// on :3001. Production builds only know about https://stash-squirrel.com.
 export default defineManifest(({ mode }) => {
   const isDev = mode !== 'production'
 
-  const prodHosts = ['https://stashsquirrel.com/*']
+  const prodHosts = ['https://stash-squirrel.com/*']
   const devHosts = [
     'http://localhost:5173/*',
     'http://localhost:3001/*',
     'http://localhost:5174/*', // crxjs/Vite HMR endpoint
   ]
 
-  const prodConnect = ['https://stashsquirrel.com/connect-extension*']
+  const prodConnect = ['https://stash-squirrel.com/connect-extension*']
   const devConnect = ['http://localhost:5173/connect-extension*']
 
   return {

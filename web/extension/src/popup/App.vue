@@ -36,7 +36,7 @@ const noPlan = computed(() =>
   status.value === 'error' && /no[_\s-]?plan/i.test(errorMessage.value)
 )
 
-// "stashsquirrel.com/foo" rather than the full https://… for the preview card.
+// "stash-squirrel.com/foo" rather than the full https://… for the preview card.
 const tabHost = computed(() => {
   try {
     return tabUrl.value ? new URL(tabUrl.value).host : ''
@@ -186,11 +186,14 @@ const isConnected = computed(
 
 const showForm = computed(
   () =>
+    status.value === 'loading' ||
     status.value === 'ready' ||
     status.value === 'saving' ||
     status.value === 'saved' ||
     (status.value === 'error' && !noPlan.value)
 )
+
+const isLoadingLists = computed(() => status.value === 'loading')
 
 onMounted(async () => {
   await Promise.all([readActiveTab(), loadLastUsed()])
@@ -228,7 +231,7 @@ onMounted(async () => {
       <!-- Disconnected: brand-forward connect prompt -->
       <div v-else-if="status === 'disconnected'" class="flex flex-col items-center gap-4 py-4 text-center">
         <p class="text-sm text-text text-balance">
-          Sign in once at <span class="font-medium">stashsquirrel.com</span> to link this extension to your account.
+          Sign in once at <span class="font-medium">stash-squirrel.com</span> to link this extension to your account.
         </p>
         <button
           type="button"
@@ -237,12 +240,6 @@ onMounted(async () => {
         >
           Connect to Stash Squirrel
         </button>
-      </div>
-
-      <!-- Loading lists -->
-      <div v-else-if="status === 'loading'" class="flex items-center gap-2 py-2 text-sm text-muted">
-        <span class="inline-block size-2 animate-pulse rounded-full bg-accent" />
-        Loading your lists…
       </div>
 
       <!-- Form -->
@@ -292,13 +289,20 @@ onMounted(async () => {
                 list="ext-lists"
                 name="list"
                 type="text"
-                class="w-full rounded-md bg-bg pl-2.5 pr-7 py-2 text-sm text-text ring-1 ring-black/10 outline-none transition focus:ring-2 focus:ring-accent -outline-offset-1"
-                placeholder="Choose or add"
+                class="w-full rounded-md bg-bg pl-2.5 pr-7 py-2 text-sm text-text ring-1 ring-black/10 outline-none transition focus:ring-2 focus:ring-accent -outline-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                :placeholder="isLoadingLists ? 'Loading lists…' : 'Choose or add'"
                 required
+                :disabled="isLoadingLists"
                 @focus="onListFocus"
                 @blur="onListBlur"
               />
+              <span
+                v-if="isLoadingLists"
+                class="pointer-events-none absolute right-2.5 top-1/2 size-3 -translate-y-1/2 animate-spin rounded-full border-2 border-muted/30 border-t-accent"
+                aria-hidden="true"
+              />
               <svg
+                v-else
                 viewBox="0 0 8 5"
                 width="8"
                 height="5"
@@ -324,12 +328,19 @@ onMounted(async () => {
                 list="ext-categories"
                 name="category"
                 type="text"
-                class="w-full rounded-md bg-bg pl-2.5 pr-7 py-2 text-sm text-text ring-1 ring-black/10 outline-none transition focus:ring-2 focus:ring-accent -outline-offset-1"
-                placeholder="Optional"
+                class="w-full rounded-md bg-bg pl-2.5 pr-7 py-2 text-sm text-text ring-1 ring-black/10 outline-none transition focus:ring-2 focus:ring-accent -outline-offset-1 disabled:cursor-not-allowed disabled:opacity-60"
+                :placeholder="isLoadingLists ? 'Loading…' : 'Optional'"
+                :disabled="isLoadingLists"
                 @focus="onCategoryFocus"
                 @blur="onCategoryBlur"
               />
+              <span
+                v-if="isLoadingLists"
+                class="pointer-events-none absolute right-2.5 top-1/2 size-3 -translate-y-1/2 animate-spin rounded-full border-2 border-muted/30 border-t-accent"
+                aria-hidden="true"
+              />
               <svg
+                v-else
                 viewBox="0 0 8 5"
                 width="8"
                 height="5"
@@ -379,7 +390,7 @@ onMounted(async () => {
         <button
           type="submit"
           class="relative w-full rounded-lg bg-accent px-3 py-2 text-sm font-medium text-[var(--color-accent-fg)] shadow-sm shadow-black/5 transition-colors hover:bg-accent-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-60"
-          :disabled="status === 'saving' || status === 'saved'"
+          :disabled="isLoadingLists || status === 'saving' || status === 'saved'"
         >
           {{ status === 'saving' ? 'Saving…' : status === 'saved' ? 'Saved' : 'Save bookmark' }}
         </button>
@@ -388,7 +399,7 @@ onMounted(async () => {
       <!-- Plan-less user (no plan picked yet) -->
       <div v-else-if="status === 'error' && noPlan" class="space-y-3">
         <div class="rounded-md bg-[var(--color-danger-bg)] px-2.5 py-2 text-xs text-[var(--color-danger-fg)] ring-1 ring-[var(--color-danger)]/15">
-          Finish setting up your account on stashsquirrel.com before saving from the extension.
+          Finish setting up your account on stash-squirrel.com before saving from the extension.
         </div>
         <button
           type="button"

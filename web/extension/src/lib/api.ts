@@ -8,10 +8,15 @@ export class NotConnectedError extends Error {
 }
 
 export class ApiError extends Error {
-  constructor(public status: number, public body: unknown) {
+  status: number
+  body: unknown
+
+  constructor(status: number, body: unknown) {
     super(typeof body === 'object' && body && 'error' in body
       ? String((body as { error: unknown }).error)
       : `HTTP ${status}`)
+    this.status = status
+    this.body = body
   }
 }
 

@@ -39,13 +39,13 @@ standard pattern (Pocket, Raindrop, Notion Web Clipper).
 ### Connect flow
 
 1. Popup (when not yet connected) shows **"Connect to Stash Squirrel"**.
-2. Click → `chrome.tabs.create({ url: 'https://stashsquirrel.com/connect-extension?ext=<extensionId>' })`.
+2. Click → `chrome.tabs.create({ url: 'https://stash-squirrel.com/connect-extension?ext=<extensionId>' })`.
 3. `/connect-extension` is a normal app route. If not logged in, the app's
    existing auth UI handles it (Google / GitHub / password — nothing new).
 4. Once authenticated, the page calls a new endpoint that mints an API token for
    the current user (see below), shows a "You're connected — you can close this
    tab" confirmation.
-5. A **content script** declared for `https://stashsquirrel.com/connect-extension*`
+5. A **content script** declared for `https://stash-squirrel.com/connect-extension*`
    reads the token the page exposes (e.g. via `window.postMessage` or a
    `data-` attribute the page writes) and forwards it with
    `chrome.runtime.sendMessage`. The background service worker stores it in
@@ -101,7 +101,7 @@ behaviour doesn't fit; Option B is more code but fully under our control.
   credentialed CORS for the extension; can stay as-is.
 - **`requirePlan`** returns `402 { error: 'no_plan' }` for a user who never
   picked a plan. An extension-only user could hit this — the popup must catch it
-  and say "Finish setup at stashsquirrel.com" with a link. (A brand-new user
+  and say "Finish setup at stash-squirrel.com" with a link. (A brand-new user
   realistically signs up in the web app first, but handle it.)
 - **Tier limits**: `POST /api/todos` enforces `LIMITS` (max lists / items for
   free tier). The popup must surface those 4xx errors clearly ("List limit
@@ -176,9 +176,9 @@ config where practical.
   "action": { "default_popup": "src/popup/index.html" },
   "background": { "service_worker": "src/background/index.ts", "type": "module" },
   "permissions": ["activeTab", "storage", "scripting"],
-  "host_permissions": ["https://stashsquirrel.com/*"],
+  "host_permissions": ["https://stash-squirrel.com/*"],
   "content_scripts": [
-    { "matches": ["https://stashsquirrel.com/connect-extension*"], "js": ["src/content/connect.ts"] }
+    { "matches": ["https://stash-squirrel.com/connect-extension*"], "js": ["src/content/connect.ts"] }
   ]
 }
 ```
@@ -234,6 +234,6 @@ State machine:
 - Token lifetime: long-lived bearer token (revocable) vs. short token + refresh.
   Long-lived + revoke list is simpler and fine for v1.
 - Domain: confirm production origin to bake into `host_permissions` and the
-  connect URL (assumed `https://stashsquirrel.com`).
+  connect URL (assumed `https://stash-squirrel.com`).
 - Do we want the extension in this monorepo (shared types, one place) or its own
   repo (independent release cadence, smaller checkout)? Plan assumes monorepo.
