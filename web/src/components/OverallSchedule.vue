@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { Todo, TodoFormData } from '../types/todo'
 import { apiFetch } from '../lib/api'
 import { useTodoStore } from '../stores/todoStore'
@@ -158,11 +158,36 @@ function chipsFor(date: Date): { visible: Todo[]; overflow: number } {
   }
 }
 
-function openOverflow(date: Date) {
+const overflowRect = ref<{ top: number; left: number; width: number } | null>(null)
+
+function updateOverflowRect(cellEl: HTMLElement | null) {
+  if (!cellEl) {
+    overflowRect.value = null
+    return
+  }
+  const r = cellEl.getBoundingClientRect()
+  // Anchor under the date number (matches the prior top-7 / left-1 / right-1).
+  overflowRect.value = {
+    top: r.top + 28,
+    left: r.left + 4,
+    width: Math.max(0, r.width - 8),
+  }
+}
+
+function openOverflow(date: Date, ev: MouseEvent) {
   openDayKey.value = localDayKey(date)
+  const cell = (ev.currentTarget as HTMLElement | null)?.closest('[data-day-cell]') as HTMLElement | null
+  updateOverflowRect(cell)
 }
 function closeOverflow() {
   openDayKey.value = null
+  overflowRect.value = null
+}
+
+function onReposition() {
+  if (!openDayKey.value) return
+  const cell = document.querySelector<HTMLElement>(`[data-day-cell="${openDayKey.value}"]`)
+  updateOverflowRect(cell)
 }
 
 async function openEdit(todo: Todo) {
@@ -262,8 +287,19 @@ function onKeydown(e: KeyboardEvent) {
     if (openDayKey.value) closeOverflow()
   }
 }
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onUnmounted(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('resize', onReposition)
+  window.addEventListener('scroll', onReposition, true)
+})
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', onReposition)
+  window.removeEventListener('scroll', onReposition, true)
+})
+
+// Recompute on month change in case the popover was open during a re-render.
+watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
 </script>
 
 <template>
@@ -313,6 +349,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <div
           v-for="cell in grid"
           :key="cell.date.toISOString()"
+          :data-day-cell="localDayKey(cell.date)"
           class="relative bg-bg min-h-24 p-1.5 flex flex-col gap-1 overflow-hidden"
           :class="[!cell.inMonth ? 'bg-surface/30' : '']"
         >
@@ -354,15 +391,17 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           <button
             v-if="chipsFor(cell.date).overflow > 0"
             class="text-left text-xs text-muted hover:text-text px-1.5"
-            @click="openOverflow(cell.date)"
+            @click="openOverflow(cell.date, $event)"
           >
             +{{ chipsFor(cell.date).overflow }} more
           </button>
 
-          <!-- Per-day popover -->
+          <!-- Per-day popover (teleported to body so it isn't clipped by the cell/grid `overflow-hidden`) -->
+          <Teleport to="body">
           <div
-            v-if="openDayKey === localDayKey(cell.date)"
-            class="absolute z-30 top-7 left-1 right-1 max-h-72 overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg p-2 space-y-1"
+            v-if="openDayKey === localDayKey(cell.date) && overflowRect"
+            class="fixed z-50 max-h-72 overflow-y-auto rounded-lg border border-border-strong bg-surface shadow-lg p-2 space-y-1"
+            :style="{ top: overflowRect.top + 'px', left: overflowRect.left + 'px', width: overflowRect.width + 'px' }"
             @click.stop
           >
             <div class="text-xs text-muted px-1 pb-1 border-b border-border mb-1">
@@ -391,6 +430,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               </span>
             </button>
           </div>
+          </Teleport>
         </div>
       </div>
 
