@@ -56,6 +56,10 @@ if (!stripeEnabled) {
 
 const stripeClient = stripeEnabled ? new Stripe(STRIPE_SECRET_KEY!) : null
 
+// Exposed so account-deletion can cancel subscriptions directly via the SDK.
+// null when Stripe env vars are unset (dev without billing).
+export const stripe = stripeClient
+
 export const auth = betterAuth({
   appName: 'Stash Squirrel',
   database: pool,

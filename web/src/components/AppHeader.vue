@@ -5,7 +5,6 @@ import { useTodoStore } from '../stores/todoStore'
 import { useListStore } from '../stores/listStore'
 import { usePlanStore } from '../stores/planStore'
 import { useSettingsStore } from '../stores/settingsStore'
-import { authClient } from '../lib/auth-client'
 import ThemePicker from './ThemePicker.vue'
 import type { ItemType } from '../types/todo'
 
@@ -27,14 +26,6 @@ const listStore = useListStore()
 const planStore = usePlanStore()
 const settingsStore = useSettingsStore()
 const showTypeMenu = ref(false)
-const showBillingMenu = ref(false)
-const billingBusy = ref(false)
-const billingError = ref('')
-
-function flashBillingError(msg: string) {
-  billingError.value = msg
-  setTimeout(() => (billingError.value = ''), 6000)
-}
 
 async function loadPlanStatus() {
   if (!authStore.isAuthenticated || authStore.needsPlanChoice) return
@@ -104,58 +95,6 @@ function openAdd(type: ItemType) {
   emit('add', type)
 }
 
-async function openBillingPortal() {
-  showBillingMenu.value = false
-  billingBusy.value = true
-  try {
-    const client = authClient as unknown as {
-      subscription: {
-        billingPortal: (args: { returnUrl: string }) => Promise<{
-          data?: { url?: string } | null
-          error?: { message?: string } | null
-        }>
-      }
-    }
-    const { data, error } = await client.subscription.billingPortal({
-      returnUrl: window.location.origin,
-    })
-    if (error) {
-      console.error('[billing] portal error:', error)
-      flashBillingError(
-        error.message ||
-          "Couldn't open the billing portal. If this is a grandfathered account, there's no Stripe subscription yet."
-      )
-      return
-    }
-    if (data?.url) window.location.href = data.url
-    else flashBillingError("Stripe didn't return a portal URL.")
-  } catch (e) {
-    flashBillingError(String(e))
-  } finally {
-    billingBusy.value = false
-  }
-}
-
-async function upgradeTo(annual: boolean) {
-  showBillingMenu.value = false
-  billingBusy.value = true
-  try {
-    const { error } = await authClient.subscription.upgrade({
-      plan: 'pro',
-      annual,
-      successUrl: `${window.location.origin}/?billing=success`,
-      cancelUrl: `${window.location.origin}/?billing=cancel`,
-    })
-    if (error) {
-      console.error('[billing] upgrade error:', error)
-      flashBillingError(error.message || "Couldn't start checkout.")
-    }
-  } catch (e) {
-    flashBillingError(String(e))
-  } finally {
-    billingBusy.value = false
-  }
-}
 </script>
 
 <template>
@@ -322,51 +261,6 @@ async function upgradeTo(annual: boolean) {
         </svg>
       </button>
 
-      <!-- Billing -->
-      <div v-if="authStore.tier" class="relative">
-        <button
-          type="button"
-          :disabled="billingBusy"
-          class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover text-sm transition-colors disabled:opacity-50"
-          :title="authStore.tier === 'pro' ? 'Manage subscription' : 'Upgrade to Pro'"
-          @click="authStore.tier === 'pro' ? openBillingPortal() : (showBillingMenu = !showBillingMenu)"
-        >
-          <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z" />
-          </svg>
-          <span class="max-md:hidden">{{ authStore.tier === 'pro' ? 'Billing' : 'Upgrade' }}</span>
-        </button>
-
-        <div
-          v-if="showBillingMenu && authStore.tier === 'free'"
-          class="absolute right-0 top-full mt-1 z-20 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-56"
-        >
-          <button
-            class="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
-            @click="upgradeTo(false)"
-          >
-            <div class="font-medium">Pro · Monthly</div>
-            <div class="text-xs text-muted">£6 / month</div>
-          </button>
-          <button
-            class="w-full text-left px-3 py-2 text-sm text-text hover:bg-surface-hover"
-            @click="upgradeTo(true)"
-          >
-            <div class="font-medium flex items-center gap-2">
-              Pro · Yearly
-              <span class="rounded-full bg-accent/15 text-accent text-[10px] font-semibold px-1.5 py-0.5">Save ~17%</span>
-            </div>
-            <div class="text-xs text-muted">£60 / year</div>
-          </button>
-        </div>
-
-        <div
-          v-if="showBillingMenu"
-          class="fixed inset-0 z-10"
-          @click="showBillingMenu = false"
-        />
-      </div>
-
       <!-- Current user -->
       <div
         v-if="authStore.user"
@@ -400,17 +294,16 @@ async function upgradeTo(annual: boolean) {
         </span>
       </div>
 
-      <button
-        type="button"
+      <a
+        href="/account"
         class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover text-sm transition-colors"
-        @click="authStore.logout()"
-        title="Sign out"
+        title="Account settings"
       >
         <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
         </svg>
-        Sign out
-      </button>
+        Account
+      </a>
     </div>
   </header>
 
@@ -424,27 +317,12 @@ async function upgradeTo(annual: boolean) {
     ]"
   >
     <span>{{ capStatus.message }}</span>
-    <button
-      type="button"
+    <a
+      href="/account"
       class="shrink-0 rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg hover:bg-accent-hover transition-colors"
-      @click="upgradeTo(false)"
     >
       Upgrade
-    </button>
-  </div>
-
-  <div
-    v-if="billingError"
-    class="bg-danger-bg border-b border-danger/60 px-4 py-2 text-sm text-danger-fg flex items-center justify-between gap-3"
-  >
-    <span>{{ billingError }}</span>
-    <button
-      type="button"
-      class="shrink-0 text-xs text-danger-fg/80 hover:text-danger-fg"
-      @click="billingError = ''"
-    >
-      Dismiss
-    </button>
+    </a>
   </div>
   </div>
 </template>
