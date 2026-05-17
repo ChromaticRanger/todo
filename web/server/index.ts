@@ -74,6 +74,10 @@ if (isProd) {
 
   app.use(express.static(distPath))
 
+  app.get('/privacy', (_req, res) => {
+    res.sendFile(path.join(distPath, 'privacy.html'))
+  })
+
   app.get(/.*/, (req, res) => {
     if (path.extname(req.path)) return res.status(404).end()
     res.setHeader('Cache-Control', 'no-cache')

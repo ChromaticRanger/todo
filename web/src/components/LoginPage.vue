@@ -286,6 +286,11 @@ function toggleMode() {
           </template>
         </div>
       </div>
+
+      <p class="mt-6 text-center text-xs text-muted">
+        By continuing you agree to our
+        <a href="/privacy" class="text-accent hover:underline">Privacy Policy</a>.
+      </p>
     </div>
   </div>
 </template>

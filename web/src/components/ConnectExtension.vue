@@ -47,7 +47,7 @@ onMounted(mintAndPost)
 </script>
 
 <template>
-  <div class="min-h-dvh bg-bg flex items-center justify-center p-4 antialiased">
+  <div class="min-h-dvh bg-bg flex flex-col items-center justify-center p-4 antialiased">
     <div class="w-full max-w-sm rounded-2xl bg-surface ring-1 ring-ring p-6 text-text">
       <h1 class="text-lg font-semibold mb-1">Connect Stash Squirrel</h1>
       <p class="text-sm text-muted mb-5">
@@ -87,5 +87,9 @@ onMounted(mintAndPost)
         </button>
       </div>
     </div>
+
+    <p class="mt-6 text-center text-xs text-muted">
+      <a href="/privacy" class="hover:underline">Privacy Policy</a>
+    </p>
   </div>
 </template>
