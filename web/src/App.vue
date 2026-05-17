@@ -24,6 +24,7 @@ import CategoryDialog from './components/CategoryDialog.vue'
 import LoginPage from './components/LoginPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
 import ConnectExtension from './components/ConnectExtension.vue'
+import AccountPage from './components/AccountPage.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
 import SearchModal from './components/SearchModal.vue'
 import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
@@ -46,6 +47,9 @@ const highlightItemId = ref<number | null>(null)
 // mount is enough — no need to react to pushState.
 const isConnectFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/connect-extension'
+)
+const isAccountFlow = ref(
+  typeof window !== 'undefined' && window.location.pathname === '/account'
 )
 
 const showAddForm = ref(false)
@@ -217,7 +221,8 @@ onMounted(async () => {
   if (
     authStore.isAuthenticated &&
     !authStore.needsPlanChoice &&
-    !isConnectFlow.value
+    !isConnectFlow.value &&
+    !isAccountFlow.value
   ) {
     await loadData()
     await settingsStore.loadFromServer()
@@ -301,6 +306,7 @@ function onTourSkip() {
 
 <template>
   <LoginPage v-if="!authStore.isAuthenticated" />
+  <AccountPage v-else-if="isAccountFlow" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />
   <ConnectExtension v-else-if="isConnectFlow" />
   <div v-else class="min-h-dvh bg-bg text-text flex flex-col isolate">
