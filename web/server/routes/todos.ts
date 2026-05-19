@@ -223,7 +223,7 @@ router.get('/', async (req, res) => {
     conditions.push(`type <> 'event'`)
 
     // Hide actively-snoozed todos from the category view. Time-based views
-    // (today/week/month/schedule) intentionally still surface them so an
+    // (today/week/month) intentionally still surface them so an
     // overdue item doesn't vanish entirely.
     conditions.push(
       '(snoozed_until IS NULL OR snoozed_until <= EXTRACT(EPOCH FROM NOW())::BIGINT)'
@@ -241,7 +241,7 @@ router.get('/', async (req, res) => {
 })
 
 // Events live outside any user list, but should still surface on every
-// time-windowed view (Today / Week / Month / Overdue / Schedule) regardless
+// time-windowed view (Today / Week / Month / Overdue) regardless
 // of which list is active. Recurring event series are excluded here — they're
 // expanded virtually by `fetchExpandedEventSeries` and merged in by each route.
 const TIME_WINDOWED_SCOPE =
@@ -433,36 +433,6 @@ router.get('/overdue', async (req, res) => {
       [userId, list]
     )
     res.json({ todos: result.rows.map(coerceTodo) })
-  } catch (err) {
-    res.status(500).json({ error: String(err) })
-  }
-})
-
-// GET /api/todos/schedule?list=X
-// "All upcoming, no explicit window." For recurring events we cap expansion at
-// one year out to prevent a 1985 birthday from generating decades of rows.
-router.get('/schedule', async (req, res) => {
-  const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
-  try {
-    await spawnRepeatingTodos(userId, list)
-    const now = Math.floor(Date.now() / 1000)
-    const horizon = now + 365 * 86400
-    const [main, series] = await Promise.all([
-      query<TodoRow>(
-        buildTodoSelect(
-          `WHERE user_id = $1 AND status = 0
-           AND (${TIME_WINDOWED_SCOPE})
-           AND due_date IS NOT NULL
-           ORDER BY due_date ASC`
-        ),
-        [userId, list]
-      ),
-      fetchExpandedEventSeries(userId, now, horizon),
-    ])
-    const merged = [...main.rows, ...series].map(coerceTodo)
-    merged.sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
-    res.json({ todos: merged })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }

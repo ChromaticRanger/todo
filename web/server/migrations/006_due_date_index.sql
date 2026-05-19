@@ -1,4 +1,4 @@
--- Index for time-windowed views (today/week/month/overdue/schedule/calendar/counts)
+-- Index for time-windowed views (today/week/month/overdue/calendar/counts)
 -- which all filter by user_id + a due_date range. Without this, those queries
 -- use the user_id index then post-filter by due_date.
 --
