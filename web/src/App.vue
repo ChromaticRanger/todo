@@ -131,7 +131,7 @@ watch(() => authStore.tier, (tier) => {
 })
 const layoutMode = computed<LayoutMode>(() => listPrefsStore.get(listStore.activeList).layout)
 const gridColumns = computed<GridColumns>(() => listPrefsStore.get(listStore.activeList).columns)
-const isCategoryView = computed(() => currentView.value !== 'schedule' && currentView.value !== 'completed')
+const isCategoryView = computed(() => currentView.value !== 'completed')
 
 function setLayout(mode: LayoutMode) {
   listPrefsStore.setLayout(listStore.activeList, mode)

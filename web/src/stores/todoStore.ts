@@ -37,7 +37,7 @@ export const useTodoStore = defineStore('todos', () => {
   // not just the active one. Bumps eventsVersion so the calendar refetches,
   // refreshes counts, and silently refetches the current view if it's one of
   // the time-windowed views.
-  const TIME_WINDOWED_VIEWS: ViewType[] = ['today', 'week', 'month', 'overdue', 'schedule']
+  const TIME_WINDOWED_VIEWS: ViewType[] = ['today', 'week', 'month', 'overdue']
   function notifyEventChanged() {
     eventsVersion.value++
     for (const listCache of todosCache.values()) {
@@ -119,7 +119,7 @@ export const useTodoStore = defineStore('todos', () => {
     })
   }
 
-  // Events surface on time-windowed views (today/week/month/overdue/schedule)
+  // Events surface on time-windowed views (today/week/month/overdue)
   // but live outside any list-and-category scheme — render them in a dedicated
   // Events block above the category grid, never inside a category card.
   const eventsInView = computed(() => todos.value.filter((t) => t.type === 'event'))
@@ -413,12 +413,12 @@ export const useTodoStore = defineStore('todos', () => {
     if (form.category) registerCategory(currentList.value, form.category || 'General')
     invalidateOtherViews(currentList.value)
 
-    // Time-windowed views (today/week/month/overdue/schedule) filter by due_date,
+    // Time-windowed views (today/week/month/overdue) filter by due_date,
     // so a changed due_date may push the item in or out of view. Refetch silently.
     const view = currentView.value
     const list = currentList.value
     const isWindowed = view === 'today' || view === 'week' || view === 'month'
-      || view === 'overdue' || view === 'schedule'
+      || view === 'overdue'
     if ('due_date' in form && isWindowed) {
       todosCache.get(list)?.delete(view)
       await fetchTodos(list, view, { silent: true })

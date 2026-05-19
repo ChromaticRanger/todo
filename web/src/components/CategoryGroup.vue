@@ -79,7 +79,7 @@ const bookmarks = computed(() => props.todos.filter(t => t.type === 'bookmark'))
 const nonBookmarks = computed(() => props.todos.filter(t => t.type !== 'bookmark'))
 
 // Per-item drag is only meaningful in the All view. Time-filtered views sort by
-// due_date for an urgency-based read; flat views (schedule/completed) don't render cards.
+// due_date for an urgency-based read; the Completed flat view doesn't render cards.
 const dragEnabled = computed(() => store.currentView === 'all')
 
 function persistOrder(ids: number[]) {

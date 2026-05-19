@@ -45,9 +45,7 @@ const draggableCategories = computed({
   },
 })
 
-const showFlat = computed(() =>
-  store.currentView === 'schedule' || store.currentView === 'completed'
-)
+const showFlat = computed(() => store.currentView === 'completed')
 
 const allCategories = computed(() => store.categories)
 
@@ -392,9 +390,6 @@ async function handleEventEditDelete() {
             </div>
             <p class="text-sm text-text" :class="todo.status === 1 ? 'line-through text-muted' : ''">
               {{ todo.title }}
-            </p>
-            <p v-if="store.currentView === 'schedule' && todo.due_date" class="text-xs text-accent mt-1">
-              {{ todo.type === 'event' ? 'Starts' : 'Due' }}: {{ formatDate(todo.due_date) }}
             </p>
             <p v-if="store.currentView === 'completed' && todo.completed_at" class="text-xs text-muted mt-1">
               Completed: {{ formatDate(todo.completed_at) }}

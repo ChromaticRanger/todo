@@ -15,7 +15,6 @@ const views: { key: ViewType; label: string; countKey?: CountKey }[] = [
   { key: 'week', label: 'Week', countKey: 'week' },
   { key: 'month', label: 'Month', countKey: 'month' },
   { key: 'overdue', label: 'Overdue', countKey: 'overdue' },
-  { key: 'schedule', label: 'Schedule' },
   { key: 'completed', label: 'Completed' },
 ]
 
