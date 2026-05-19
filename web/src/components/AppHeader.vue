@@ -261,12 +261,13 @@ function openAdd(type: ItemType) {
         </svg>
       </button>
 
-      <!-- Current user -->
-      <div
+      <!-- Current user / Account link -->
+      <a
         v-if="authStore.user"
+        href="/account"
         data-tour="user-menu"
-        class="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg text-sm text-text"
-        :title="authStore.user.email ?? ''"
+        class="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg text-sm text-text hover:bg-surface-hover transition-colors"
+        :title="`Account settings${authStore.user.email ? ` (${authStore.user.email})` : ''}`"
       >
         <img
           v-if="authStore.user.image"
@@ -292,17 +293,6 @@ function openAdd(type: ItemType) {
         >
           {{ authStore.tier }}
         </span>
-      </div>
-
-      <a
-        href="/account"
-        class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover text-sm transition-colors"
-        title="Account settings"
-      >
-        <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-        </svg>
-        Account
       </a>
     </div>
   </header>

@@ -237,13 +237,19 @@ watch(
   () => (authStore.needsPlanChoice ? null : authStore.user?.id ?? null),
   async (currentId, previousId) => {
     if (currentId === previousId) return
-    // User identity changed (including going to/from null). Purge per-user stores.
+    // previousId === null is just the initial async session resolution after a
+    // page load — same user, not a switch. Keep prefs caches intact so the
+    // pre-mount localStorage layout stays visible until loadFromServer arrives;
+    // otherwise the cached grid view flashes to the kanban default.
+    const userChanged = previousId != null
     listStore.reset()
     todoStore.reset()
-    listPrefsStore.reset()
-    categoryPrefsStore.reset()
     searchStore.reset()
     discoverStore.reset()
+    if (userChanged) {
+      listPrefsStore.reset()
+      categoryPrefsStore.reset()
+    }
     if (currentId) {
       await loadData()
       await settingsStore.loadFromServer()
@@ -305,7 +311,8 @@ function onTourSkip() {
 </script>
 
 <template>
-  <LoginPage v-if="!authStore.isAuthenticated" />
+  <div v-if="authStore.loading && !authStore.isAuthenticated" class="min-h-dvh bg-bg" aria-hidden="true" />
+  <LoginPage v-else-if="!authStore.isAuthenticated" />
   <AccountPage v-else-if="isAccountFlow" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />
   <ConnectExtension v-else-if="isConnectFlow" />
