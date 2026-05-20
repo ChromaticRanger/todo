@@ -82,6 +82,7 @@ function onMainContextMenu(e: MouseEvent) {
   if (target.closest('.category-drag-handle, .select-text')) return
   const sel = window.getSelection?.()
   if (sel && sel.toString().length > 0) return
+  if (mode.value !== 'lists') return
   if (!isCategoryView.value) return
   e.preventDefault()
   categoryMenu.value = { x: e.clientX, y: e.clientY }
