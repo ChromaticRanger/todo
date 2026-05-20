@@ -14,9 +14,10 @@ router.get('/', async (req, res) => {
       email: string
       name: string | null
       tier: string | null
+      tierSource: string | null
       createdAt: Date
     }>(
-      `SELECT id, email, name, tier, "createdAt"
+      `SELECT id, email, name, tier, "tierSource", "createdAt"
          FROM "user"
         WHERE id = $1`,
       [userId]

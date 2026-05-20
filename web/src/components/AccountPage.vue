@@ -9,6 +9,7 @@ interface Profile {
   email: string
   name: string | null
   tier: string | null
+  tierSource: string | null
   createdAt: string
 }
 
@@ -213,7 +214,13 @@ onMounted(loadProfile)
       >
         <h2 class="text-base font-semibold mb-1">Billing</h2>
 
-        <template v-if="profile.tier === 'pro'">
+        <template v-if="profile.tier === 'pro' && profile.tierSource === 'comp'">
+          <p class="text-sm text-muted mb-4">
+            You have a complementary Pro Plan Account, gifted by Martin. :-)
+          </p>
+        </template>
+
+        <template v-else-if="profile.tier === 'pro'">
           <p class="text-sm text-muted mb-4">
             You're on the <span class="text-text font-medium">Pro</span> plan. Manage your
             subscription, view invoices, or cancel any time through the Stripe billing portal.
