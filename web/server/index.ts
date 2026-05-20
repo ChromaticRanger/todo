@@ -15,6 +15,7 @@ import importRouter from './routes/import.js'
 import sharedRouter from './routes/shared.js'
 import extensionRouter from './routes/extension.js'
 import accountRouter from './routes/account.js'
+import adminRouter from './routes/admin.js'
 import { authMiddleware } from './middleware/auth.js'
 import { requirePlan } from './middleware/requirePlan.js'
 import { rateLimit } from './middleware/rateLimit.js'
@@ -55,6 +56,10 @@ app.use('/api/extension', extensionRouter)
 // Account routes (profile read, account delete) also bypass requirePlan so a
 // user mid-signup can still delete their account if they change their mind.
 app.use('/api/account', accountRouter)
+
+// Admin Dashboard routes — gated by ADMIN_EMAILS, not by tier, so we mount
+// before requirePlan.
+app.use('/api/admin', adminRouter)
 
 // Everything below requires the user to have chosen a plan.
 app.use('/api', requirePlan)

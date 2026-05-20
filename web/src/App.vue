@@ -25,6 +25,7 @@ import LoginPage from './components/LoginPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
 import ConnectExtension from './components/ConnectExtension.vue'
 import AccountPage from './components/AccountPage.vue'
+import AdminDashboard from './components/AdminDashboard.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
 import SearchModal from './components/SearchModal.vue'
 import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
@@ -50,6 +51,9 @@ const isConnectFlow = ref(
 )
 const isAccountFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/account'
+)
+const isAdminFlow = ref(
+  typeof window !== 'undefined' && window.location.pathname === '/admin'
 )
 
 const showAddForm = ref(false)
@@ -222,7 +226,8 @@ onMounted(async () => {
     authStore.isAuthenticated &&
     !authStore.needsPlanChoice &&
     !isConnectFlow.value &&
-    !isAccountFlow.value
+    !isAccountFlow.value &&
+    !isAdminFlow.value
   ) {
     await loadData()
     await settingsStore.loadFromServer()
@@ -313,6 +318,7 @@ function onTourSkip() {
 <template>
   <div v-if="authStore.loading && !authStore.isAuthenticated" class="min-h-dvh bg-bg" aria-hidden="true" />
   <LoginPage v-else-if="!authStore.isAuthenticated" />
+  <AdminDashboard v-else-if="isAdminFlow" />
   <AccountPage v-else-if="isAccountFlow" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />
   <ConnectExtension v-else-if="isConnectFlow" />

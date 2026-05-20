@@ -87,6 +87,15 @@ export const auth = betterAuth({
         defaultValue: null,
         input: false,
       },
+      // 'stripe' for tiers granted via Stripe webhook, 'comp' for admin-granted
+      // PRO accounts. Lets us tell paying users apart from comped friends and
+      // avoid surprises when Stripe events fire for users who never paid.
+      tierSource: {
+        type: 'string',
+        required: false,
+        defaultValue: null,
+        input: false,
+      },
     },
   },
   databaseHooks: {
@@ -122,16 +131,16 @@ export const auth = betterAuth({
                 },
               ],
               onSubscriptionComplete: async ({ subscription }) => {
-                await query('UPDATE "user" SET tier = $1 WHERE id = $2', [
-                  'pro',
-                  subscription.referenceId,
-                ])
+                await query(
+                  'UPDATE "user" SET tier = $1, "tierSource" = $2 WHERE id = $3',
+                  ['pro', 'stripe', subscription.referenceId]
+                )
               },
               onSubscriptionDeleted: async ({ subscription }) => {
-                await query('UPDATE "user" SET tier = $1 WHERE id = $2', [
-                  'free',
-                  subscription.referenceId,
-                ])
+                await query(
+                  'UPDATE "user" SET tier = $1, "tierSource" = $2 WHERE id = $3',
+                  ['free', 'stripe', subscription.referenceId]
+                )
               },
             },
           }),

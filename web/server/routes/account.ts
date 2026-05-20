@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { pool, query } from '../db.js'
 import { stripe } from '../auth.js'
+import { isAdminEmail } from '../middleware/requireAdmin.js'
 
 const router = Router()
 
@@ -24,7 +25,7 @@ router.get('/', async (req, res) => {
       res.status(404).json({ error: 'not_found' })
       return
     }
-    res.json(rows[0])
+    res.json({ ...rows[0], isAdmin: isAdminEmail(rows[0].email) })
   } catch (err) {
     console.error('[account] GET failed:', err)
     res.status(500).json({ error: String(err) })
