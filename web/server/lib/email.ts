@@ -106,6 +106,23 @@ export async function sendVerificationEmailFor(user: { email: string }, url: str
   })
 }
 
+export async function sendWelcomeEmailFor(user: { email: string; name?: string | null }) {
+  const greeting = user.name ? `Hi ${user.name},` : 'Hi there,'
+  const { text, html } = renderEmail({
+    heading: 'Welcome to Stash Squirrel',
+    body: `${greeting} your email is verified and your account is ready. Stash Squirrel keeps your todos, bookmarks, and notes organised in one tidy burrow. Jump in and start your first list.`,
+    cta: 'Open Stash Squirrel',
+    url: APP_URL || 'https://stash-squirrel.com',
+    footer: 'Got a question? Just reply to this email — it reaches a real person.',
+  })
+  await sendEmail({
+    to: user.email,
+    subject: 'Welcome to Stash Squirrel',
+    text,
+    html,
+  })
+}
+
 export async function sendPasswordResetEmailFor(user: { email: string }, url: string) {
   const link = rewriteAuthLink(url)
   const { text, html } = renderEmail({
