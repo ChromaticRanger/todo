@@ -4,15 +4,15 @@ Outstanding work captured 2026-05-17. Phases are suggested ordering, not hard co
 
 ## In flight
 
-- **Browser extension registration** (Chrome Web Store). Blocked on UK Postbox address landing → fill placeholders in `web/public/privacy.html` → deploy → submit. Listing copy ready in `chrome-web-store-listing.md`.
+- **Browser extension registration** (Chrome Web Store). UK Postbox address obtained and `web/public/privacy.html` updated with it. Remaining: deploy → submit. Listing copy ready in `chrome-web-store-listing.md`.
 
 ## Phase 1 — Pre-launch must-do
 
 Cannot responsibly open the doors to real users without these.
 
-1. **Database backups** — confirm or configure automated backups. DigitalOcean Managed Postgres has daily backups + 7-day point-in-time recovery built in; verify it's switched on for the prod DB. If self-managed Postgres on a droplet, configure `pg_dump` to S3/Spaces nightly + retention policy. Single point of failure with zero recovery = company-ending event for one customer.
-2. **Account Details page + delete account** — GDPR right to erasure is a legal requirement, not a feature. Must exist before any public user signs up. Page should also show: current plan, email, sign-out, "delete my account and all data" with a 30-day grace period or immediate hard delete.
-3. **Welcome email after account verification** — small, easy, big first-impression win. Sent via Resend (already wired). Short, friendly, links to FAQ once that exists.
+1. ~~**Database backups**~~ — **Done.** DigitalOcean Managed Postgres provides daily backups + 7-day point-in-time recovery by default; no action needed at present.
+2. ~~**Account Details page + delete account**~~ — **Done & tested.** `AccountPage.vue` shows current plan, email, sign-out, and a DELETE-confirmation flow; `account.ts` cancels any Stripe subscription and cascades all user data. Delete flow verified end-to-end against a real account.
+3. ~~**Welcome email after account verification**~~ — **Done & verified.** Sent via Resend on email verification (`afterEmailVerification`) and on OAuth signup (user-create hook). Currently links to the app; point it at the FAQ once that exists.
 
 ## Phase 2 — Launch enablers
 
@@ -27,7 +27,7 @@ Needed to actually acquire and convert users.
 After first users arrive.
 
 7. **Welcome Tour updates** — include the features that have shipped since the tour was written. Onboarding completion correlates strongly with retention.
-8. **Admin Console** — even a basic version: total users, signups today/week/month, conversion to Pro, current MRR. Lets you tell if marketing efforts are working. Can start as a single read-only page or even a CLI script before becoming a real console.
+8. ~~**Admin Console**~~ — **Done.** Admin Dashboard shipped with user list, signup counts, and Pro/comp breakdown. Revisit later if MRR or richer analytics are needed.
 
 ## Phase 4 — Trust & defensive
 
@@ -55,16 +55,16 @@ After first users arrive.
 
 The shortest path to "real customers using a defensible product":
 
-1. Finish extension registration (in flight)
-2. Database backups verified
-3. Account deletion / GDPR
-4. Welcome email
+1. Finish extension registration (in flight — deploy + submit)
+2. ~~Database backups~~ — covered by DO defaults; no action needed
+3. ~~Account deletion / GDPR~~ — done & tested
+4. ~~Welcome email~~ — done & verified
 5. Marketing landing page
 6. Pricing page update
 7. FAQ
 8. — *Launch publicly* —
 9. Welcome Tour update
-10. Basic admin visibility
+10. ~~Basic admin visibility~~ — Admin Dashboard shipped
 11. ~~Encryption~~ — already covered by DO (transit + at-rest); no app-level work unless a customer specifically asks
 12. Blog
 13. More Discovery content

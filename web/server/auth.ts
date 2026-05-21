@@ -4,7 +4,11 @@ import { bearer } from 'better-auth/plugins'
 import Stripe from 'stripe'
 import { stripe as stripePlugin } from '@better-auth/stripe'
 import { pool, query, seedUserDefaults } from './db.js'
-import { sendVerificationEmailFor, sendPasswordResetEmailFor } from './lib/email.js'
+import {
+  sendVerificationEmailFor,
+  sendPasswordResetEmailFor,
+  sendWelcomeEmailFor,
+} from './lib/email.js'
 
 const {
   BETTER_AUTH_SECRET,
@@ -78,6 +82,14 @@ export const auth = betterAuth({
       await sendVerificationEmailFor(user, url)
     },
     autoSignInAfterVerification: true,
+    afterEmailVerification: async (user) => {
+      try {
+        await sendWelcomeEmailFor(user)
+      } catch (err) {
+        // A failed welcome email must never block verification.
+        console.error('[auth] sendWelcomeEmailFor failed for', user.id, err)
+      }
+    },
   },
   user: {
     additionalFields: {
@@ -107,6 +119,17 @@ export const auth = betterAuth({
           } catch (err) {
             // Don't fail signup if seeding fails — user can still use the app.
             console.error('[auth] seedUserDefaults failed for', user.id, err)
+          }
+          // OAuth signups arrive already verified and skip the email-verification
+          // flow, so afterEmailVerification never fires for them — send their
+          // welcome email here. Email/password users start unverified and get
+          // it from afterEmailVerification instead.
+          if (user.emailVerified) {
+            try {
+              await sendWelcomeEmailFor(user)
+            } catch (err) {
+              console.error('[auth] sendWelcomeEmailFor failed for', user.id, err)
+            }
           }
         },
       },
