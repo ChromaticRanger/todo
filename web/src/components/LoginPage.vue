@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { authClient } from '../lib/auth-client'
+import { useAuthStore } from '../stores/authStore'
 
 type Mode = 'signin' | 'signup'
+
+const authStore = useAuthStore()
 
 const mode = ref<Mode>('signin')
 const email = ref('')
@@ -12,8 +15,12 @@ const error = ref('')
 const loading = ref(false)
 const needsVerification = ref(false)
 const resendStatus = ref<'' | 'sending' | 'sent' | 'failed'>('')
-const awaitingVerification = ref(false)
-const awaitingEmail = ref('')
+
+// Post-signup "check your inbox" state is held in the auth store so it
+// survives LoginPage being unmounted by the session refetch that signUp
+// triggers — see authStore.awaitingVerificationEmail.
+const awaitingVerification = computed(() => !!authStore.awaitingVerificationEmail)
+const awaitingEmail = computed(() => authStore.awaitingVerificationEmail ?? '')
 
 const title = computed(() => (mode.value === 'signin' ? 'Sign in' : 'Create account'))
 const submitLabel = computed(() => (mode.value === 'signin' ? 'Sign in' : 'Sign up'))
@@ -33,8 +40,7 @@ async function handleSubmit() {
       if (err) {
         error.value = err.message || 'Sign up failed'
       } else {
-        awaitingEmail.value = email.value
-        awaitingVerification.value = true
+        authStore.awaitingVerificationEmail = email.value
         password.value = ''
       }
     } else {
@@ -73,8 +79,7 @@ async function resendVerification(target?: string) {
 }
 
 function backToSignIn() {
-  awaitingVerification.value = false
-  awaitingEmail.value = ''
+  authStore.awaitingVerificationEmail = null
   resendStatus.value = ''
   error.value = ''
   mode.value = 'signin'

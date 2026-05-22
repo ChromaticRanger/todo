@@ -78,18 +78,14 @@ export const auth = betterAuth({
     },
   },
   emailVerification: {
+    // Send the verification email the moment the account is created, so the
+    // "check your inbox" prompt shown after sign-up is truthful. Without this
+    // the email only goes out on the first (blocked) sign-in attempt.
+    sendOnSignUp: true,
     sendVerificationEmail: async ({ user, url }) => {
       await sendVerificationEmailFor(user, url)
     },
     autoSignInAfterVerification: true,
-    afterEmailVerification: async (user) => {
-      try {
-        await sendWelcomeEmailFor(user)
-      } catch (err) {
-        // A failed welcome email must never block verification.
-        console.error('[auth] sendWelcomeEmailFor failed for', user.id, err)
-      }
-    },
   },
   user: {
     additionalFields: {
@@ -120,17 +116,9 @@ export const auth = betterAuth({
             // Don't fail signup if seeding fails — user can still use the app.
             console.error('[auth] seedUserDefaults failed for', user.id, err)
           }
-          // OAuth signups arrive already verified and skip the email-verification
-          // flow, so afterEmailVerification never fires for them — send their
-          // welcome email here. Email/password users start unverified and get
-          // it from afterEmailVerification instead.
-          if (user.emailVerified) {
-            try {
-              await sendWelcomeEmailFor(user)
-            } catch (err) {
-              console.error('[auth] sendWelcomeEmailFor failed for', user.id, err)
-            }
-          }
+          // The welcome email is sent at plan-selection time (free → /api/plan/
+          // select-free, pro → onSubscriptionComplete) so it can reflect the
+          // chosen tier — the tier is still null at account-creation time.
         },
       },
     },
@@ -154,10 +142,21 @@ export const auth = betterAuth({
                 },
               ],
               onSubscriptionComplete: async ({ subscription }) => {
-                await query(
-                  'UPDATE "user" SET tier = $1, "tierSource" = $2 WHERE id = $3',
+                const { rows } = await query<{ email: string; name: string | null }>(
+                  'UPDATE "user" SET tier = $1, "tierSource" = $2 WHERE id = $3 RETURNING email, name',
                   ['pro', 'stripe', subscription.referenceId]
                 )
+                if (rows[0]) {
+                  try {
+                    await sendWelcomeEmailFor(rows[0], 'pro')
+                  } catch (err) {
+                    console.error(
+                      '[auth] Pro welcome email failed for',
+                      subscription.referenceId,
+                      err
+                    )
+                  }
+                }
               },
               onSubscriptionDeleted: async ({ subscription }) => {
                 await query(

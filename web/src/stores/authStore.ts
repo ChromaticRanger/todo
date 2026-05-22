@@ -15,6 +15,18 @@ export const useAuthStore = defineStore('auth', () => {
   })
   const needsPlanChoice = computed(() => isAuthenticated.value && !tier.value)
 
+  // Post-signup email-verification state. The email/password signup flow can't
+  // sign the user in until they verify, so LoginPage shows a "check your inbox"
+  // card. It lives here rather than in LoginPage's local state because signUp
+  // triggers a session refetch that briefly unmounts LoginPage — local state
+  // would be lost across that remount, store state survives it.
+  const awaitingVerificationEmail = ref<string | null>(null)
+
+  // Once the user is actually signed in, the verification prompt is moot.
+  watch(isAuthenticated, (authed) => {
+    if (authed) awaitingVerificationEmail.value = null
+  })
+
   // isAdmin lives on the server (env-var allowlist), not on the Better Auth
   // session. We learn it via /api/account; this ref caches the answer per
   // signed-in user and is refreshed when the user identity changes.
@@ -73,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
     loading,
     tier,
     needsPlanChoice,
+    awaitingVerificationEmail,
     isAdmin,
     refreshUser,
     refreshAdminFlag,

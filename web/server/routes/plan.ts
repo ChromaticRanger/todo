@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db.js'
 import { LIMITS, countUserLists, countUserItems } from '../lib/limits.js'
+import { sendWelcomeEmailFor } from '../lib/email.js'
 
 const router = Router()
 
@@ -8,13 +9,20 @@ const router = Router()
 router.post('/select-free', async (req, res) => {
   const userId = req.userId!
   try {
-    const result = await query(
-      'UPDATE "user" SET tier = $1 WHERE id = $2 AND tier IS NULL',
+    const result = await query<{ email: string; name: string | null }>(
+      'UPDATE "user" SET tier = $1 WHERE id = $2 AND tier IS NULL RETURNING email, name',
       ['free', userId]
     )
     if (result.rowCount === 0) {
       res.status(409).json({ error: 'plan_already_set' })
       return
+    }
+    // tier IS NULL guard means this UPDATE only ever succeeds once per user,
+    // so the welcome email fires exactly once on initial Free selection.
+    try {
+      await sendWelcomeEmailFor(result.rows[0], 'free')
+    } catch (err) {
+      console.error('[plan/select-free] welcome email failed:', err)
     }
     res.json({ ok: true, tier: 'free' })
   } catch (err) {
