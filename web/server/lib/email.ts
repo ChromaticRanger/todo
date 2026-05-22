@@ -71,13 +71,15 @@ export async function sendEmail({ to, subject, text, html, from }: EmailArgs): P
 }
 
 // Branded email shell shared by every template. `bullets` renders a feature
-// list; `bodyExtra` is a second paragraph after it — both optional so the
-// verification/reset emails can ignore them.
+// list; `bodyExtra` is a second paragraph after it; `promo` renders a divided
+// section with its own heading + bullet list (the Free email's Pro upsell).
+// All optional so the verification/reset emails can ignore them.
 function renderEmail(opts: {
   heading: string
   body: string
   bullets?: string[]
   bodyExtra?: string
+  promo?: { heading: string; bullets: string[] }
   cta: string
   url: string
   footer?: string
@@ -85,11 +87,15 @@ function renderEmail(opts: {
   text: string
   html: string
 } {
-  const { heading, body, bullets, bodyExtra, cta, url, footer } = opts
+  const { heading, body, bullets, bodyExtra, promo, cta, url, footer } = opts
 
   const textParts = [heading, body]
   if (bullets?.length) textParts.push(bullets.map((b) => `• ${b}`).join('\n'))
   if (bodyExtra) textParts.push(bodyExtra)
+  if (promo) {
+    textParts.push(promo.heading)
+    textParts.push(promo.bullets.map((b) => `• ${b}`).join('\n'))
+  }
   textParts.push(`${cta}: ${url}`)
   if (footer) textParts.push(footer)
   const text = textParts.join('\n\n')
@@ -102,6 +108,14 @@ function renderEmail(opts: {
   const bodyExtraHtml = bodyExtra
     ? `<p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:#444;">${bodyExtra}</p>`
     : ''
+  const promoHtml = promo
+    ? `<div style="margin:0 0 24px;padding-top:20px;border-top:1px solid #ececec;">
+        <h3 style="margin:0 0 8px;font-size:15px;font-weight:600;color:#c92c24;">${promo.heading}</h3>
+        <ul style="margin:0;padding-left:20px;font-size:14px;line-height:1.7;color:#444;">${promo.bullets
+          .map((b) => `<li>${b}</li>`)
+          .join('')}</ul>
+      </div>`
+    : ''
   const html = `<!DOCTYPE html>
 <html>
   <body style="margin:0;padding:24px;background:#f7f7f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a;">
@@ -111,6 +125,7 @@ function renderEmail(opts: {
       <p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:#444;">${body}</p>
       ${bulletsHtml}
       ${bodyExtraHtml}
+      ${promoHtml}
       <p style="margin:0 0 24px;">
         <a href="${url}" style="display:inline-block;background:#c92c24;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:500;">${cta}</a>
       </p>
@@ -186,8 +201,18 @@ export async function sendWelcomeEmailFor(
             'Today / Week / Month / Overdue views',
             'Light &amp; dark themes',
           ],
-          bodyExtra:
-            'Need more room? Pro unlocks unlimited lists and items, the Overall Schedule calendar, and global search across everything — from £6/month. Upgrade any time from the Account page.',
+          promo: {
+            heading: 'Upgrade to Pro — from £6/month',
+            bullets: [
+              'Unlimited lists',
+              'Unlimited items',
+              'Events — a calendar item type with recurring options',
+              'Overall Schedule — every todo with a due date in one calendar',
+              'Global search across every list (Ctrl/⌘K)',
+              'Discover — browse and clone community-shared lists',
+              'Bookmark import from your browser',
+            ],
+          },
           cta: 'Open Stash Squirrel',
           url: appUrl,
           footer,
