@@ -131,8 +131,11 @@ onMounted(async () => {
               <li>• Everything in Free</li>
               <li>• Unlimited lists</li>
               <li>• Unlimited items</li>
+              <li>• Events — a calendar item type</li>
               <li>• Overall Schedule — every todo with a due date in one Calendar</li>
               <li>• Global search across lists (Ctrl/⌘K)</li>
+              <li>• Discover — browse &amp; clone community lists</li>
+              <li>• Bookmark import from your browser</li>
               <li>• Cancel anytime</li>
             </ul>
           </div>
