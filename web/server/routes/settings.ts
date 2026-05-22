@@ -14,7 +14,7 @@ interface UiSettings {
   mode: ThemeMode
 }
 
-const DEFAULT_SETTINGS: UiSettings = { theme: 'midnight', mode: 'dark' }
+const DEFAULT_SETTINGS: UiSettings = { theme: 'midnight', mode: 'light' }
 
 // GET /api/settings
 router.get('/', async (req, res) => {

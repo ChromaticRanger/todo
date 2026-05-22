@@ -11,7 +11,7 @@ interface UiSettings {
 }
 
 const STORAGE_KEY = 'theme_settings'
-const DEFAULT: UiSettings = { theme: 'midnight', mode: 'dark' }
+const DEFAULT: UiSettings = { theme: 'midnight', mode: 'light' }
 
 const VALID_THEMES: ThemeName[] = ['midnight', 'slate', 'forest', 'sunset', 'rose', 'mono']
 const VALID_MODES: ThemeMode[] = ['light', 'dark']
