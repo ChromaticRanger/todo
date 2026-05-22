@@ -1,6 +1,11 @@
 import { Resend } from 'resend'
 
-const { RESEND_API_KEY, EMAIL_FROM, APP_URL } = process.env
+const { RESEND_API_KEY, EMAIL_FROM, EMAIL_FROM_SUPPORT, APP_URL } = process.env
+
+// Transactional mail (verification, password reset) goes from the no-reply
+// address. The welcome email invites a reply, so it must come from a monitored
+// inbox — falls back to the support address even if the env var is unset.
+const SUPPORT_FROM = EMAIL_FROM_SUPPORT || 'support@stash-squirrel.com'
 
 /**
  * Better Auth builds verification/reset URLs off BETTER_AUTH_URL, which
@@ -46,17 +51,20 @@ export interface EmailArgs {
   subject: string
   text: string
   html: string
+  /** Overrides the default no-reply sender. Use for mail that invites a reply. */
+  from?: string
 }
 
-export async function sendEmail({ to, subject, text, html }: EmailArgs): Promise<void> {
+export async function sendEmail({ to, subject, text, html, from }: EmailArgs): Promise<void> {
   if (!resend || !EMAIL_FROM) {
     console.log(`[email] (console fallback — Resend not configured)`)
+    console.log(`[email] from=${from ?? EMAIL_FROM ?? '(unset)'}`)
     console.log(`[email] to=${to}`)
     console.log(`[email] subject=${subject}`)
     console.log(`[email] ${text}`)
     return
   }
-  const { error } = await resend.emails.send({ from: EMAIL_FROM, to, subject, text, html })
+  const { error } = await resend.emails.send({ from: from ?? EMAIL_FROM, to, subject, text, html })
   if (error) {
     console.error('[email] Resend send failed:', error)
   }
@@ -187,6 +195,9 @@ export async function sendWelcomeEmailFor(
     subject: tier === 'pro' ? 'Welcome to Stash Squirrel Pro' : 'Welcome to Stash Squirrel',
     text,
     html,
+    // The footer invites a reply — send from the monitored support inbox,
+    // not the no-reply address.
+    from: SUPPORT_FROM,
   })
 }
 
