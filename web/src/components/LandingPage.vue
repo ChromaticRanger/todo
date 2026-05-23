@@ -179,12 +179,9 @@ const features = [
         <h1
           class="font-display italic text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight text-balance leading-[1.05]"
         >
-          A workspace for everything
-          <span
+          <span>A workspace for everything </span><span
             class="bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent"
-          >
-            a project needs.
-          </span>
+          >a project needs.</span>
         </h1>
         <p class="mt-6 text-lg sm:text-xl text-muted text-balance max-w-2xl mx-auto">
           Todos, bookmarks and notes — together in one list. Kanban when you need a
