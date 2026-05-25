@@ -7,7 +7,15 @@ type Mode = 'signin' | 'signup'
 
 const authStore = useAuthStore()
 
-const mode = ref<Mode>('signin')
+// Honour `?mode=signup` from the marketing CTAs so users land directly in the
+// signup form instead of having to flip the toggle.
+const initialMode: Mode =
+  typeof window !== 'undefined' &&
+  new URLSearchParams(window.location.search).get('mode') === 'signup'
+    ? 'signup'
+    : 'signin'
+
+const mode = ref<Mode>(initialMode)
 const email = ref('')
 const password = ref('')
 const name = ref('')
@@ -295,6 +303,9 @@ function toggleMode() {
       <p class="mt-6 text-center text-xs text-muted">
         By continuing you agree to our
         <a href="/privacy" class="text-accent hover:underline">Privacy Policy</a>.
+      </p>
+      <p class="mt-3 text-center text-xs text-muted">
+        <a href="/" class="hover:text-text transition-colors">← Back to home</a>
       </p>
     </div>
   </div>

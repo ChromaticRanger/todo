@@ -22,6 +22,7 @@ import OverallSchedule from './components/OverallSchedule.vue'
 import TodoForm from './components/TodoForm.vue'
 import CategoryDialog from './components/CategoryDialog.vue'
 import LoginPage from './components/LoginPage.vue'
+import LandingPage from './components/LandingPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
 import ConnectExtension from './components/ConnectExtension.vue'
 import AccountPage from './components/AccountPage.vue'
@@ -55,6 +56,12 @@ const isAccountFlow = ref(
 const isAdminFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/admin'
 )
+// Unauthenticated routing: '/' shows the marketing landing page, '/login'
+// shows the sign-in form, anything else (e.g. /connect-extension deep links)
+// falls through to the login form so the post-auth deep-link still resolves.
+const pathname = typeof window !== 'undefined' ? window.location.pathname : '/'
+const isLandingFlow = ref(pathname === '/')
+const isLoginFlow = ref(pathname === '/login')
 
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
@@ -127,6 +134,23 @@ function handleClonedToList() {
   mode.value = 'lists'
   discoverStore.selectSlug(null)
 }
+
+// Once authenticated, swap a `/login` URL for `/` so a reload doesn't bounce
+// the now-signed-in user back to the form. Other deep links (e.g. /account,
+// /connect-extension) are intentionally preserved — those branches need them.
+watch(
+  () => authStore.isAuthenticated,
+  (authed) => {
+    if (!authed) return
+    if (typeof window === 'undefined') return
+    if (window.location.pathname === '/login') {
+      window.history.replaceState({}, '', '/')
+      isLoginFlow.value = false
+      isLandingFlow.value = true
+    }
+  },
+  { immediate: true }
+)
 
 // Plan downgrade safety: never strand a Free user on a Pro-only mode.
 watch(() => authStore.tier, (tier) => {
@@ -318,6 +342,7 @@ function onTourSkip() {
 
 <template>
   <div v-if="authStore.loading && !authStore.isAuthenticated" class="min-h-dvh bg-bg" aria-hidden="true" />
+  <LandingPage v-else-if="!authStore.isAuthenticated && isLandingFlow" />
   <LoginPage v-else-if="!authStore.isAuthenticated" />
   <AdminDashboard v-else-if="isAdminFlow" />
   <AccountPage v-else-if="isAccountFlow" />
