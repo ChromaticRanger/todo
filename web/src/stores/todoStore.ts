@@ -3,15 +3,23 @@ import { ref, computed } from 'vue'
 import type { Todo, TodoFormData, ViewType } from '../types/todo'
 import { apiFetch } from '../lib/api'
 import { useCategoryPrefsStore } from './categoryPrefsStore'
+import { useSettingsStore, type CompletedWindow } from './settingsStore'
 
 export const useTodoStore = defineStore('todos', () => {
   const categoryPrefsStore = useCategoryPrefsStore()
+  const settingsStore = useSettingsStore()
   const todos = ref<Todo[]>([])
   const categories = ref<string[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   const currentView = ref<ViewType>('all')
   const currentList = ref<string>('todos')
+  // True when the most recent /completed fetch was clipped by the server cap —
+  // surfaces a "narrow the range" hint in the UI.
+  const completedHasMore = ref(false)
+  // Exact count of items in the current window (independent of limit), so the
+  // UI can show a count even when the row list is clipped.
+  const completedTotal = ref(0)
   const viewCounts = ref<{ today: number; week: number; month: number; overdue: number }>({
     today: 0, week: 0, month: 0, overdue: 0,
   })
@@ -26,10 +34,14 @@ export const useTodoStore = defineStore('todos', () => {
   // Per-list cache to avoid redundant DB calls
   const todosCache = new Map<string, Map<ViewType, Todo[]>>()
   const categoriesCache = new Map<string, string[]>()
+  // Completed view is keyed by window too, so toggling 30d↔All is instant
+  // after the first fetch of each.
+  const completedCache = new Map<string, Map<CompletedWindow, { todos: Todo[]; hasMore: boolean; total: number }>>()
 
   function invalidateList(list: string) {
     todosCache.delete(list)
     categoriesCache.delete(list)
+    completedCache.delete(list)
   }
 
   // Events surface across every list's time-windowed views, so a mutation
@@ -246,6 +258,41 @@ export const useTodoStore = defineStore('todos', () => {
     loadEmptyCategories()
     fetchViewCounts(list)
 
+    // Completed has its own per-window cache so toggling the dropdown is instant.
+    if (view === 'completed') {
+      const window = settingsStore.completedWindow as CompletedWindow
+      const cached = completedCache.get(list)?.get(window)
+      if (cached !== undefined) {
+        todos.value = cached.todos
+        completedHasMore.value = cached.hasMore
+        completedTotal.value = cached.total
+        fetchCategories(list)
+        return
+      }
+      if (!opts.silent) loading.value = true
+      error.value = null
+      fetchCategories(list)
+      try {
+        const url = `/api/todos/completed?list=${encodeURIComponent(list)}&window=${window}`
+        const res = await apiFetch(url)
+        if (!res.ok) return
+        const data = await res.json() as { todos: Todo[]; hasMore?: boolean; total?: number }
+        const fetched = Array.isArray(data.todos) ? data.todos : []
+        const hasMore = !!data.hasMore
+        const total = typeof data.total === 'number' ? data.total : fetched.length
+        todos.value = fetched
+        completedHasMore.value = hasMore
+        completedTotal.value = total
+        if (!completedCache.has(list)) completedCache.set(list, new Map())
+        completedCache.get(list)!.set(window, { todos: fetched, hasMore, total })
+      } catch (e) {
+        error.value = String(e)
+      } finally {
+        if (!opts.silent) loading.value = false
+      }
+      return
+    }
+
     const cachedTodos = todosCache.get(list)?.get(view)
     if (cachedTodos !== undefined) {
       todos.value = cachedTodos
@@ -257,10 +304,7 @@ export const useTodoStore = defineStore('todos', () => {
     error.value = null
     fetchCategories(list)
     try {
-      const url = view === 'completed'
-        ? `/api/todos/completed?list=${encodeURIComponent(list)}`
-        : buildUrl(list, view)
-
+      const url = buildUrl(list, view)
       const statusParam = view === 'all' ? '&status=0' : ''
       const res = await apiFetch(url + statusParam)
       if (!res.ok) {
@@ -279,16 +323,39 @@ export const useTodoStore = defineStore('todos', () => {
     }
   }
 
+  async function setCompletedWindow(w: CompletedWindow) {
+    if (settingsStore.completedWindow === w) return
+    settingsStore.setCompletedWindow(w)
+    if (currentView.value === 'completed') {
+      await fetchTodos(currentList.value, 'completed')
+    }
+  }
+
   // Drop cached views for `list` except the one currently displayed — their
   // filters may differ from what we patched locally, so they'll refetch on
   // next visit. The current view's cache entry shares a reference with
   // `todos.value`, so in-place mutations below keep it in sync automatically.
   function invalidateOtherViews(list: string) {
     const listCache = todosCache.get(list)
-    if (!listCache) return
-    const keep = list === currentList.value ? currentView.value : null
-    for (const view of [...listCache.keys()]) {
-      if (view !== keep) listCache.delete(view)
+    if (listCache) {
+      const keep = list === currentList.value ? currentView.value : null
+      for (const view of [...listCache.keys()]) {
+        if (view !== keep) listCache.delete(view)
+      }
+    }
+    // Completed cache is keyed by window. If the user is currently on the
+    // Completed view, keep only the active window's entry (it shares its
+    // reference with todos.value); otherwise drop the whole list's bucket.
+    const cListCache = completedCache.get(list)
+    if (cListCache) {
+      if (list === currentList.value && currentView.value === 'completed') {
+        const active = settingsStore.completedWindow as CompletedWindow
+        for (const w of [...cListCache.keys()]) {
+          if (w !== active) cListCache.delete(w)
+        }
+      } else {
+        completedCache.delete(list)
+      }
     }
   }
 
@@ -429,8 +496,14 @@ export const useTodoStore = defineStore('todos', () => {
   async function deleteTodo(id: number) {
     const res = await apiFetch(`/api/todos/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(await res.text())
+    const removed = todos.value.find((t) => t.id === id)
     todos.value = todos.value.filter((t) => t.id !== id)
     invalidateList(currentList.value)
+    // Keep the Completed dropdown count in sync when deleting from there.
+    // invalidateList wiped the cached entries, so we only need the ref.
+    if (currentView.value === 'completed' && removed?.status === 1) {
+      completedTotal.value = Math.max(0, completedTotal.value - 1)
+    }
     fetchViewCounts(currentList.value)
   }
 
@@ -481,6 +554,13 @@ export const useTodoStore = defineStore('todos', () => {
       throw e
     }
     invalidateOtherViews(list)
+    // Keep the Completed dropdown count and active-window cache total in sync.
+    if (view === 'completed') {
+      completedTotal.value = Math.max(0, completedTotal.value - 1)
+      const active = settingsStore.completedWindow as CompletedWindow
+      const entry = completedCache.get(list)?.get(active)
+      if (entry) entry.total = Math.max(0, entry.total - 1)
+    }
     fetchViewCounts(list)
   }
 
@@ -663,6 +743,9 @@ export const useTodoStore = defineStore('todos', () => {
     emptyCategoriesLoaded = false
     todosCache.clear()
     categoriesCache.clear()
+    completedCache.clear()
+    completedHasMore.value = false
+    completedTotal.value = 0
     viewCounts.value = { today: 0, week: 0, month: 0, overdue: 0 }
   }
 
@@ -674,11 +757,14 @@ export const useTodoStore = defineStore('todos', () => {
     currentView,
     currentList,
     viewCounts,
+    completedHasMore,
+    completedTotal,
     eventsVersion,
     eventsInView,
     byCategory,
     notifyEventChanged,
     fetchTodos,
+    setCompletedWindow,
     addTodo,
     updateTodo,
     deleteTodo,

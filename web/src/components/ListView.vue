@@ -5,6 +5,7 @@ import type { Todo, TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { describeRecurrence } from '../lib/recurrence'
 import { useListStore } from '../stores/listStore'
+import { useSettingsStore, type CompletedWindow } from '../stores/settingsStore'
 import { apiFetch } from '../lib/api'
 import CategoryGroup from './CategoryGroup.vue'
 import EmptyState from './EmptyState.vue'
@@ -37,6 +38,20 @@ const gridColumnClasses = computed(() => GRID_COLUMN_CLASSES[props.gridColumns])
 
 const store = useTodoStore()
 const listStore = useListStore()
+const settingsStore = useSettingsStore()
+
+const COMPLETED_WINDOW_OPTIONS: { value: CompletedWindow; label: string }[] = [
+  { value: '7d', label: 'Last 7 days' },
+  { value: '30d', label: 'Last 30 days' },
+  { value: '90d', label: 'Last 90 days' },
+  { value: '1y', label: 'Last year' },
+  { value: 'all', label: 'All time' },
+]
+
+function onCompletedWindowChange(e: Event) {
+  const w = (e.target as HTMLSelectElement).value as CompletedWindow
+  store.setCompletedWindow(w)
+}
 
 const draggableCategories = computed({
   get: () => [...store.byCategory.entries()],
@@ -232,6 +247,25 @@ async function handleEventEditDelete() {
 
 <template>
   <div class="flex-1 min-h-0 overflow-y-auto">
+    <!-- Completed view: window selector. Rendered above the empty state so the
+         user can widen the range to discover older items. -->
+    <div v-if="store.currentView === 'completed'" class="flex items-center gap-2 mb-3 max-w-2xl">
+      <label for="completed-window" class="text-xs uppercase tracking-wider text-muted">Show</label>
+      <select
+        id="completed-window"
+        class="bg-surface border border-border rounded-lg px-2 py-1 text-sm text-text hover:bg-surface-hover transition-colors"
+        :value="settingsStore.completedWindow"
+        @change="onCompletedWindowChange"
+      >
+        <option v-for="opt in COMPLETED_WINDOW_OPTIONS" :key="opt.value" :value="opt.value">
+          {{ opt.label }}
+        </option>
+      </select>
+      <span v-if="!store.loading" class="text-sm text-muted">
+        {{ store.completedTotal }} {{ store.completedTotal === 1 ? 'item' : 'items' }}
+      </span>
+    </div>
+
     <EmptyState
       v-if="
         store.todos.length === 0 &&
@@ -408,6 +442,14 @@ async function handleEventEditDelete() {
         </div>
       </component>
     </div>
+
+    <!-- "Results clipped" hint when the server capped the response. -->
+    <p
+      v-if="store.currentView === 'completed' && store.completedHasMore && !store.loading && store.todos.length > 0"
+      class="text-xs text-muted mt-3 max-w-2xl"
+    >
+      Only showing the most recent items in this range.
+    </p>
   </div>
 
   <ConfirmDialog

@@ -74,6 +74,8 @@ const dueDateStr = computed(() => {
 
 const isDueOverdue = computed(() => {
   if (!props.todo.due_date || isCompleted.value) return false
+  // A past event has taken place — it isn't "overdue" in the actionable sense.
+  if (props.todo.type === 'event') return false
   return props.todo.due_date < Math.floor(Date.now() / 1000)
 })
 
