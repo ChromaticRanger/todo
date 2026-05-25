@@ -4,6 +4,7 @@ import { apiFetch } from '../lib/api'
 
 export type ThemeName = 'midnight' | 'slate' | 'forest' | 'sunset' | 'rose' | 'mono'
 export type ThemeMode = 'light' | 'dark'
+export type CompletedWindow = '7d' | '30d' | '90d' | '1y' | 'all'
 
 interface UiSettings {
   theme: ThemeName
@@ -11,10 +12,29 @@ interface UiSettings {
 }
 
 const STORAGE_KEY = 'theme_settings'
+const COMPLETED_WINDOW_KEY = 'completed_window'
 const DEFAULT: UiSettings = { theme: 'midnight', mode: 'light' }
+const DEFAULT_COMPLETED_WINDOW: CompletedWindow = '30d'
 
 const VALID_THEMES: ThemeName[] = ['midnight', 'slate', 'forest', 'sunset', 'rose', 'mono']
 const VALID_MODES: ThemeMode[] = ['light', 'dark']
+const VALID_COMPLETED_WINDOWS: CompletedWindow[] = ['7d', '30d', '90d', '1y', 'all']
+
+function readCompletedWindow(): CompletedWindow {
+  try {
+    const raw = localStorage.getItem(COMPLETED_WINDOW_KEY)
+    if (raw && VALID_COMPLETED_WINDOWS.includes(raw as CompletedWindow)) {
+      return raw as CompletedWindow
+    }
+  } catch {}
+  return DEFAULT_COMPLETED_WINDOW
+}
+
+function writeCompletedWindow(w: CompletedWindow) {
+  try {
+    localStorage.setItem(COMPLETED_WINDOW_KEY, w)
+  } catch {}
+}
 
 function readCache(): UiSettings {
   try {
@@ -48,6 +68,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const hasSeenWelcome = ref(true)
   // Transient flag — true while the user-menu replay is open. Not persisted.
   const replayingWelcome = ref(false)
+  // How far back the Completed view fetches. Local-only (no server sync) —
+  // a per-device preference, like list collapse state.
+  const completedWindow = ref<CompletedWindow>(DEFAULT_COMPLETED_WINDOW)
 
   /** Call synchronously before app.mount() to prevent flash. */
   function loadFromCache() {
@@ -55,6 +78,12 @@ export const useSettingsStore = defineStore('settings', () => {
     theme.value = cached.theme
     mode.value = cached.mode
     applyToDom(cached)
+    completedWindow.value = readCompletedWindow()
+  }
+
+  function setCompletedWindow(w: CompletedWindow) {
+    completedWindow.value = w
+    writeCompletedWindow(w)
   }
 
   /** Call after authentication to sync from server. */
@@ -129,9 +158,11 @@ export const useSettingsStore = defineStore('settings', () => {
     mode,
     hasSeenWelcome,
     replayingWelcome,
+    completedWindow,
     loadFromCache,
     loadFromServer,
     setTheme,
+    setCompletedWindow,
     completeWelcome,
     replayWelcome,
     dismissReplay,

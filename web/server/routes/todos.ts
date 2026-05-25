@@ -441,21 +441,68 @@ router.get('/overdue', async (req, res) => {
   }
 })
 
-// GET /api/todos/completed?list=X&since=epoch
+// GET /api/todos/completed?list=X&window=30d&limit=N
+// Also accepts legacy `since=epoch` for the browser extension.
+//
+// `window` is the user-friendly knob: '7d' | '30d' | '90d' | '1y' | 'all'.
+// `since` (if provided) takes precedence so existing callers keep working.
+// `limit` caps the response (default 500, hard ceiling 2000) so an 'all'
+// query on a heavy user can't return tens of thousands of rows.
+// `hasMore` in the response signals when the cap clipped the result.
+// `total` is the exact count of rows in the window (independent of limit),
+// so the UI can show "X completed in the last 30 days" even when clipped.
+const COMPLETED_WINDOWS: Record<string, number | null> = {
+  '7d': 7 * 86400,
+  '30d': 30 * 86400,
+  '90d': 90 * 86400,
+  '1y': 365 * 86400,
+  all: null,
+}
+const COMPLETED_LIMIT_DEFAULT = 500
+const COMPLETED_LIMIT_MAX = 2000
 router.get('/completed', async (req, res) => {
   const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
-  const since = req.query.since ? parseInt(req.query.since as string) : 0
+
+  let since = 0
+  if (req.query.since != null) {
+    since = parseInt(req.query.since as string) || 0
+  } else if (req.query.window != null) {
+    const span = COMPLETED_WINDOWS[String(req.query.window)]
+    if (span === undefined) {
+      return res.status(400).json({ error: 'Invalid window' })
+    }
+    since = span == null ? 0 : Math.floor(Date.now() / 1000) - span
+  }
+
+  const requested = req.query.limit ? parseInt(req.query.limit as string) : COMPLETED_LIMIT_DEFAULT
+  const limit = Math.min(Math.max(1, requested || COMPLETED_LIMIT_DEFAULT), COMPLETED_LIMIT_MAX)
+
   try {
-    const result = await query<TodoRow>(
-      buildTodoSelect(
-        `WHERE user_id = $1 AND list_name = $2 AND status = 1 AND type = 'todo'
-         AND (EXTRACT(EPOCH FROM completed_at)::BIGINT >= $3 OR $3 = 0)
-         ORDER BY completed_at DESC`
+    // Rows + exact total in parallel. limit+1 on the row fetch lets us flag
+    // `hasMore` without a second query; the total is cheap with the partial
+    // index added in migration 024.
+    const [rowsRes, countRes] = await Promise.all([
+      query<TodoRow>(
+        buildTodoSelect(
+          `WHERE user_id = $1 AND list_name = $2 AND status = 1 AND type = 'todo'
+           AND (EXTRACT(EPOCH FROM completed_at)::BIGINT >= $3 OR $3 = 0)
+           ORDER BY completed_at DESC
+           LIMIT $4`
+        ),
+        [userId, list, since, limit + 1]
       ),
-      [userId, list, since]
-    )
-    res.json({ todos: result.rows.map(coerceTodo) })
+      query<{ total: string }>(
+        `SELECT COUNT(*)::TEXT AS total FROM todos
+         WHERE user_id = $1 AND list_name = $2 AND status = 1 AND type = 'todo'
+           AND (EXTRACT(EPOCH FROM completed_at)::BIGINT >= $3 OR $3 = 0)`,
+        [userId, list, since]
+      ),
+    ])
+    const hasMore = rowsRes.rows.length > limit
+    const rows = hasMore ? rowsRes.rows.slice(0, limit) : rowsRes.rows
+    const total = Number(countRes.rows[0]?.total ?? 0)
+    res.json({ todos: rows.map(coerceTodo), hasMore, total })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
