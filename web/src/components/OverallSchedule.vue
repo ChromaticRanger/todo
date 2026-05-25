@@ -3,11 +3,13 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { Todo, TodoFormData } from '../types/todo'
 import { apiFetch } from '../lib/api'
 import { useTodoStore } from '../stores/todoStore'
+import { useListStore } from '../stores/listStore'
 import { priorityBorderClass } from '../lib/priorityClass'
 import { describeRecurrence } from '../lib/recurrence'
 import TodoForm from './TodoForm.vue'
 
 const todoStore = useTodoStore()
+const listStore = useListStore()
 
 const today = new Date()
 const viewMonth = ref<{ year: number; month: number }>({
@@ -21,6 +23,11 @@ const error = ref<string | null>(null)
 const openDayKey = ref<string | null>(null)
 const editing = ref<Todo | null>(null)
 const editingCategories = ref<string[]>([])
+
+// Right-click context menu + new-event creation state.
+const dayMenu = ref<{ x: number; y: number; date: Date } | null>(null)
+const creatingDue = ref<number | null>(null)
+const creatingCategories = ref<string[]>([])
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -247,8 +254,38 @@ async function handleEditDelete() {
   await fetchCalendar()
 }
 
-function todayClass(date: Date): string {
-  return isSameDay(date, today) ? 'ring-1 ring-accent' : ''
+function isToday(date: Date): boolean {
+  return isSameDay(date, today)
+}
+
+function onCellContextMenu(e: MouseEvent, date: Date) {
+  e.preventDefault()
+  dayMenu.value = { x: e.clientX, y: e.clientY, date: new Date(date) }
+}
+
+function closeDayMenu() {
+  dayMenu.value = null
+}
+
+async function openCreateEvent() {
+  if (!dayMenu.value) return
+  // Default to 9:00 AM local on the chosen day — sensible business-hours
+  // starting point the user can adjust in the form.
+  const d = new Date(dayMenu.value.date)
+  d.setHours(9, 0, 0, 0)
+  creatingDue.value = Math.floor(d.getTime() / 1000)
+  closeDayMenu()
+  creatingCategories.value = await todoStore.fetchCategoriesFor(listStore.activeList)
+}
+
+async function handleCreateSubmit(form: TodoFormData) {
+  creatingDue.value = null
+  await todoStore.addTodo(listStore.activeList, form)
+  await fetchCalendar()
+}
+
+function handleCreateCancel() {
+  creatingDue.value = null
 }
 
 function chipBaseClass(t: Todo): string {
@@ -283,7 +320,11 @@ function eventKey(t: Todo): string {
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    if (editing.value) return // TodoForm handles its own escape
+    if (editing.value || creatingDue.value != null) return // TodoForm handles its own escape
+    if (dayMenu.value) {
+      closeDayMenu()
+      return
+    }
     if (openDayKey.value) closeOverflow()
   }
 }
@@ -351,14 +392,19 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
           :key="cell.date.toISOString()"
           :data-day-cell="localDayKey(cell.date)"
           class="relative bg-bg min-h-24 p-1.5 flex flex-col gap-1 overflow-hidden"
-          :class="[!cell.inMonth ? 'bg-surface/30' : '']"
+          :class="[
+            !cell.inMonth ? 'bg-surface/30' : '',
+            isToday(cell.date) ? 'bg-accent/10 inset-ring-1 inset-ring-accent/40' : '',
+          ]"
+          @contextmenu="onCellContextMenu($event, cell.date)"
         >
           <div class="flex items-center justify-between text-[11px]">
             <span
               class="inline-flex items-center justify-center size-5 rounded-full"
               :class="[
-                !cell.inMonth ? 'text-muted/60' : 'text-text',
-                todayClass(cell.date),
+                isToday(cell.date)
+                  ? 'bg-accent text-accent-fg font-semibold'
+                  : (!cell.inMonth ? 'text-muted/60' : 'text-text'),
               ]"
             >
               {{ cell.date.getDate() }}
@@ -501,5 +547,34 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
       @cancel="handleEditCancel"
       @delete="handleEditDelete"
     />
+
+    <!-- Create-event modal (right-click → Create Event) -->
+    <TodoForm
+      v-if="creatingDue != null"
+      :categories="creatingCategories"
+      initial-type="event"
+      :initial-due="creatingDue"
+      @submit="handleCreateSubmit"
+      @cancel="handleCreateCancel"
+    />
+
+    <!-- Right-click context menu -->
+    <template v-if="dayMenu">
+      <div class="fixed inset-0 z-40" @click="closeDayMenu" @contextmenu.prevent="closeDayMenu" />
+      <div
+        class="fixed z-50 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-44 dark:inset-ring dark:inset-ring-white/5"
+        :style="{ left: `${dayMenu.x}px`, top: `${dayMenu.y}px` }"
+      >
+        <button
+          class="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
+          @click="openCreateEvent"
+        >
+          <svg class="size-3.5 text-muted shrink-0" viewBox="0 0 16 16" fill="currentColor">
+            <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />
+          </svg>
+          Create Event
+        </button>
+      </div>
+    </template>
   </div>
 </template>

@@ -9,6 +9,7 @@ const props = defineProps<{
   categories: string[]
   defaultCategory?: string
   initialType?: ItemType
+  initialDue?: number
 }>()
 
 const emit = defineEmits<{
@@ -29,7 +30,11 @@ function epochToDatetimeLocalStr(epoch: number): string {
 }
 
 const dueStr = ref(
-  props.initial?.due_date ? epochToDatetimeLocalStr(props.initial.due_date) : ''
+  props.initial?.due_date
+    ? epochToDatetimeLocalStr(props.initial.due_date)
+    : props.initialDue != null
+      ? epochToDatetimeLocalStr(props.initialDue)
+      : ''
 )
 const repeatUnit = ref<'days' | 'months'>(
   (props.initial?.repeat_months ?? 0) > 0 ? 'months' : 'days'
@@ -189,7 +194,7 @@ const priorityLabels = [
             <input
               v-model="title"
               type="text"
-              :placeholder="type === 'bookmark' ? 'Bookmark title' : type === 'note' ? 'Note title' : 'What needs to be done?'"
+              :placeholder="type === 'bookmark' ? 'Bookmark title' : type === 'note' ? 'Note title' : type === 'event' ? 'What is happening?' : 'What needs to be done?'"
               class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
               ref="titleInput"
             />
