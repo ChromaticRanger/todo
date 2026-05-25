@@ -366,7 +366,8 @@ router.get('/counts', async (req, res) => {
     await spawnRepeatingTodos(userId, list)
     // Base counts: todos in the active list + non-recurring events. Recurring
     // event occurrences are tallied in JS below so a single birthday series
-    // contributes to today/week/month at most once each, never to overdue.
+    // contributes to today/week/month at most once each. Events never count
+    // toward Overdue — a past event has taken place, it isn't actionable.
     const [countsResult, seriesMonth] = await Promise.all([
       query<{ today: string; week: string; month: string; overdue: string }>(
         `WITH bounds AS (
@@ -378,7 +379,7 @@ router.get('/counts', async (req, res) => {
            COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 86400) AS today,
            COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 7 * 86400) AS week,
            COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 30 * 86400) AS month,
-           COUNT(*) FILTER (WHERE due_date < b.now_epoch) AS overdue
+           COUNT(*) FILTER (WHERE due_date < b.now_epoch AND type = 'todo') AS overdue
          FROM todos, bounds b
          WHERE user_id = $1 AND status = 0
            AND ((list_name = $2 AND type = 'todo')
@@ -417,6 +418,8 @@ router.get('/counts', async (req, res) => {
 })
 
 // GET /api/todos/overdue?list=X
+// Events are intentionally excluded — once an event's date passes it has
+// simply taken place, it is not "overdue" in the actionable sense.
 router.get('/overdue', async (req, res) => {
   const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
@@ -425,7 +428,7 @@ router.get('/overdue', async (req, res) => {
     const result = await query<TodoRow>(
       buildTodoSelect(
         `WHERE user_id = $1 AND status = 0
-         AND (${TIME_WINDOWED_SCOPE})
+         AND list_name = $2 AND type = 'todo'
          AND due_date IS NOT NULL
          AND due_date < EXTRACT(EPOCH FROM NOW())::BIGINT
          ORDER BY due_date ASC`
