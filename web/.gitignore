@@ -12,7 +12,12 @@ dist
 dist-ssr
 *.local
 .env
+.env.*
+!.env.example
 dist-server
+
+# Local DB dumps and other untracked working files
+.local/
 
 # Editor directories and files
 .vscode/*
