@@ -348,7 +348,7 @@ function onTourSkip() {
   <AccountPage v-else-if="isAccountFlow" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />
   <ConnectExtension v-else-if="isConnectFlow" />
-  <div v-else class="min-h-dvh bg-bg text-text flex flex-col isolate">
+  <div v-else class="h-dvh bg-bg text-text flex flex-col isolate">
     <AppHeader
       :calendar-active="mode === 'calendar'"
       :discover-active="mode === 'discover'"

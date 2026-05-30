@@ -18,7 +18,7 @@
     "db:down": "docker compose down",
     "db:refresh": "bash server/scripts/db-refresh.sh",
     "db:migrate": "tsx server/scripts/run-migrations.ts",
-    "migrate:prod": "tsx --env-file=.env.production server/scripts/run-migrations.ts",
+    "migrate:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/run-migrations.ts",
     "db:backfill-user": "tsx server/scripts/backfill-user.ts",
     "ext:dev": "npm --prefix extension run dev",
     "ext:build": "npm --prefix extension run build"

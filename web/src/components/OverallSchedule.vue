@@ -4,18 +4,25 @@ import type { Todo, TodoFormData } from '../types/todo'
 import { apiFetch } from '../lib/api'
 import { useTodoStore } from '../stores/todoStore'
 import { useListStore } from '../stores/listStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { priorityBorderClass } from '../lib/priorityClass'
 import { describeRecurrence } from '../lib/recurrence'
+import { formatEventTimeRange } from '../lib/eventTime'
 import TodoForm from './TodoForm.vue'
 
 const todoStore = useTodoStore()
 const listStore = useListStore()
+const settingsStore = useSettingsStore()
 
 const today = new Date()
-const viewMonth = ref<{ year: number; month: number }>({
-  year: today.getFullYear(),
-  month: today.getMonth(),
-})
+// Single anchor Date for the visible range. For month mode it's the 1st of the
+// shown month; for week mode it's the Monday of the shown week. Initialise
+// based on the persisted view mode so a reload lands on the current bucket.
+const viewAnchor = ref<Date>(
+  settingsStore.calendarView === 'week'
+    ? startOfWeek(today)
+    : new Date(today.getFullYear(), today.getMonth(), 1)
+)
 
 const todos = ref<Todo[]>([])
 const loading = ref(false)
@@ -61,8 +68,33 @@ function startOfDayEpoch(d: Date): number {
   return Math.floor(x.getTime() / 1000)
 }
 
+// ── Week hour-grid constants & helpers ─────────────────────────────────────
+const HOUR_PX = 56
+const HOURS = Array.from({ length: 24 }, (_, i) => i)
+const hourGridScroll = ref<HTMLElement | null>(null)
+
+// Monday containing the given date (or earlier in the same week).
+function startOfWeek(d: Date): Date {
+  const dow = (d.getDay() + 6) % 7 // Mon=0..Sun=6
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow)
+}
+
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+}
+
+// Mon-start 7-cell week grid. All cells flagged inMonth=true so any existing
+// "non-current-month" styling collapses to a no-op (week mode doesn't have a
+// notion of "out of bucket" — every visible day is a real day).
+function buildWeekGrid(anchor: Date): { date: Date; inMonth: boolean }[] {
+  const monday = startOfWeek(anchor)
+  return Array.from({ length: 7 }, (_, i) => ({ date: addDays(monday, i), inMonth: true }))
+}
+
 // Mon-start grid, always 6 rows × 7 cols.
-function buildMonthGrid(year: number, month: number): { date: Date; inMonth: boolean }[] {
+function buildMonthGrid(anchor: Date): { date: Date; inMonth: boolean }[] {
+  const year = anchor.getFullYear()
+  const month = anchor.getMonth()
   const firstOfMonth = new Date(year, month, 1)
   // JS getDay: Sun=0..Sat=6. Convert to Mon=0..Sun=6.
   const dow = (firstOfMonth.getDay() + 6) % 7
@@ -74,20 +106,52 @@ function buildMonthGrid(year: number, month: number): { date: Date; inMonth: boo
   return cells
 }
 
-const grid = computed(() => buildMonthGrid(viewMonth.value.year, viewMonth.value.month))
+const grid = computed(() =>
+  settingsStore.calendarView === 'week'
+    ? buildWeekGrid(viewAnchor.value)
+    : buildMonthGrid(viewAnchor.value)
+)
+
+const emptyPreposition = computed(() => settingsStore.calendarView === 'week' ? 'for' : 'in')
 
 const monthLabel = computed(() => {
-  const d = new Date(viewMonth.value.year, viewMonth.value.month, 1)
-  return d.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+  if (settingsStore.calendarView === 'week') {
+    const start = startOfWeek(viewAnchor.value)
+    const end = addDays(start, 6)
+    const sameYear = start.getFullYear() === end.getFullYear()
+    const sameMonth = sameYear && start.getMonth() === end.getMonth()
+    const startStr = start.toLocaleDateString(undefined,
+      sameMonth ? { day: 'numeric' } : { day: 'numeric', month: 'short' })
+    const endStr = end.toLocaleDateString(undefined,
+      sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' })
+    const yearStr = sameYear ? `, ${start.getFullYear()}` : ''
+    return `${startStr} – ${endStr}${yearStr}`
+  }
+  return viewAnchor.value.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
 })
 
 const todosByDay = computed(() => {
   const map = new Map<string, Todo[]>()
-  for (const t of todos.value) {
-    if (t.due_date == null) continue
-    const key = localDayKey(t.due_date)
+  const push = (key: string, t: Todo) => {
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(t)
+  }
+  for (const t of todos.value) {
+    if (t.due_date == null) continue
+    // Multi-day events (positive duration) appear on every day they span.
+    // Todos and point-in-time events stay grouped by their start day.
+    if (t.type === 'event' && t.duration_seconds != null && t.duration_seconds > 0) {
+      const start = new Date(t.due_date * 1000)
+      const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate())
+      const endEpoch = t.due_date + t.duration_seconds
+      let cursor = startDay
+      while (cursor.getTime() / 1000 < endEpoch) {
+        push(localDayKey(cursor), t)
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate() + 1)
+      }
+    } else {
+      push(localDayKey(t.due_date), t)
+    }
   }
   return map
 })
@@ -100,6 +164,155 @@ const agendaDays = computed(() =>
     .map((c) => ({ date: c.date, items: todosByDay.value.get(localDayKey(c.date)) ?? [] }))
     .filter((d) => d.items.length > 0)
 )
+
+// ── Week hour-grid: positioned event blocks per day ────────────────────────
+//
+// For each day column, find events that overlap the day, clip [start, end] to
+// the day's bounds, and lane-pack overlapping events side by side. Multi-day
+// events split into one block per day they touch.
+interface HourBlock {
+  key: string
+  todo: Todo
+  topPx: number
+  heightPx: number
+  leftPct: number
+  widthPct: number
+  startEpoch: number
+  endEpoch: number
+}
+
+function dayStartEpoch(d: Date): number {
+  return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 1000)
+}
+
+function packLanes(blocks: HourBlock[]): HourBlock[] {
+  // Sort by start, then by end descending so longer-running events anchor lanes.
+  const sorted = [...blocks].sort((a, b) =>
+    a.startEpoch - b.startEpoch || b.endEpoch - a.endEpoch
+  )
+  // Greedy lane assignment within an overlap cluster. A new cluster begins
+  // whenever no current event is still running at the next event's start.
+  const lanes: number[] = [] // lane index → end epoch
+  const cluster: HourBlock[] = []
+  let clusterMaxLane = 0
+  const flush = () => {
+    if (!cluster.length) return
+    const laneCount = clusterMaxLane + 1
+    const width = 100 / laneCount
+    for (const b of cluster) {
+      // assigned lane was stored on b.leftPct as a lane index sentinel
+      const laneIdx = b.leftPct
+      b.leftPct = laneIdx * width
+      b.widthPct = width
+    }
+    cluster.length = 0
+    lanes.length = 0
+    clusterMaxLane = 0
+  }
+  for (const b of sorted) {
+    // Drop lanes whose event has ended before this one starts.
+    for (let i = 0; i < lanes.length; i++) {
+      if (lanes[i] <= b.startEpoch) lanes[i] = -1
+    }
+    const allFree = lanes.every((l) => l === -1)
+    if (allFree) flush()
+    // Pick the lowest free lane (-1 means free, including newly-vacated).
+    let lane = lanes.findIndex((l) => l === -1)
+    if (lane === -1) {
+      lane = lanes.length
+      lanes.push(b.endEpoch)
+    } else {
+      lanes[lane] = b.endEpoch
+    }
+    b.leftPct = lane // sentinel — converted to % in flush()
+    if (lane > clusterMaxLane) clusterMaxLane = lane
+    cluster.push(b)
+  }
+  flush()
+  return sorted
+}
+
+const weekDayBlocks = computed(() => {
+  if (settingsStore.calendarView !== 'week') return new Map<string, HourBlock[]>()
+  const map = new Map<string, HourBlock[]>()
+  for (const cell of grid.value) {
+    const dayStart = dayStartEpoch(cell.date)
+    const dayEnd = dayStart + 86400
+    const blocks: HourBlock[] = []
+    for (const t of todos.value) {
+      if (t.type !== 'event' || t.due_date == null) continue
+      const dur = t.duration_seconds ?? 0
+      const evStart = t.due_date
+      const evEnd = t.due_date + dur
+      // Skip events that don't touch this day.
+      if (evEnd <= dayStart || evStart >= dayEnd) continue
+      // Treat point-in-time events as a 30-min block so they're visible.
+      const visibleStart = Math.max(evStart, dayStart)
+      const visibleEndRaw = dur > 0 ? Math.min(evEnd, dayEnd) : Math.min(evStart + 1800, dayEnd)
+      const visibleEnd = Math.max(visibleEndRaw, visibleStart + 900) // min 15 min visual
+      blocks.push({
+        key: `${t.id}-${t.due_date}-${dayStart}`,
+        todo: t,
+        topPx: ((visibleStart - dayStart) / 3600) * HOUR_PX,
+        heightPx: ((visibleEnd - visibleStart) / 3600) * HOUR_PX,
+        leftPct: 0, // assigned by packLanes
+        widthPct: 100,
+        startEpoch: visibleStart,
+        endEpoch: visibleEnd,
+      })
+    }
+    map.set(localDayKey(cell.date), packLanes(blocks))
+  }
+  return map
+})
+
+function blocksFor(date: Date): HourBlock[] {
+  return weekDayBlocks.value.get(localDayKey(date)) ?? []
+}
+
+// Pixel offset for the "now" indicator on today's column.
+const nowLineTopPx = computed(() => {
+  const t = new Date(nowEpoch.value * 1000)
+  const minutes = t.getHours() * 60 + t.getMinutes()
+  return (minutes / 60) * HOUR_PX
+})
+
+// Tick the now-line every minute so it slides down through the day.
+let nowTickHandle: ReturnType<typeof setInterval> | null = null
+function startNowTick() {
+  if (nowTickHandle) return
+  nowTickHandle = setInterval(() => {
+    nowEpoch.value = Math.floor(Date.now() / 1000)
+  }, 60_000)
+}
+function stopNowTick() {
+  if (nowTickHandle) {
+    clearInterval(nowTickHandle)
+    nowTickHandle = null
+  }
+}
+
+function scrollWeekTo8am() {
+  nextTick(() => {
+    if (hourGridScroll.value) {
+      hourGridScroll.value.scrollTop = 8 * HOUR_PX
+    }
+  })
+}
+
+// Right-click on the hour grid: derive the time from the click's Y offset and
+// snap to 15 min. The cell day is passed by the caller.
+function onHourCellContextMenu(e: MouseEvent, date: Date) {
+  e.preventDefault()
+  const col = e.currentTarget as HTMLElement
+  const rect = col.getBoundingClientRect()
+  const y = e.clientY - rect.top
+  const minutes = Math.max(0, Math.min(24 * 60 - 1, (y / HOUR_PX) * 60))
+  const snapped = Math.floor(minutes / 15) * 15
+  const clicked = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  clicked.setHours(Math.floor(snapped / 60), snapped % 60, 0, 0)
+  dayMenu.value = { x: e.clientX, y: e.clientY, date: clicked }
+}
 
 const nowEpoch = ref(Math.floor(Date.now() / 1000))
 function isSnoozed(t: Todo): boolean {
@@ -128,26 +341,56 @@ async function fetchCalendar() {
   }
 }
 
-watch(viewMonth, fetchCalendar, { deep: true })
+watch(viewAnchor, fetchCalendar)
 // Refetch when an event is added from the +Add menu while the calendar is open.
 watch(() => todoStore.eventsVersion, () => { fetchCalendar() })
-onMounted(fetchCalendar)
+onMounted(() => {
+  fetchCalendar()
+  if (settingsStore.calendarView === 'week') {
+    scrollWeekTo8am()
+    startNowTick()
+  }
+})
 
-function prevMonth() {
-  const m = viewMonth.value.month - 1
-  viewMonth.value = m < 0
-    ? { year: viewMonth.value.year - 1, month: 11 }
-    : { year: viewMonth.value.year, month: m }
+// Toggle the now-tick + auto-scroll whenever the view mode changes at runtime.
+watch(() => settingsStore.calendarView, (mode) => {
+  if (mode === 'week') {
+    scrollWeekTo8am()
+    startNowTick()
+  } else {
+    stopNowTick()
+  }
+})
+
+function prev() {
+  const a = viewAnchor.value
+  viewAnchor.value = settingsStore.calendarView === 'week'
+    ? addDays(startOfWeek(a), -7)
+    : new Date(a.getFullYear(), a.getMonth() - 1, 1)
 }
-function nextMonth() {
-  const m = viewMonth.value.month + 1
-  viewMonth.value = m > 11
-    ? { year: viewMonth.value.year + 1, month: 0 }
-    : { year: viewMonth.value.year, month: m }
+function next() {
+  const a = viewAnchor.value
+  viewAnchor.value = settingsStore.calendarView === 'week'
+    ? addDays(startOfWeek(a), 7)
+    : new Date(a.getFullYear(), a.getMonth() + 1, 1)
 }
 function goToday() {
   const t = new Date()
-  viewMonth.value = { year: t.getFullYear(), month: t.getMonth() }
+  viewAnchor.value = settingsStore.calendarView === 'week'
+    ? startOfWeek(t)
+    : new Date(t.getFullYear(), t.getMonth(), 1)
+}
+
+function setView(v: 'month' | 'week') {
+  if (settingsStore.calendarView === v) return
+  settingsStore.setCalendarView(v)
+  // Snap the anchor into the natural starting bucket for the new mode so the
+  // user lands on "now" rather than wherever the previous mode left them.
+  // The mode watcher above handles the now-tick + auto-scroll side effects.
+  const t = new Date()
+  viewAnchor.value = v === 'week'
+    ? startOfWeek(t)
+    : new Date(t.getFullYear(), t.getMonth(), 1)
 }
 
 function dayItems(date: Date): Todo[] {
@@ -269,10 +512,13 @@ function closeDayMenu() {
 
 async function openCreateEvent() {
   if (!dayMenu.value) return
-  // Default to 9:00 AM local on the chosen day — sensible business-hours
-  // starting point the user can adjust in the form.
   const d = new Date(dayMenu.value.date)
-  d.setHours(9, 0, 0, 0)
+  // Week view's right-click already snapped to the clicked hour (15-min
+  // granularity); month view passes a date at midnight, so default to 9 AM
+  // there as a sensible business-hours starting point.
+  if (settingsStore.calendarView === 'month') {
+    d.setHours(9, 0, 0, 0)
+  }
   creatingDue.value = Math.floor(d.getTime() / 1000)
   closeDayMenu()
   creatingCategories.value = await todoStore.fetchCategoriesFor(listStore.activeList)
@@ -299,12 +545,9 @@ function chipBaseClass(t: Todo): string {
   ].filter(Boolean).join(' ')
 }
 
-function formatEventTime(epoch: number | null): string {
-  if (epoch == null) return ''
-  return new Date(epoch * 1000).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+function formatEventTime(t: Todo): string {
+  if (t.due_date == null) return ''
+  return formatEventTimeRange(t.due_date, t.duration_seconds)
 }
 
 function eventRecurrenceLabel(t: Todo): string {
@@ -337,6 +580,7 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)
   window.removeEventListener('resize', onReposition)
   window.removeEventListener('scroll', onReposition, true)
+  stopNowTick()
 })
 
 // Recompute on month change in case the popover was open during a re-render.
@@ -345,13 +589,14 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
 
 <template>
   <div class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col">
-    <!-- Header -->
-    <div class="flex items-center justify-between gap-3 mb-3">
+    <!-- Header — pinned so it stays visible while the calendar scrolls
+         (mainly relevant for the week view's tall hour grid). -->
+    <div class="sticky top-0 z-30 bg-bg flex items-center justify-between gap-3 -mx-4 px-4 py-2 -mt-4 mb-3">
       <div class="flex items-center gap-1">
         <button
           class="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
-          title="Previous month"
-          @click="prevMonth"
+          :title="settingsStore.calendarView === 'week' ? 'Previous week' : 'Previous month'"
+          @click="prev"
         >
           <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -360,8 +605,8 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
         <h2 class="text-base font-medium text-text px-2 min-w-40 text-center">{{ monthLabel }}</h2>
         <button
           class="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
-          title="Next month"
-          @click="nextMonth"
+          :title="settingsStore.calendarView === 'week' ? 'Next week' : 'Next month'"
+          @click="next"
         >
           <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
@@ -375,14 +620,34 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
         >
           Today
         </button>
+        <div class="inline-flex rounded-lg border border-border overflow-hidden text-sm">
+          <button
+            class="px-2.5 py-1 transition-colors"
+            :class="settingsStore.calendarView === 'month'
+              ? 'bg-accent text-accent-fg'
+              : 'text-muted hover:text-text hover:bg-surface-hover'"
+            @click="setView('month')"
+          >
+            Month
+          </button>
+          <button
+            class="px-2.5 py-1 transition-colors border-l border-border"
+            :class="settingsStore.calendarView === 'week'
+              ? 'bg-accent text-accent-fg'
+              : 'text-muted hover:text-text hover:bg-surface-hover'"
+            @click="setView('week')"
+          >
+            Week
+          </button>
+        </div>
         <span v-if="loading" class="size-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
       </div>
     </div>
 
     <p v-if="error" class="text-sm text-danger mb-2">{{ error }}</p>
 
-    <!-- Desktop / tablet grid -->
-    <div class="hidden sm:flex sm:flex-col flex-1 min-h-0">
+    <!-- Desktop / tablet month grid -->
+    <div v-if="settingsStore.calendarView === 'month'" class="hidden sm:flex sm:flex-col flex-1 min-h-0">
       <div class="grid grid-cols-7 text-xs text-muted uppercase tracking-wider mb-1">
         <div v-for="d in WEEKDAY_LABELS" :key="d" class="px-2 py-1">{{ d }}</div>
       </div>
@@ -415,7 +680,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
             v-for="t in chipsFor(cell.date).visible"
             :key="t.type === 'event' ? eventKey(t) : t.id"
             class="text-left"
-            :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
+            :title="t.type === 'event' ? `Event · ${formatEventTime(t)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
             @click="openEdit(t)"
           >
             <span :class="chipBaseClass(t)">
@@ -457,7 +722,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
               v-for="t in dayItems(cell.date)"
               :key="t.type === 'event' ? eventKey(t) : t.id"
               class="block w-full text-left"
-              :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
+              :title="t.type === 'event' ? `Event · ${formatEventTime(t)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
               @click="openEdit(t)"
             >
               <span :class="chipBaseClass(t)">
@@ -488,10 +753,105 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
       />
     </div>
 
+    <!-- Desktop / tablet week hour grid -->
+    <div v-if="settingsStore.calendarView === 'week'" class="hidden sm:flex sm:flex-col flex-1 min-h-0">
+      <!-- Day headers: spacer + 7 columns. Sticky below the calendar nav so
+           they stay visible while the hour grid (or the outer container)
+           scrolls. The top offset clears the sticky nav above it. -->
+      <div class="sticky top-[44px] z-20 bg-bg grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] text-xs mb-1 pt-2 border-b border-border">
+        <div></div>
+        <div
+          v-for="cell in grid"
+          :key="cell.date.toISOString()"
+          class="px-2 py-1 flex items-center justify-center gap-1.5"
+        >
+          <span class="uppercase tracking-wider text-muted">
+            {{ cell.date.toLocaleDateString(undefined, { weekday: 'short' }) }}
+          </span>
+          <span
+            class="inline-flex items-center justify-center size-5 rounded-full"
+            :class="isToday(cell.date) ? 'bg-accent text-accent-fg font-semibold' : 'text-text'"
+          >
+            {{ cell.date.getDate() }}
+          </span>
+        </div>
+      </div>
+
+      <!-- Scrollable hour grid -->
+      <div
+        ref="hourGridScroll"
+        class="overflow-y-auto flex-1 min-h-0 border border-border rounded-lg bg-bg"
+      >
+        <div
+          class="grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] relative"
+          :style="{ height: `${24 * HOUR_PX}px` }"
+        >
+          <!-- Hour labels column -->
+          <div class="relative">
+            <div
+              v-for="h in HOURS"
+              :key="h"
+              class="absolute right-2 -translate-y-1/2 text-[10px] text-muted tabular-nums"
+              :style="{ top: `${h * HOUR_PX}px` }"
+            >
+              {{ h === 0 ? '' : String(h).padStart(2, '0') + ':00' }}
+            </div>
+          </div>
+
+          <!-- Day columns -->
+          <div
+            v-for="cell in grid"
+            :key="cell.date.toISOString()"
+            class="relative border-l border-border"
+            :class="isToday(cell.date) ? 'bg-accent/5' : ''"
+            @contextmenu="onHourCellContextMenu($event, cell.date)"
+          >
+            <!-- Hour grid lines -->
+            <div
+              v-for="h in HOURS"
+              :key="h"
+              class="absolute left-0 right-0 border-t border-border/40"
+              :style="{ top: `${h * HOUR_PX}px` }"
+            />
+
+            <!-- Event blocks -->
+            <button
+              v-for="b in blocksFor(cell.date)"
+              :key="b.key"
+              class="absolute rounded-md bg-accent/20 hover:bg-accent/30 border-l-4 border-accent text-left text-[11px] overflow-hidden px-1.5 py-0.5 transition-colors"
+              :style="{
+                top: `${b.topPx}px`,
+                height: `${b.heightPx}px`,
+                left: `calc(${b.leftPct}% + 2px)`,
+                width: `calc(${b.widthPct}% - 4px)`,
+              }"
+              :title="`${b.todo.title} · ${formatEventTime(b.todo)}${eventRecurrenceLabel(b.todo) ? ' · ' + eventRecurrenceLabel(b.todo) : ''}`"
+              @click.stop="openEdit(b.todo)"
+            >
+              <div class="font-medium text-text truncate">{{ b.todo.title }}</div>
+              <div v-if="b.heightPx >= 28" class="text-[10px] text-muted truncate">
+                {{ formatEventTime(b.todo) }}
+              </div>
+            </button>
+
+            <!-- "Now" indicator on today's column -->
+            <div
+              v-if="isToday(cell.date)"
+              class="absolute left-0 right-0 pointer-events-none z-10"
+              :style="{ top: `${nowLineTopPx}px` }"
+            >
+              <div class="h-px bg-rose-500"></div>
+              <div class="absolute -left-1 -top-1 size-2 rounded-full bg-rose-500"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- Mobile agenda list -->
     <div class="sm:hidden space-y-3">
       <div v-if="agendaDays.length === 0 && !loading" class="text-center text-muted py-12 text-sm">
-        No scheduled todos in {{ monthLabel }}
+        No scheduled todos {{ emptyPreposition }} {{ monthLabel }}
       </div>
       <div
         v-for="day in agendaDays"
@@ -507,7 +867,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
             v-for="t in day.items"
             :key="t.type === 'event' ? eventKey(t) : t.id"
             class="w-full text-left"
-            :title="t.type === 'event' ? `Event · ${formatEventTime(t.due_date)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
+            :title="t.type === 'event' ? `Event · ${formatEventTime(t)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
             @click="openEdit(t)"
           >
             <span :class="chipBaseClass(t)">
@@ -523,7 +883,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
               <span v-else class="size-2 rounded-full shrink-0" :class="listColour(t.list_name)" />
               <span class="truncate flex-1">{{ t.title }}</span>
               <span v-if="t.type === 'event' && eventRecurrenceLabel(t)" class="text-[10px] text-accent/80 shrink-0" aria-label="Recurring">↻</span>
-              <span class="text-[10px] text-muted shrink-0">{{ t.type === 'event' ? formatEventTime(t.due_date) : t.list_name }}</span>
+              <span class="text-[10px] text-muted shrink-0">{{ t.type === 'event' ? formatEventTime(t) : t.list_name }}</span>
             </span>
           </button>
         </div>
@@ -535,7 +895,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
       v-if="agendaDays.length === 0 && !loading"
       class="hidden sm:block text-center text-muted py-2 text-sm"
     >
-      No scheduled todos in {{ monthLabel }}
+      No scheduled todos {{ emptyPreposition }} {{ monthLabel }}
     </div>
 
     <!-- Edit modal -->
@@ -554,6 +914,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
       :categories="creatingCategories"
       initial-type="event"
       :initial-due="creatingDue"
+      :initial-duration-seconds="1800"
       @submit="handleCreateSubmit"
       @cancel="handleCreateCancel"
     />

@@ -10,6 +10,7 @@ const props = defineProps<{
   defaultCategory?: string
   initialType?: ItemType
   initialDue?: number
+  initialDurationSeconds?: number
 }>()
 
 const emit = defineEmits<{
@@ -36,6 +37,22 @@ const dueStr = ref(
       ? epochToDatetimeLocalStr(props.initialDue)
       : ''
 )
+
+// Event end time. Pre-fills from initial.due_date + duration_seconds (edit),
+// or from initialDue + initialDurationSeconds (new event from right-click).
+// Blank otherwise — the user can fill it in when promoting a legacy event.
+const DEFAULT_NEW_EVENT_DURATION_SEC = 1800
+function computeInitialEndStr(): string {
+  if (props.initial?.due_date != null && (props.initial.duration_seconds ?? 0) > 0) {
+    return epochToDatetimeLocalStr(props.initial.due_date + (props.initial.duration_seconds ?? 0))
+  }
+  if (!props.initial && props.initialDue != null) {
+    const dur = props.initialDurationSeconds ?? DEFAULT_NEW_EVENT_DURATION_SEC
+    return epochToDatetimeLocalStr(props.initialDue + dur)
+  }
+  return ''
+}
+const endStr = ref(computeInitialEndStr())
 const repeatUnit = ref<'days' | 'months'>(
   (props.initial?.repeat_months ?? 0) > 0 ? 'months' : 'days'
 )
@@ -105,10 +122,27 @@ const effectiveCategory = computed(() =>
     : selectedCategory.value
 )
 
+// Epoch helpers for the event start/end pair; using getTime/1000 picks up the
+// browser's local TZ — matches what the user sees in the datetime-local input.
+function strToEpoch(s: string): number | null {
+  if (!s) return null
+  const t = new Date(s).getTime()
+  return Number.isFinite(t) ? Math.floor(t / 1000) : null
+}
+
 const canSubmit = computed(() => {
   if (!title.value.trim()) return false
   if (type.value === 'bookmark' && !url.value.trim()) return false
-  if (type.value === 'event' && !dueStr.value) return false
+  if (type.value === 'event') {
+    if (!dueStr.value) return false
+    // End must be after start when both are set. End is optional for legacy
+    // point-in-time events; we only block invalid ranges.
+    if (endStr.value) {
+      const s = strToEpoch(dueStr.value)
+      const e = strToEpoch(endStr.value)
+      if (s == null || e == null || e <= s) return false
+    }
+  }
   return true
 })
 
@@ -134,6 +168,16 @@ function submit() {
     }
   }
 
+  // Compute duration from end - start. Blank end on an event submits as null
+  // (server treats null/0 as legacy point-in-time).
+  let duration_seconds: number | null = null
+  if (type.value === 'event' && due_date != null && endStr.value) {
+    const endEpoch = strToEpoch(endStr.value)
+    if (endEpoch != null && endEpoch > due_date) {
+      duration_seconds = endEpoch - due_date
+    }
+  }
+
   emit('submit', {
     title: title.value.trim(),
     description: description.value.trim(),
@@ -145,6 +189,7 @@ function submit() {
     type: type.value,
     url: type.value === 'bookmark' ? url.value.trim() : null,
     recur_until: type.value === 'event' ? recurUntil : null,
+    duration_seconds: type.value === 'event' ? duration_seconds : null,
   })
 }
 
@@ -213,16 +258,34 @@ const priorityLabels = [
             />
           </div>
 
-          <!-- Event-only: Date & Time (required) -->
-          <div v-if="type === 'event'">
-            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Date &amp; Time *</label>
-            <input
-              v-model="dueStr"
-              type="datetime-local"
-              required
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
-            />
+          <!-- Event-only: Start (required) and End. End is optional so legacy
+               point-in-time events keep working; new events default to a
+               +30 min end. -->
+          <div v-if="type === 'event'" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Start *</label>
+              <input
+                v-model="dueStr"
+                type="datetime-local"
+                required
+                class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
+            <div>
+              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">End</label>
+              <input
+                v-model="endStr"
+                type="datetime-local"
+                class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              />
+            </div>
           </div>
+          <p
+            v-if="type === 'event' && endStr && dueStr && (strToEpoch(endStr) ?? 0) <= (strToEpoch(dueStr) ?? 0)"
+            class="text-xs text-danger -mt-1"
+          >
+            End must be after start.
+          </p>
 
           <!-- Event-only: Recurrence -->
           <div v-if="type === 'event'">

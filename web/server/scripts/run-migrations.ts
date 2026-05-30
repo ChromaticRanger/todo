@@ -4,16 +4,58 @@
  * Usage:  npx tsx server/scripts/run-migrations.ts
  */
 
-import 'dotenv/config'
+// For local runs, .env must win over any stale DATABASE_URL exported by the
+// shell — that's exactly the trap the local-DB setup is meant to prevent.
+// migrate:prod (ALLOW_REMOTE_DB=1) keeps the standard precedence so the value
+// set by --env-file=.env.production survives. Env munging must happen BEFORE
+// importing db.js (which builds its pool from process.env at module load),
+// so the pool is loaded dynamically inside main().
+import dotenv from 'dotenv'
+if (process.env.ALLOW_REMOTE_DB !== '1') {
+  delete process.env.DATABASE_URL
+}
+dotenv.config()
+
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { pool } from '../db.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const migrationsDir = path.join(__dirname, '..', 'migrations')
 
+// Safety: refuse to migrate against a non-local DB unless the caller has
+// explicitly opted in. The `migrate:prod` npm script sets ALLOW_REMOTE_DB=1;
+// every other invocation must hit localhost. Catches the lingering-shell-
+// export trap where a stale DATABASE_URL silently routes to prod.
+function guardTargetDb() {
+  const url = process.env.DATABASE_URL
+  if (!url) return // db.ts will error out cleanly
+  let host = ''
+  try {
+    host = new URL(url).hostname
+  } catch {
+    return // malformed URL — let db.ts surface it
+  }
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  if (isLocal) {
+    console.log(`→ Migrating local DB (${host})`)
+    return
+  }
+  if (process.env.ALLOW_REMOTE_DB === '1') {
+    console.log(`→ Migrating REMOTE DB (${host}) — ALLOW_REMOTE_DB is set`)
+    return
+  }
+  console.error(
+    `Refusing to migrate: DATABASE_URL points at ${host}, not localhost.\n` +
+    `If this is intentional, use \`npm run migrate:prod\` (which sets ALLOW_REMOTE_DB=1).\n` +
+    `If your shell still exports a stale DATABASE_URL, run \`unset DATABASE_URL\` and try again.`
+  )
+  process.exit(1)
+}
+
 async function main() {
+  guardTargetDb()
+  const { pool } = await import('../db.js')
   const client = await pool.connect()
   try {
     await client.query(`

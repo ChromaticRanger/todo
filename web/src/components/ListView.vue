@@ -6,6 +6,7 @@ import { useTodoStore } from '../stores/todoStore'
 import { describeRecurrence } from '../lib/recurrence'
 import { useListStore } from '../stores/listStore'
 import { useSettingsStore, type CompletedWindow } from '../stores/settingsStore'
+import { formatEventDateTimeRange } from '../lib/eventTime'
 import { apiFetch } from '../lib/api'
 import CategoryGroup from './CategoryGroup.vue'
 import EmptyState from './EmptyState.vue'
@@ -180,12 +181,9 @@ function formatDate(epoch: number | null): string {
   })
 }
 
-function formatEventTime(epoch: number | null): string {
-  if (!epoch) return ''
-  return new Date(epoch * 1000).toLocaleString(undefined, {
-    weekday: 'short', day: 'numeric', month: 'short',
-    hour: 'numeric', minute: '2-digit',
-  })
+function formatEventTime(t: Todo): string {
+  if (t.due_date == null) return ''
+  return formatEventDateTimeRange(t.due_date, t.duration_seconds)
 }
 
 function eventRecurrenceLabel(t: Todo): string {
@@ -301,7 +299,7 @@ async function handleEventEditDelete() {
         >
           <span class="flex-1 truncate text-sm text-text">{{ ev.title }}</span>
           <span v-if="eventRecurrenceLabel(ev)" class="text-[10px] text-accent/80 shrink-0" :title="eventRecurrenceLabel(ev)">↻ {{ eventRecurrenceLabel(ev) }}</span>
-          <span class="text-xs text-muted shrink-0">{{ formatEventTime(ev.due_date) }}</span>
+          <span class="text-xs text-muted shrink-0">{{ formatEventTime(ev) }}</span>
         </button>
       </div>
     </div>
