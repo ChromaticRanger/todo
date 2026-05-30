@@ -30,6 +30,7 @@ export interface TodoRow {
   url: string | null
   snoozed_until: number | null
   recur_until: number | null
+  duration_seconds: number | null
 }
 
 // pg serializes BIGINT/NUMERIC as strings; coerce to numbers for the client
@@ -49,6 +50,7 @@ export function coerceTodo(row: TodoRow) {
     url: row.url ?? null,
     snoozed_until: row.snoozed_until != null ? Number(row.snoozed_until) : null,
     recur_until: row.recur_until != null ? Number(row.recur_until) : null,
+    duration_seconds: row.duration_seconds != null ? Number(row.duration_seconds) : null,
   }
 }
 
@@ -129,26 +131,34 @@ export function expandEventOccurrences(
     const isRecurring = stepDays > 0 || stepMonths > 0
     const base = ev.due_date != null ? Number(ev.due_date) : null
     if (base == null) continue
+    // Each occurrence inherits the series' duration. Treat NULL/0 the same
+    // (legacy point-in-time) so the overlap check below collapses to
+    // start-in-window for them.
+    const dur = ev.duration_seconds != null ? Number(ev.duration_seconds) : 0
 
     if (!isRecurring) {
-      if (base >= from && base < to) out.push(ev)
+      // Overlap: include when [base, base+dur) touches [from, to).
+      if (base < to && base + dur > from) out.push(ev)
       continue
     }
 
     const until = ev.recur_until != null ? Number(ev.recur_until) : Infinity
     let occ = base
 
-    // Fast-forward to the first occurrence >= from.
-    if (occ < from) {
+    // Fast-forward to the first occurrence whose end is past `from` — that's
+    // the first one that can overlap the window. For dur=0 this is the same
+    // as the classic "first occurrence >= from".
+    if (occ + dur <= from) {
       if (stepDays > 0) {
         const stepSec = stepDays * 86400
-        const skips = Math.floor((from - occ) / stepSec)
-        occ += skips * stepSec
-        while (occ < from) occ += stepSec
+        const target = from - dur
+        const skips = Math.floor((target - occ) / stepSec)
+        occ += Math.max(0, skips) * stepSec
+        while (occ + dur <= from) occ += stepSec
       } else {
         // Monthly: iterate so JS setMonth handles 31st → 28th/29th/30th
         // boundaries and Feb 29 yearly anchors correctly.
-        while (occ < from) occ = addMonths(occ, stepMonths)
+        while (occ + dur <= from) occ = addMonths(occ, stepMonths)
       }
     }
 
@@ -172,11 +182,15 @@ async function fetchExpandedEventSeries(
 ): Promise<TodoRow[]> {
   const result = await query<TodoRow>(
     buildTodoSelect(
+      // recur_until is the LAST allowed start; the last occurrence ends at
+      // recur_until + duration_seconds, which still has to reach `from` for
+      // the series to be relevant.
       `WHERE user_id = $1 AND status = 0 AND type = 'event'
        AND (repeat_days > 0 OR repeat_months > 0)
        AND due_date IS NOT NULL
        AND due_date < $3
-       AND (recur_until IS NULL OR recur_until >= $2)`
+       AND (recur_until IS NULL
+            OR (recur_until + COALESCE(duration_seconds, 0)) >= $2)`
     ),
     [userId, from, to]
   )
@@ -188,7 +202,7 @@ export function buildTodoSelect(extra = ''): string {
     EXTRACT(EPOCH FROM created_at)::BIGINT AS created_at,
     EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at,
     due_date, repeat_days, repeat_months, spawned_next, type, url, snoozed_until,
-    recur_until
+    recur_until, duration_seconds
   FROM todos ${extra}`
 }
 
@@ -241,12 +255,17 @@ router.get('/', async (req, res) => {
 })
 
 // Events live outside any user list, but should still surface on every
-// time-windowed view (Today / Week / Month / Overdue) regardless
-// of which list is active. Recurring event series are excluded here — they're
-// expanded virtually by `fetchExpandedEventSeries` and merged in by each route.
+// time-windowed view (Today / Week / Month) regardless of which list is
+// active. Recurring event series are excluded here — they're expanded
+// virtually by `fetchExpandedEventSeries` and merged in by each route.
+//
+// Todos use start-in-window filtering. Events use overlap filtering so a
+// multi-day block appears in every window it touches.
 const TIME_WINDOWED_SCOPE =
-  `(list_name = $2 AND type = 'todo')
-   OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0)`
+  `(list_name = $2 AND type = 'todo' AND due_date >= $3 AND due_date < $4)
+   OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
+       AND due_date < $4
+       AND (due_date + COALESCE(duration_seconds, 0)) > $3)`
 
 // Shared helper for the today/week/month routes: fetch the regular rows from
 // the time-windowed scope and merge expanded recurring-event occurrences.
@@ -260,9 +279,8 @@ async function fetchWindowedScope(
     query<TodoRow>(
       buildTodoSelect(
         `WHERE user_id = $1 AND status = 0
-         AND (${TIME_WINDOWED_SCOPE})
          AND due_date IS NOT NULL
-         AND due_date >= $3 AND due_date < $4
+         AND (${TIME_WINDOWED_SCOPE})
          ORDER BY due_date ASC`
       ),
       [userId, list, from, to]
@@ -337,11 +355,16 @@ router.get('/calendar', async (req, res) => {
       query<TodoRow>(
         buildTodoSelect(
           // Exclude recurring event series — they're expanded virtually below.
+          // Todos: start-in-window. Events: overlap with window so multi-day
+          // blocks show up on every day they span.
           `WHERE user_id = $1 AND status = 0
-           AND (type = 'todo'
-                OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0))
            AND due_date IS NOT NULL
-           AND due_date >= $2 AND due_date < $3
+           AND (
+             (type = 'todo' AND due_date >= $2 AND due_date < $3)
+             OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
+                 AND due_date < $3
+                 AND (due_date + COALESCE(duration_seconds, 0)) > $2)
+           )
            ORDER BY due_date ASC`
         ),
         [userId, from, to]
@@ -370,15 +393,31 @@ router.get('/counts', async (req, res) => {
     // toward Overdue — a past event has taken place, it isn't actionable.
     const [countsResult, seriesMonth] = await Promise.all([
       query<{ today: string; week: string; month: string; overdue: string }>(
+        // Per-window FILTER branches on type so events use overlap semantics
+        // (a multi-day event counts toward every window it touches) while
+        // todos keep start-in-window semantics. The outer WHERE is the loose
+        // candidate set; FILTER does the real per-window check.
         `WITH bounds AS (
            SELECT
              (FLOOR(EXTRACT(EPOCH FROM NOW()) / 86400) * 86400)::BIGINT AS day_start,
              EXTRACT(EPOCH FROM NOW())::BIGINT AS now_epoch
          )
          SELECT
-           COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 86400) AS today,
-           COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 7 * 86400) AS week,
-           COUNT(*) FILTER (WHERE due_date >= b.day_start AND due_date < b.day_start + 30 * 86400) AS month,
+           COUNT(*) FILTER (
+             WHERE (type = 'todo' AND due_date >= b.day_start AND due_date < b.day_start + 86400)
+                OR (type = 'event' AND due_date < b.day_start + 86400
+                    AND (due_date + COALESCE(duration_seconds, 0)) > b.day_start)
+           ) AS today,
+           COUNT(*) FILTER (
+             WHERE (type = 'todo' AND due_date >= b.day_start AND due_date < b.day_start + 7 * 86400)
+                OR (type = 'event' AND due_date < b.day_start + 7 * 86400
+                    AND (due_date + COALESCE(duration_seconds, 0)) > b.day_start)
+           ) AS week,
+           COUNT(*) FILTER (
+             WHERE (type = 'todo' AND due_date >= b.day_start AND due_date < b.day_start + 30 * 86400)
+                OR (type = 'event' AND due_date < b.day_start + 30 * 86400
+                    AND (due_date + COALESCE(duration_seconds, 0)) > b.day_start)
+           ) AS month,
            COUNT(*) FILTER (WHERE due_date < b.now_epoch AND type = 'todo') AS overdue
          FROM todos, bounds b
          WHERE user_id = $1 AND status = 0
@@ -394,15 +433,18 @@ router.get('/counts', async (req, res) => {
       })(),
     ])
     const row = countsResult.rows[0]
-    // Bucket expanded recurring-event occurrences into the three windows.
+    // Bucket expanded recurring-event occurrences into the three windows
+    // using overlap semantics — a block that touches a window counts once.
     const now = Math.floor(Date.now() / 1000)
     const dayStart = Math.floor(now / 86400) * 86400
     let extraToday = 0, extraWeek = 0, extraMonth = 0
     for (const ev of seriesMonth) {
-      const d = ev.due_date ?? 0
-      if (d >= dayStart && d < dayStart + 86400) extraToday++
-      if (d >= dayStart && d < dayStart + 7 * 86400) extraWeek++
-      if (d >= dayStart && d < dayStart + 30 * 86400) extraMonth++
+      const start = ev.due_date != null ? Number(ev.due_date) : 0
+      const dur = ev.duration_seconds != null ? Number(ev.duration_seconds) : 0
+      const end = start + dur
+      if (start < dayStart + 86400 && end > dayStart) extraToday++
+      if (start < dayStart + 7 * 86400 && end > dayStart) extraWeek++
+      if (start < dayStart + 30 * 86400 && end > dayStart) extraMonth++
     }
     res.json({
       counts: {
@@ -550,6 +592,7 @@ router.post('/', async (req, res) => {
     type = 'todo',
     url = null,
     recur_until = null,
+    duration_seconds = null,
   } = req.body as Partial<{
     list_name: string
     title: string
@@ -562,6 +605,7 @@ router.post('/', async (req, res) => {
     type: string
     url: string | null
     recur_until: number | null
+    duration_seconds: number | null
   }>
 
   if (!title) return res.status(400).json({ error: 'Title is required' })
@@ -576,6 +620,17 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'recur_until must be after due_date' })
     }
   }
+  // duration_seconds is event-only and bounded; reject anything outside the
+  // accepted range up front so DB never sees a bogus value.
+  if (duration_seconds != null) {
+    const d = Number(duration_seconds)
+    if (!Number.isInteger(d) || d < 0 || d > 14 * 86400) {
+      return res.status(400).json({ error: 'invalid_duration_seconds' })
+    }
+    if (d > 0 && type !== 'event') {
+      return res.status(400).json({ error: 'duration_seconds_event_only' })
+    }
+  }
 
   // Events live outside any user list — pin them to a sentinel name and
   // skip list/category metadata so they can't accidentally surface in lists.
@@ -588,6 +643,12 @@ router.post('/', async (req, res) => {
   const effectiveUrl = type === 'event' ? null : url
   // recur_until is event-only; ignore it on todos to keep the contract crisp.
   const effectiveRecurUntil = type === 'event' ? (recur_until ?? null) : null
+  // duration_seconds is event-only too. Treat 0 as NULL (no real "instant"
+  // events; the column is for time blocks). Validated above.
+  const effectiveDuration =
+    type === 'event' && duration_seconds != null && Number(duration_seconds) > 0
+      ? Number(duration_seconds)
+      : null
 
   try {
     if (req.plan === 'free') {
@@ -607,9 +668,9 @@ router.post('/', async (req, res) => {
     const result = await query<{ id: number }>(
       `INSERT INTO todos
          (user_id, list_name, title, description, category, priority, status,
-          due_date, repeat_days, repeat_months, spawned_next, type, url, recur_until)
-       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0,$10,$11,$12) RETURNING id`,
-      [userId, effectiveList, title, description, effectiveCategory, priority, effectiveDue, effectiveRepeatDays, effectiveRepeatMonths, type, effectiveUrl, effectiveRecurUntil]
+          due_date, repeat_days, repeat_months, spawned_next, type, url, recur_until, duration_seconds)
+       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0,$10,$11,$12,$13) RETURNING id`,
+      [userId, effectiveList, title, description, effectiveCategory, priority, effectiveDue, effectiveRepeatDays, effectiveRepeatMonths, type, effectiveUrl, effectiveRecurUntil, effectiveDuration]
     )
     res.status(201).json({ id: Number(result.rows[0].id) })
   } catch (err) {
@@ -630,6 +691,7 @@ router.put('/:id', async (req, res) => {
     repeat_days: number
     repeat_months: number
     recur_until: number | null
+    duration_seconds: number | null
   }>
   const { title, description, category, priority, due_date, url } = body
 
@@ -638,11 +700,12 @@ router.put('/:id', async (req, res) => {
   const hasRepeatDays = Object.prototype.hasOwnProperty.call(body, 'repeat_days')
   const hasRepeatMonths = Object.prototype.hasOwnProperty.call(body, 'repeat_months')
   const hasRecurUntil = Object.prototype.hasOwnProperty.call(body, 'recur_until')
+  const hasDuration = Object.prototype.hasOwnProperty.call(body, 'duration_seconds')
 
   try {
     // Validate event recurrence presets when the row is (or is becoming) an
     // event. We look at the current row to know its type.
-    if (hasRepeatDays || hasRepeatMonths || hasRecurUntil) {
+    if (hasRepeatDays || hasRepeatMonths || hasRecurUntil || hasDuration) {
       const cur = await query<TodoRow>(
         `SELECT type, repeat_days, repeat_months, due_date FROM todos
          WHERE id = $1 AND user_id = $2`,
@@ -662,8 +725,22 @@ router.put('/:id', async (req, res) => {
           return res.status(400).json({ error: 'recur_until must be after due_date' })
         }
       }
+      // duration_seconds is event-only and bounded.
+      if (hasDuration && body.duration_seconds != null) {
+        const d = Number(body.duration_seconds)
+        if (!Number.isInteger(d) || d < 0 || d > 14 * 86400) {
+          return res.status(400).json({ error: 'invalid_duration_seconds' })
+        }
+        if (d > 0 && row.type !== 'event') {
+          return res.status(400).json({ error: 'duration_seconds_event_only' })
+        }
+      }
     }
 
+    // Treat 0/missing as NULL on writes — only positive durations are stored.
+    const nextDuration = hasDuration && body.duration_seconds != null && Number(body.duration_seconds) > 0
+      ? Number(body.duration_seconds)
+      : null
     const result = await query(
       `UPDATE todos SET
          title = COALESCE($1, title),
@@ -672,9 +749,10 @@ router.put('/:id', async (req, res) => {
          priority = COALESCE($4, priority),
          due_date = $5,
          url = COALESCE($6, url),
-         repeat_days   = CASE WHEN $9::BOOLEAN THEN $7  ELSE repeat_days   END,
-         repeat_months = CASE WHEN $10::BOOLEAN THEN $8 ELSE repeat_months END,
-         recur_until   = CASE WHEN $11::BOOLEAN THEN $12 ELSE recur_until  END
+         repeat_days     = CASE WHEN $9::BOOLEAN  THEN $7  ELSE repeat_days     END,
+         repeat_months   = CASE WHEN $10::BOOLEAN THEN $8  ELSE repeat_months   END,
+         recur_until     = CASE WHEN $11::BOOLEAN THEN $12 ELSE recur_until     END,
+         duration_seconds = CASE WHEN $15::BOOLEAN THEN $16 ELSE duration_seconds END
        WHERE id = $13 AND user_id = $14`,
       [
         title,
@@ -691,6 +769,8 @@ router.put('/:id', async (req, res) => {
         hasRecurUntil ? (body.recur_until ?? null) : null,
         req.params.id,
         userId,
+        hasDuration,
+        nextDuration,
       ]
     )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })

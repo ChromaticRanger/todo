@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:18
+    container_name: todo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: todo
+    ports:
+      - "5432:5432"
+    volumes:
+      # Postgres 18 expects the mount at /var/lib/postgresql (it places its
+      # data in a version-numbered subdirectory). Mounting at .../data like in
+      # earlier majors causes the entrypoint to bail with "PostgreSQL data in
+      # unused mount/volume". See docker-library/postgres#1259.
+      - todo-db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d todo"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  todo-db-data:

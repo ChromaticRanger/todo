@@ -15,9 +15,13 @@ if (!process.env.DATABASE_URL) {
 const connStr = process.env.DATABASE_URL!
   .replace('sslmode=require', 'sslmode=require&uselibpqcompat=true')
 
+// Local Postgres (Docker) doesn't speak SSL; prod (DO) requires it. Derive
+// from the URL so the same code works for both.
+const needsSsl = /sslmode=(require|verify-)/i.test(process.env.DATABASE_URL!)
+
 export const pool = new Pool({
   connectionString: connStr,
-  ssl: { rejectUnauthorized: false },
+  ssl: needsSsl ? { rejectUnauthorized: false } : false,
   max: 3,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,

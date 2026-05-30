@@ -5,6 +5,7 @@ import { apiFetch } from '../lib/api'
 export type ThemeName = 'midnight' | 'slate' | 'forest' | 'sunset' | 'rose' | 'mono'
 export type ThemeMode = 'light' | 'dark'
 export type CompletedWindow = '7d' | '30d' | '90d' | '1y' | 'all'
+export type CalendarView = 'month' | 'week'
 
 interface UiSettings {
   theme: ThemeName
@@ -13,12 +14,15 @@ interface UiSettings {
 
 const STORAGE_KEY = 'theme_settings'
 const COMPLETED_WINDOW_KEY = 'completed_window'
+const CALENDAR_VIEW_KEY = 'calendar_view'
 const DEFAULT: UiSettings = { theme: 'midnight', mode: 'light' }
 const DEFAULT_COMPLETED_WINDOW: CompletedWindow = '30d'
+const DEFAULT_CALENDAR_VIEW: CalendarView = 'month'
 
 const VALID_THEMES: ThemeName[] = ['midnight', 'slate', 'forest', 'sunset', 'rose', 'mono']
 const VALID_MODES: ThemeMode[] = ['light', 'dark']
 const VALID_COMPLETED_WINDOWS: CompletedWindow[] = ['7d', '30d', '90d', '1y', 'all']
+const VALID_CALENDAR_VIEWS: CalendarView[] = ['month', 'week']
 
 function readCompletedWindow(): CompletedWindow {
   try {
@@ -33,6 +37,22 @@ function readCompletedWindow(): CompletedWindow {
 function writeCompletedWindow(w: CompletedWindow) {
   try {
     localStorage.setItem(COMPLETED_WINDOW_KEY, w)
+  } catch {}
+}
+
+function readCalendarView(): CalendarView {
+  try {
+    const raw = localStorage.getItem(CALENDAR_VIEW_KEY)
+    if (raw && VALID_CALENDAR_VIEWS.includes(raw as CalendarView)) {
+      return raw as CalendarView
+    }
+  } catch {}
+  return DEFAULT_CALENDAR_VIEW
+}
+
+function writeCalendarView(v: CalendarView) {
+  try {
+    localStorage.setItem(CALENDAR_VIEW_KEY, v)
   } catch {}
 }
 
@@ -71,6 +91,8 @@ export const useSettingsStore = defineStore('settings', () => {
   // How far back the Completed view fetches. Local-only (no server sync) —
   // a per-device preference, like list collapse state.
   const completedWindow = ref<CompletedWindow>(DEFAULT_COMPLETED_WINDOW)
+  // Month vs Week layout for the schedule calendar. Local-only.
+  const calendarView = ref<CalendarView>(DEFAULT_CALENDAR_VIEW)
 
   /** Call synchronously before app.mount() to prevent flash. */
   function loadFromCache() {
@@ -79,11 +101,17 @@ export const useSettingsStore = defineStore('settings', () => {
     mode.value = cached.mode
     applyToDom(cached)
     completedWindow.value = readCompletedWindow()
+    calendarView.value = readCalendarView()
   }
 
   function setCompletedWindow(w: CompletedWindow) {
     completedWindow.value = w
     writeCompletedWindow(w)
+  }
+
+  function setCalendarView(v: CalendarView) {
+    calendarView.value = v
+    writeCalendarView(v)
   }
 
   /** Call after authentication to sync from server. */
@@ -159,10 +187,12 @@ export const useSettingsStore = defineStore('settings', () => {
     hasSeenWelcome,
     replayingWelcome,
     completedWindow,
+    calendarView,
     loadFromCache,
     loadFromServer,
     setTheme,
     setCompletedWindow,
+    setCalendarView,
     completeWelcome,
     replayWelcome,
     dismissReplay,

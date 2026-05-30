@@ -35,6 +35,7 @@ export interface Todo {
   url: string | null
   snoozed_until: number | null
   recur_until: number | null
+  duration_seconds: number | null
 }
 
 export interface TodoFormData {
@@ -48,4 +49,5 @@ export interface TodoFormData {
   type: ItemType
   url: string | null
   recur_until?: number | null
+  duration_seconds?: number | null
 }
