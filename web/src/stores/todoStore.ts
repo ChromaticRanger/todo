@@ -411,6 +411,7 @@ export const useTodoStore = defineStore('todos', () => {
       url: form.url,
       snoozed_until: null,
       recur_until: null,
+      duration_seconds: null,
     }
 
     if (list === currentList.value) todos.value.push(newTodo)
