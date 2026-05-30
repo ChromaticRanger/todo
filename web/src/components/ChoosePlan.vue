@@ -105,6 +105,7 @@ onMounted(async () => {
               <li>• Categories with drag-to-reorder</li>
               <li>• Grid &amp; kanban layouts</li>
               <li>• Today / Week / Month / Overdue views</li>
+              <li>• Browser extension for bookmarking the current tab</li>
               <li>• Light &amp; dark themes</li>
             </ul>
           </div>
@@ -129,13 +130,13 @@ onMounted(async () => {
             </p>
             <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
               <li>• Everything in Free</li>
-              <li>• Unlimited lists</li>
-              <li>• Unlimited items</li>
-              <li>• Events — a calendar item type</li>
-              <li>• Overall Schedule — every todo with a due date in one Calendar</li>
+              <li>• Unlimited lists &amp; items</li>
+              <li>• Events as time blocks — start/end times, multi-day, recurring</li>
+              <li>• Overall Schedule calendar — Month &amp; Week views, right-click to add</li>
               <li>• Global search across lists (Ctrl/⌘K)</li>
-              <li>• Discover — browse &amp; clone community lists</li>
+              <li>• Discover — browse, clone &amp; publish community lists</li>
               <li>• Bookmark import from your browser</li>
+              <li>• Higher API rate limit for power users</li>
               <li>• Cancel anytime</li>
             </ul>
           </div>

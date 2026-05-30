@@ -387,34 +387,99 @@ const features = [
       </div>
     </section>
 
-    <!-- Pricing teaser -->
+    <!-- Pricing -->
     <section id="pricing" class="border-t border-border bg-surface/40">
-      <div class="mx-auto max-w-4xl px-6 py-20 text-center">
-        <p class="text-xs font-semibold uppercase tracking-wider text-accent">
-          Pricing
-        </p>
-        <h2
-          class="mt-3 font-display italic text-4xl font-semibold tracking-tight text-balance"
-        >
-          Free for casual use. £6/month when you want it all.
-        </h2>
-        <p class="mt-5 text-muted text-lg text-balance max-w-xl mx-auto">
-          Up to 3 lists and 50 items on Free, forever. Go Pro for unlimited lists,
-          Calendar, Discover, global search and the browser extension.
-        </p>
-        <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <a
-            href="/login?mode=signup"
-            class="rounded-xl bg-accent px-5 py-3 text-base font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+      <div class="mx-auto max-w-6xl px-6 py-20">
+        <div class="text-center max-w-2xl mx-auto">
+          <p class="text-xs font-semibold uppercase tracking-wider text-accent">
+            Pricing
+          </p>
+          <h2
+            class="mt-3 font-display italic text-4xl font-semibold tracking-tight text-balance"
           >
-            Get started — it’s free
-          </a>
-          <a
-            href="/login"
-            class="rounded-xl bg-surface ring-1 ring-ring px-5 py-3 text-base font-medium text-text transition-colors hover:bg-surface-hover"
-          >
-            Sign in
-          </a>
+            Free for casual use. £6/month when you want it all.
+          </h2>
+        </div>
+
+        <div class="mt-12 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
+          <!-- Free -->
+          <div class="rounded-2xl bg-surface ring-1 ring-ring p-8 flex flex-col dark:inset-ring dark:inset-ring-white/5">
+            <h3 class="font-display italic text-2xl font-semibold tracking-tight">Free</h3>
+            <p class="mt-1 text-sm text-muted">For casual stashers.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">£0</span>
+              <span class="text-sm text-muted">/forever</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text flex-1">
+              <li>• Up to 3 lists</li>
+              <li>• Up to 50 items across all lists</li>
+              <li>• Todos, bookmarks &amp; notes</li>
+              <li>• Categories with drag-to-reorder</li>
+              <li>• Grid &amp; kanban layouts</li>
+              <li>• Today / Week / Month / Overdue views</li>
+              <li>• Browser extension for bookmarking the current tab</li>
+              <li>• Light &amp; dark themes</li>
+            </ul>
+            <a
+              href="/login?mode=signup"
+              class="mt-8 rounded-xl bg-bg px-4 py-2.5 text-sm font-medium text-text ring-1 ring-ring text-center transition-colors hover:bg-surface-hover"
+            >
+              Start free
+            </a>
+          </div>
+
+          <!-- Pro Monthly -->
+          <div class="rounded-2xl bg-surface ring-1 ring-accent/60 p-8 flex flex-col dark:inset-ring dark:inset-ring-white/5">
+            <h3 class="font-display italic text-2xl font-semibold tracking-tight">Pro · Monthly</h3>
+            <p class="mt-1 text-sm text-muted">For serious stashers.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">£6</span>
+              <span class="text-sm text-muted">/month</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text flex-1">
+              <li>• Everything in Free</li>
+              <li>• Unlimited lists &amp; items</li>
+              <li>• Events as time blocks — start/end times, multi-day, recurring</li>
+              <li>• Overall Schedule calendar — Month &amp; Week views, right-click to add</li>
+              <li>• Global search across lists (Ctrl/⌘K)</li>
+              <li>• Discover — browse, clone &amp; publish community lists</li>
+              <li>• Bookmark import from your browser</li>
+              <li>• Higher API rate limit for power users</li>
+              <li>• Cancel anytime</li>
+            </ul>
+            <a
+              href="/login?mode=signup"
+              class="mt-8 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg text-center transition-colors hover:bg-accent-hover"
+            >
+              Go Pro Monthly
+            </a>
+          </div>
+
+          <!-- Pro Yearly -->
+          <div class="relative rounded-2xl bg-surface ring-1 ring-accent p-8 flex flex-col dark:inset-ring dark:inset-ring-white/5">
+            <span
+              class="absolute -top-3 right-5 rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-accent-fg"
+            >
+              Save ~17%
+            </span>
+            <h3 class="font-display italic text-2xl font-semibold tracking-tight">Pro · Yearly</h3>
+            <p class="mt-1 text-sm text-muted">Best value.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">£60</span>
+              <span class="text-sm text-muted">/year</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text flex-1">
+              <li>• Everything in Pro Monthly</li>
+              <li>• 2 months free</li>
+              <li>• Cancel anytime</li>
+            </ul>
+            <a
+              href="/login?mode=signup"
+              class="mt-8 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg text-center transition-colors hover:bg-accent-hover"
+            >
+              Go Pro Yearly
+            </a>
+          </div>
         </div>
       </div>
     </section>
