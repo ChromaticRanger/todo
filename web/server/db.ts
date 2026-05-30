@@ -15,9 +15,15 @@ if (!process.env.DATABASE_URL) {
 const connStr = process.env.DATABASE_URL!
   .replace('sslmode=require', 'sslmode=require&uselibpqcompat=true')
 
-// Local Postgres (Docker) doesn't speak SSL; prod (DO) requires it. Derive
-// from the URL so the same code works for both.
-const needsSsl = /sslmode=(require|verify-)/i.test(process.env.DATABASE_URL!)
+// Local Postgres (Docker) doesn't speak SSL; everything else does. Detect by
+// host: DO injects DATABASE_URL without an explicit `?sslmode=require`, so
+// matching on the query string isn't reliable — match on the hostname.
+let dbHost = ''
+try {
+  dbHost = new URL(process.env.DATABASE_URL!).hostname
+} catch {}
+const isLocalDb = dbHost === 'localhost' || dbHost === '127.0.0.1' || dbHost === '::1'
+const needsSsl = !isLocalDb
 
 export const pool = new Pool({
   connectionString: connStr,
