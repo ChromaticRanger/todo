@@ -410,40 +410,14 @@ async function main() {
       )
     }
 
-    // ── A published Discover list so the demo shows the publish side too ─
-    // Same Household Chores content as 012_seed_chores.sql, owned by the demo
-    // user this time. Slug is unique so it doesn't collide with the system
-    // copy.
-    const sharedList = await client.query<{ id: number }>(
-      `INSERT INTO shared_lists
-         (slug, name, description, icon, owner_user_id, original_list_name, sort_order, category)
-       VALUES ('demo-household-chores', 'Household Chores (Demo)',
-               'A starter checklist of recurring household tasks.',
-               '🧹', $1, 'Home', 1000, 'Home')
-       RETURNING id`,
-      [DEMO_USER_ID]
-    )
-    if (sharedList.rows[0]) {
-      const sid = sharedList.rows[0].id
-      const chores: Array<[string, string, number, number, number]> = [
-        ['Daily', 'Make the bed', 1, 1, 0],
-        ['Daily', 'Wipe kitchen counters', 1, 1, 1],
-        ['Weekly', 'Hoover and mop floors', 2, 7, 0],
-        ['Weekly', 'Clean bathrooms', 2, 7, 1],
-        ['Weekly', 'Take bins out', 2, 7, 2],
-        ['Monthly', 'Deep clean the fridge', 2, 30, 0],
-      ]
-      for (const [category, title, priority, repeat_days, sort_order] of chores) {
-        await client.query(
-          `INSERT INTO shared_items (shared_list_id, category, type, title, priority, repeat_days, sort_order)
-           VALUES ($1, $2, 'todo', $3, $4, $5, $6)`,
-          [sid, category, title, priority, repeat_days, sort_order]
-        )
-      }
-    }
+    // No published Discover list for the demo user: visitors can browse and
+    // clone Discover content, but POST /api/shared/publish rejects demo
+    // sessions (see routes/shared.ts) so they can't add their own. Seeding
+    // one here would put a "Household Chores (Demo)" duplicate on the public
+    // feed that no real publisher can curate or replace.
 
     await client.query('COMMIT')
-    console.log(`✓ Demo user seeded — ${items.length} items + 1 published Discover list`)
+    console.log(`✓ Demo user seeded — ${items.length} items`)
   } catch (err) {
     await client.query('ROLLBACK')
     throw err
