@@ -18,8 +18,8 @@ Cannot responsibly open the doors to real users without these.
 
 Needed to actually acquire and convert users.
 
-4. **Marketing landing page** — currently `stash-squirrel.com` resolves to the login page. A cold visitor has no idea what the product is. Without this, every acquisition channel (blog, social, ads) leads nowhere. Should sit at `/` for unauthenticated users; the existing login page moves to `/login` or a modal.
-5. **Pricing page update** — list all Pro features currently missing from the page. Without an accurate pricing page, even interested users can't justify upgrading.
+4. ~~**Marketing landing page**~~ — **Done.** `LandingPage.vue` at `/` for unauthenticated visitors with hero, problem/solution, use cases, Discover, features, live demo, and pricing sections. Login moved to `/login`. Deep-link redirects after auth preserved.
+5. ~~**Pricing page update**~~ — **Done.** Both `ChoosePlan.vue` (in-app upgrade screen) and the landing page's pricing cards now list every shipped Pro feature: time-block events with recurrence, Month/Week calendar, Discover (browse + clone + publish), global search, bookmark import, higher rate limit. Free caps reconciled with prod (3 lists / 50 items).
 6. **FAQ / Help section** — reduces support load (which lands in your inbox), helps SEO, builds trust. Can start as a single page with 10–15 questions and grow over time.
 
 ## Phase 3 — Onboarding & retention polish
@@ -28,7 +28,7 @@ After first users arrive.
 
 7. **Welcome Tour updates** — include the features that have shipped since the tour was written. Onboarding completion correlates strongly with retention.
 8. ~~**Admin Console**~~ — **Done.** Admin Dashboard shipped with user list, signup counts, and Pro/comp breakdown. Revisit later if MRR or richer analytics are needed.
-13. **More signposting todos in the demo Home/Welcome category** — extend the demo seed (`server/scripts/seed-demo.ts`) with a handful of extra "try this" todos in `Home / Welcome` that walk the demo visitor through specific things: clone a Discover list, snooze a todo, switch theme, drag-reorder categories, complete a recurring item, publish a list to Discover. Cheap to write, multiplies what a casual demo visitor actually sees and tries — direct conversion lift. Pair with #7 (Welcome Tour updates) since the same writing pass can produce both.
+13. ~~**More signposting todos in the demo Home/Welcome category**~~ — **Done (landed in the welcome note instead).** The demo's `Home / Welcome` note (now Markdown — see #14) carries a "What to try" bullet list covering right-click event creation, Month/Week toggle, Discover clone, global search, and category drag-reorder. Reads better as a single welcoming note than as multiple checkbox todos. Publish-to-Discover wasn't included because demo users are blocked from publishing.
 
 ## Phase 4 — Trust & defensive
 
@@ -52,7 +52,7 @@ After first users arrive.
 
 ## Phase 6 — Existing-feature polish
 
-14. **Markdown support for notes** — let users write notes in Markdown and toggle between rendered and raw views. Headings, lists, bold/italic, links, code blocks, blockquotes. A two-button toggle (Edit / Preview) inside the note item, or live split-pane on wider viewports. Server-side: notes already store free-form text; no schema change needed. Frontend: pick a small Markdown renderer (e.g. `marked` + DOMPurify, or `markdown-it`). Keep the existing plain-text path as a fallback for notes that don't look like Markdown. Modest scope, big quality-of-life win for power users — notes become a real second-brain surface rather than a comment box.
+14. ~~**Markdown support for notes**~~ — **Done.** `markdown-it` with `html:false` renders note bodies in display mode; the edit textarea in `TodoForm.vue` stays as raw source. Headings, lists, bold/italic, links (auto-targeted `_blank` with `noopener nofollow`), inline code, code blocks, blockquotes. Styles live in `style.css` under `@layer components .note-markdown` keyed to existing theme tokens (works in light + dark). Same rendering applies to imported notes on Discover via `SharedItemTile.vue`. Demo welcome note rewritten in Markdown to showcase the feature on first run.
 
 ## Phase 7 — Speculative features
 
@@ -68,15 +68,15 @@ The shortest path to "real customers using a defensible product":
 2. ~~Database backups~~ — covered by DO defaults; no action needed
 3. ~~Account deletion / GDPR~~ — done & tested
 4. ~~Welcome email~~ — done & verified
-5. Marketing landing page
-6. Pricing page update
+5. ~~Marketing landing page~~ — shipped
+6. ~~Pricing page update~~ — shipped
 7. FAQ
 7a. Discover moderation — admin hide/delete (item 15) + user report button (item 16). The doors shouldn't open without at least the ability to take a submission down.
 8. — *Launch publicly* —
-9. Welcome Tour update — pair with extra demo signposting todos (item 13) in the same content pass
+9. Welcome Tour update — demo signposting (item 13) already covered via the welcome note; tour itself still needs updating for shipped features
 10. ~~Basic admin visibility~~ — Admin Dashboard shipped
 11. ~~Encryption~~ — already covered by DO (transit + at-rest); no app-level work unless a customer specifically asks
-12. Markdown notes (item 14) — modest scope, real second-brain upgrade for power users
+12. ~~Markdown notes~~ — shipped (item 14)
 13. Blog
 14. More Discovery content
 15. New item types (only the ones users ask for)

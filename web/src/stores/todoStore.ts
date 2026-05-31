@@ -122,11 +122,14 @@ export const useTodoStore = defineStore('todos', () => {
     }
   }
 
-  /** Default sort: 'General' first, then alphabetical. */
+  /** Default sort: 'Welcome' first (onboarding content), 'General' second
+   *  (the fallback bucket every user has), everything else alphabetical.
+   *  Only applied to categories that don't have an explicit saved order. */
   function defaultCategorySort(keys: string[]): string[] {
+    const rank = (k: string) => (k === 'Welcome' ? 0 : k === 'General' ? 1 : 2)
     return [...keys].sort((a, b) => {
-      if (a === 'General') return -1
-      if (b === 'General') return 1
+      const ra = rank(a), rb = rank(b)
+      if (ra !== rb) return ra - rb
       return a.localeCompare(b)
     })
   }

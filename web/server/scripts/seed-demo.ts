@@ -99,15 +99,28 @@ function buildSeed(): SeedTodo[] {
     {
       list_name: 'Home', category: 'Welcome', type: 'note',
       title: 'Welcome to the Stash Squirrel demo',
-      description:
-        "This is a fully interactive demo account. Click around, drag, edit, " +
-        "complete, create — everything works the same as the real app, and " +
-        "your changes stick around through page refreshes too.\n\n" +
-        "You have 30 minutes. When the timer in the banner runs out (or any " +
-        "time before) you can sign up — tick \"Keep my demo work\" on the " +
-        "signup form and everything you built here moves into your new " +
-        "account. Untick it to start with a clean slate instead. Either way " +
-        "the demo account itself gets cleaned up afterwards.",
+      description: [
+        "This is a fully interactive demo account. Click around, drag, edit,",
+        "complete, create — **everything works** the same as the real app, and",
+        "your changes stick around through page refreshes too.",
+        "",
+        "## What to try",
+        "",
+        "- Right-click an empty cell on the **calendar** to add an event",
+        "- Toggle between **Month** and **Week** view (top-right of the calendar)",
+        "- Open the **Discover** tab and clone someone else's list into yours",
+        "- Use `Cmd/Ctrl + K` to search across everything",
+        "- Drag a category card to reorder your list",
+        "",
+        "## What happens at the end",
+        "",
+        "You have **30 minutes**. When the timer runs out — or any time before —",
+        "you can sign up. Picking **Pro** keeps every list, todo, bookmark, note,",
+        "and event you've built here. Picking **Free** starts fresh with a clean",
+        "welcome list. Either way the demo account is cleaned up afterwards.",
+        "",
+        "_p.s. This note itself is Markdown — try editing it to see the source._",
+      ].join('\n'),
       priority: 2,
     },
     {

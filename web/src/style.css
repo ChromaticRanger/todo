@@ -260,6 +260,34 @@
   }
 }
 
+/* ── Rendered Markdown (notes) ───────────────────────────────────────────────── */
+/* Tailwind resets headings + lists; these rules give the markdown-it output
+   a calm "compact note body" voice that sits at the same scale as the
+   surrounding muted body text in TodoItem / SharedItemTile. */
+@layer components {
+  .note-markdown > :first-child { margin-top: 0; }
+  .note-markdown > :last-child { margin-bottom: 0; }
+  .note-markdown p { @apply my-1.5; }
+  .note-markdown h1 { @apply text-sm font-semibold text-text mt-3 mb-1.5; }
+  .note-markdown h2 { @apply text-xs font-semibold text-text uppercase tracking-wider mt-3 mb-1; }
+  .note-markdown h3,
+  .note-markdown h4,
+  .note-markdown h5,
+  .note-markdown h6 { @apply text-xs font-semibold text-text mt-2 mb-1; }
+  .note-markdown ul { @apply list-disc pl-5 my-1.5; }
+  .note-markdown ol { @apply list-decimal pl-5 my-1.5; }
+  .note-markdown li { @apply my-0.5; }
+  .note-markdown li > p { @apply my-0; }
+  .note-markdown strong { @apply font-semibold text-text; }
+  .note-markdown em { @apply italic; }
+  .note-markdown a { @apply text-accent underline underline-offset-2 hover:no-underline; }
+  .note-markdown code { @apply text-[0.95em] bg-surface-hover/60 text-text px-1 py-0.5 rounded; }
+  .note-markdown pre { @apply text-[0.95em] bg-surface-hover/60 text-text p-2 rounded my-2 overflow-x-auto; }
+  .note-markdown pre code { @apply bg-transparent p-0 rounded-none; }
+  .note-markdown blockquote { @apply border-l-2 border-border pl-3 my-2 italic text-muted; }
+  .note-markdown hr { @apply my-3 border-border; }
+}
+
 /* ── Utilities ───────────────────────────────────────────────────────────────── */
 @layer utilities {
   .scrollbar-thin {

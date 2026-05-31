@@ -1,9 +1,15 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import BookmarkFavicon from './BookmarkFavicon.vue'
 import type { SharedItem } from '../stores/discoverStore'
 import { describeRecurrence } from '../lib/recurrence'
+import { renderMarkdown } from '../lib/markdown'
 
-defineProps<{ item: SharedItem }>()
+const props = defineProps<{ item: SharedItem }>()
+
+const noteBodyHtml = computed(() =>
+  props.item.type === 'note' ? renderMarkdown(props.item.description ?? '') : ''
+)
 </script>
 
 <template>
@@ -43,9 +49,11 @@ defineProps<{ item: SharedItem }>()
     class="rounded-lg bg-amber-50/60 dark:bg-amber-500/10 border border-amber-200/60 dark:border-amber-500/30 p-2"
   >
     <p class="text-sm font-medium text-text">{{ item.title }}</p>
-    <p v-if="item.description" class="text-xs text-muted mt-1 whitespace-pre-line">
-      {{ item.description }}
-    </p>
+    <div
+      v-if="item.description"
+      class="note-markdown text-xs text-muted mt-1"
+      v-html="noteBodyHtml"
+    ></div>
   </div>
 
   <div
