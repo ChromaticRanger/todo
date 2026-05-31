@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { authClient } from '../lib/auth-client'
 import { useAuthStore } from '../stores/authStore'
 import { apiFetch } from '../lib/api'
@@ -8,6 +8,11 @@ const authStore = useAuthStore()
 const error = ref('')
 const busy = ref<'free' | 'monthly' | 'yearly' | null>(null)
 const activating = ref(false)
+// True when the user signed up with "Keep my demo work" ticked. The flag
+// rides on the server-stored profile (cleared by /api/account on first read),
+// so the warning surfaces here even if email verification opens the link in
+// a different browser context than the signup tab.
+const carriedDemoData = computed(() => authStore.signupCarriedDemoData)
 
 const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -86,6 +91,20 @@ onMounted(async () => {
 
       <div v-if="error" class="mb-4 rounded-lg bg-danger-bg ring-1 ring-danger/60 px-4 py-3 text-sm text-danger-fg">
         {{ error }}
+      </div>
+
+      <div
+        v-if="carriedDemoData"
+        class="mb-6 rounded-lg bg-warning-bg/40 ring-1 ring-warning-fg/40 px-4 py-3 text-sm text-text"
+      >
+        <p class="font-semibold mb-1">Your demo work is parked.</p>
+        <p class="text-muted">
+          Pick <span class="font-semibold text-text">Pro</span> to move every
+          list, todo, bookmark, note, and event from your demo session into
+          this account. Pick <span class="font-semibold text-text">Free</span>
+          and your demo content is discarded — you'll start fresh with a
+          welcome list.
+        </p>
       </div>
 
       <div class="grid gap-6 sm:grid-cols-3">

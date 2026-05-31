@@ -28,6 +28,7 @@ After first users arrive.
 
 7. **Welcome Tour updates** — include the features that have shipped since the tour was written. Onboarding completion correlates strongly with retention.
 8. ~~**Admin Console**~~ — **Done.** Admin Dashboard shipped with user list, signup counts, and Pro/comp breakdown. Revisit later if MRR or richer analytics are needed.
+13. **More signposting todos in the demo Home/Welcome category** — extend the demo seed (`server/scripts/seed-demo.ts`) with a handful of extra "try this" todos in `Home / Welcome` that walk the demo visitor through specific things: clone a Discover list, snooze a todo, switch theme, drag-reorder categories, complete a recurring item, publish a list to Discover. Cheap to write, multiplies what a casual demo visitor actually sees and tries — direct conversion lift. Pair with #7 (Welcome Tour updates) since the same writing pass can produce both.
 
 ## Phase 4 — Trust & defensive
 
@@ -40,12 +41,20 @@ After first users arrive.
 
    **Action**: this item is essentially done. The privacy policy has been updated to disclose what's protected. Only revisit if a real customer asks for application-level encryption — and then push back, because they probably don't realise the trade-offs.
 
+15. **Admin moderation for Discover lists** — currently any Pro user can publish anything to Discover, with no review queue and no admin-side way to take a submitted list down. Add an `is_hidden BOOLEAN DEFAULT FALSE` column on `shared_lists`; the public browse query filters `is_hidden = FALSE`. Extend the Admin Dashboard with a "Recent Discover submissions" panel — sortable, with hide/restore/delete actions per row. ~1 day. Covers ~90% of real moderation needs at current scale. **Pre-launch must-do**: open the doors with at least the ability to take a published list down. Pair with #16.
+
+16. **User-facing report button on Discover** — on each Discover list card and detail view, a small "Report" link that opens a one-field dialog (optional reason). Submission creates a row in a new `shared_list_reports` table: `(id, shared_list_id, reporter_user_id, reason, created_at, resolved_at, resolved_by)`. Admin Dashboard surfaces a "Open reports" badge + panel that lets the admin resolve (hide the list via #15, or dismiss the report). Lets the community do the spotting so the admin only spends time on flagged content. ~half a day on top of #15.
+
 ## Phase 5 — Growth
 
 10. **Blog section** — slow-burn SEO + a place to post product updates. Doesn't need to be elaborate — a markdown-rendered route at `/blog` with file-based posts in the repo is enough. Stripe/Linear/Plausible all run their blogs this way.
 11. **Discovery content** — more Topic and Todo lists like the Household Chores one. Quick wins for engagement.
 
-## Phase 6 — Speculative features
+## Phase 6 — Existing-feature polish
+
+14. **Markdown support for notes** — let users write notes in Markdown and toggle between rendered and raw views. Headings, lists, bold/italic, links, code blocks, blockquotes. A two-button toggle (Edit / Preview) inside the note item, or live split-pane on wider viewports. Server-side: notes already store free-form text; no schema change needed. Frontend: pick a small Markdown renderer (e.g. `marked` + DOMPurify, or `markdown-it`). Keep the existing plain-text path as a fallback for notes that don't look like Markdown. Modest scope, big quality-of-life win for power users — notes become a real second-brain surface rather than a comment box.
+
+## Phase 7 — Speculative features
 
 12. **New item types**: Clock, Pomodoro Timer, RSS Feed, Stock Quotes, Currency Converter, Calculator. Each is its own design and engineering project; some (RSS, stocks) bring ongoing infrastructure cost. Defer until you know which ones actual users ask for — building all of these speculatively risks bloating the product without raising retention.
 
@@ -62,13 +71,15 @@ The shortest path to "real customers using a defensible product":
 5. Marketing landing page
 6. Pricing page update
 7. FAQ
+7a. Discover moderation — admin hide/delete (item 15) + user report button (item 16). The doors shouldn't open without at least the ability to take a submission down.
 8. — *Launch publicly* —
-9. Welcome Tour update
+9. Welcome Tour update — pair with extra demo signposting todos (item 13) in the same content pass
 10. ~~Basic admin visibility~~ — Admin Dashboard shipped
 11. ~~Encryption~~ — already covered by DO (transit + at-rest); no app-level work unless a customer specifically asks
-12. Blog
-13. More Discovery content
-14. New item types (only the ones users ask for)
+12. Markdown notes (item 14) — modest scope, real second-brain upgrade for power users
+13. Blog
+14. More Discovery content
+15. New item types (only the ones users ask for)
 
 ## Things worth discussing before starting any of them
 

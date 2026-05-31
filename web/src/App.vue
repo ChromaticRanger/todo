@@ -29,6 +29,7 @@ import AccountPage from './components/AccountPage.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
 import SearchModal from './components/SearchModal.vue'
+import DemoOverlay from './components/DemoOverlay.vue'
 import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
 import DiscoverView from './components/DiscoverView.vue'
 import { useDiscoverStore } from './stores/discoverStore'
@@ -144,6 +145,12 @@ watch(
     if (!authed) return
     if (typeof window === 'undefined') return
     if (window.location.pathname === '/login') {
+      // `?mode=signup` is the explicit "I want the signup form" signal. The
+      // demo visitor's "Sign up" CTA navigates here while still authenticated
+      // as the demo user (so promote-signup can hand off); rewriting the URL
+      // would punt them straight back into the demo. Leave them on /login.
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('mode') === 'signup') return
       window.history.replaceState({}, '', '/')
       isLoginFlow.value = false
       isLandingFlow.value = true
@@ -158,6 +165,15 @@ watch(() => authStore.tier, (tier) => {
     mode.value = 'lists'
   }
 })
+
+// Toggle <html data-demo="1"> so the body bg picks up the diagonal-stripe
+// watermark from style.css. Stored as an attribute so unauthenticated tabs
+// and non-demo users keep the unmarked background.
+watch(() => authStore.isDemo, (isDemo) => {
+  if (typeof document === 'undefined') return
+  if (isDemo) document.documentElement.dataset.demo = '1'
+  else delete document.documentElement.dataset.demo
+}, { immediate: true })
 const layoutMode = computed<LayoutMode>(() => listPrefsStore.get(listStore.activeList).layout)
 const gridColumns = computed<GridColumns>(() => listPrefsStore.get(listStore.activeList).columns)
 const isCategoryView = computed(() => currentView.value !== 'completed')
@@ -343,12 +359,16 @@ function onTourSkip() {
 <template>
   <div v-if="authStore.loading && !authStore.isAuthenticated" class="min-h-dvh bg-bg" aria-hidden="true" />
   <LandingPage v-else-if="!authStore.isAuthenticated && isLandingFlow" />
-  <LoginPage v-else-if="!authStore.isAuthenticated" />
+  <!-- Demo visitors can reach /login while still authenticated as their
+       ephemeral demo user — that's how the "Sign up to keep my work" flow
+       hands off to the promote endpoint without losing the demo session. -->
+  <LoginPage v-else-if="!authStore.isAuthenticated || (authStore.isDemo && isLoginFlow)" />
   <AdminDashboard v-else-if="isAdminFlow" />
   <AccountPage v-else-if="isAccountFlow" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />
   <ConnectExtension v-else-if="isConnectFlow" />
   <div v-else class="h-dvh bg-bg text-text flex flex-col isolate">
+    <DemoOverlay v-if="authStore.isDemo" />
     <AppHeader
       :calendar-active="mode === 'calendar'"
       :discover-active="mode === 'discover'"

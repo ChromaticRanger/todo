@@ -151,7 +151,35 @@ onMounted(loadProfile)
 </script>
 
 <template>
-  <div class="min-h-dvh bg-bg text-text p-6 antialiased">
+  <!-- Demo-mode placeholder: hide the full account UI (Sign out, Delete
+       account, billing) from the shared demo session. -->
+  <div v-if="authStore.isDemo" class="min-h-dvh bg-bg text-text p-6 antialiased">
+    <div class="mx-auto max-w-xl">
+      <button
+        type="button"
+        class="mb-6 inline-flex items-center gap-1.5 text-sm text-muted hover:text-text"
+        @click="backToApp"
+      >
+        <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Back to Stash Squirrel
+      </button>
+      <h1 class="text-2xl font-semibold mb-1">Demo account</h1>
+      <p class="text-sm text-muted mb-8">
+        You're exploring with a temporary demo account. Sign up to manage
+        your own.
+      </p>
+      <a
+        href="/login?mode=signup"
+        class="inline-block rounded-xl bg-accent px-5 py-3 text-base font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+      >
+        Sign up — it's free
+      </a>
+    </div>
+  </div>
+
+  <div v-else class="min-h-dvh bg-bg text-text p-6 antialiased">
     <div class="mx-auto max-w-xl">
       <button
         type="button"

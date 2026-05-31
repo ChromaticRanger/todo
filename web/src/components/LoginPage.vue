@@ -40,6 +40,42 @@ async function handleSubmit() {
   loading.value = true
   try {
     if (mode.value === 'signup') {
+      // Demo visitors signing up go through /api/demo/promote-signup so the
+      // server can park their demo data (the visitor's plan choice on
+      // ChoosePlan resolves it: Pro transfers, Free discards). If the demo
+      // session has expired, that endpoint 401s and we fall back to a normal
+      // signup.
+      if (authStore.isDemo) {
+        const res = await fetch('/api/demo/promote-signup', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: email.value,
+            password: password.value,
+            name: name.value || email.value,
+          }),
+        })
+        if (res.status === 401) {
+          // Demo session is gone — fall through to normal signup below.
+        } else if (!res.ok) {
+          let msg = 'Sign up failed'
+          try {
+            const body = await res.json()
+            if (body?.message) msg = body.message
+          } catch {}
+          error.value = msg
+          return
+        } else {
+          // The server records keepData on the new user's app_settings row;
+          // ChoosePlan reads it via /api/account and surfaces the carryover
+          // warning. Survives email-verification in a different browser.
+          authStore.awaitingVerificationEmail = email.value
+          password.value = ''
+          await authStore.refreshUser()
+          return
+        }
+      }
       const { error: err } = await authClient.signUp.email({
         email: email.value,
         password: password.value,
@@ -175,6 +211,21 @@ function toggleMode() {
       <!-- Auth card -->
       <div v-else class="rounded-2xl bg-surface ring-1 ring-ring p-6 dark:inset-ring dark:inset-ring-white/5">
         <h2 class="text-base font-semibold text-text mb-4">{{ title }}</h2>
+
+        <!-- Demo carryover preview. The decision to actually move the data
+             is deferred to the plan-choice step — Pro transfers, Free
+             discards — so the visitor only sees the choice they can make
+             *here* in passing. -->
+        <div
+          v-if="mode === 'signup' && authStore.isDemo"
+          class="rounded-lg bg-accent/10 ring-1 ring-accent/30 px-3 py-2 mb-5 text-sm text-text"
+        >
+          Your demo work is parked.
+          <span class="block text-xs text-muted mt-0.5">
+            Upgrade to Pro after signup to move every list, todo, bookmark,
+            note, and event into your new account. Picking Free starts fresh.
+          </span>
+        </div>
 
         <!-- Social providers -->
         <div class="flex flex-col gap-2 mb-5">

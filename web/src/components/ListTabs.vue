@@ -222,9 +222,10 @@ onBeforeUnmount(() => {
               d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-1.414.586H7v-3a2 2 0 01.586-1.414z" />
           </svg>
         </span>
-        <!-- Publish icon (Pro only) -->
+        <!-- Publish icon (Pro only, hidden for demo visitors so they can't
+             push junk onto the public Discover feed). -->
         <span
-          v-if="authStore.tier === 'pro'"
+          v-if="authStore.tier === 'pro' && !authStore.isDemo"
           class="tab-action opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-surface-hover hover:text-accent transition-all"
           title="Publish to community"
           @click.stop="publishingList = list"
