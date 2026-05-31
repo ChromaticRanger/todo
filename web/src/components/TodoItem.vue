@@ -4,6 +4,7 @@ import type { Todo } from '../types/todo'
 import { Status } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { priorityBorderClass as borderClassFor } from '../lib/priorityClass'
+import { renderMarkdown } from '../lib/markdown'
 import TodoForm from './TodoForm.vue'
 import MoveDialog from './MoveDialog.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -58,6 +59,11 @@ const isDeleting = ref(false)
 const isTodo = computed(() => props.todo.type === 'todo' || !props.todo.type)
 const isBookmark = computed(() => props.todo.type === 'bookmark')
 const isNote = computed(() => props.todo.type === 'note')
+
+// Notes accept Markdown in the description; render once per change rather
+// than on every re-render. Plain-text bodies stay safe — markdown-it just
+// wraps them in <p>.
+const noteBodyHtml = computed(() => isNote.value ? renderMarkdown(props.todo.description) : '')
 
 const priorityBorderClass = computed(() =>
   isTodo.value ? borderClassFor(props.todo.priority) : 'border-l-border-strong'
@@ -244,7 +250,13 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     <!-- Content -->
     <div class="flex-1 min-w-0 select-text">
       <div class="text-sm text-text leading-5 font-medium">{{ todo.title }}</div>
-      <pre v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed whitespace-pre-wrap font-sans">{{ todo.description }}</pre>
+      <!-- Note body is Markdown. v-html is safe here because markdown-it
+           is configured with html:false (raw <script>/<iframe> are escaped). -->
+      <div
+        v-if="todo.description"
+        class="note-markdown mt-0.5 text-xs text-muted leading-relaxed"
+        v-html="noteBodyHtml"
+      ></div>
     </div>
 
     <!-- Actions (visible on hover) -->
