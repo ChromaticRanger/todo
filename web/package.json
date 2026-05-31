@@ -23,8 +23,6 @@
     "seed:demo:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/seed-demo.ts",
     "cleanup:demo": "tsx server/scripts/cleanup-demo.ts",
     "cleanup:demo:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/cleanup-demo.ts",
-    "discover:remove-demo-list": "tsx server/scripts/remove-demo-discover-list.ts",
-    "discover:remove-demo-list:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/remove-demo-discover-list.ts",
     "db:backfill-user": "tsx server/scripts/backfill-user.ts",
     "ext:dev": "npm --prefix extension run dev",
     "ext:build": "npm --prefix extension run build"
