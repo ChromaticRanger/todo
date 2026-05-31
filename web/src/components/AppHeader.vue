@@ -274,13 +274,19 @@ function openAdd(type: ItemType) {
         Admin
       </a>
 
-      <!-- Current user / Account link -->
+      <!-- Current user / Account link. The Account page is hidden for demo
+           visitors (it would expose Sign out, Delete account, billing) — the
+           anchor stays as a non-navigating element so the avatar + DEMO pill
+           still render. -->
       <a
         v-if="authStore.user"
-        href="/account"
+        :href="authStore.isDemo ? undefined : '/account'"
         data-tour="user-menu"
-        class="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg text-sm text-text hover:bg-surface-hover transition-colors"
-        :title="`Account settings${authStore.user.email ? ` (${authStore.user.email})` : ''}`"
+        class="flex items-center gap-2 pl-2 pr-3 py-1.5 rounded-lg text-sm text-text transition-colors"
+        :class="authStore.isDemo ? 'cursor-default' : 'hover:bg-surface-hover'"
+        :title="authStore.isDemo
+          ? 'Demo account — temporary, sign up to make your own'
+          : `Account settings${authStore.user.email ? ` (${authStore.user.email})` : ''}`"
       >
         <img
           v-if="authStore.user.image"
@@ -297,7 +303,14 @@ function openAdd(type: ItemType) {
         </div>
         <span class="max-md:hidden font-medium leading-none">{{ displayName }}</span>
         <span
-          v-if="authStore.tier"
+          v-if="authStore.isDemo"
+          class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none bg-warning-bg text-warning-fg"
+          title="Demo account"
+        >
+          demo
+        </span>
+        <span
+          v-else-if="authStore.tier"
           class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none"
           :class="authStore.tier === 'pro'
             ? 'bg-accent/15 text-accent'

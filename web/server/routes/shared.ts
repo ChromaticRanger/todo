@@ -284,6 +284,14 @@ router.post('/publish', async (req, res) => {
     res.status(403).json({ error: 'system_account_cannot_publish' })
     return
   }
+  // Demo visitors have tier='pro' so they pass ensurePro, but they shouldn't
+  // be able to push content onto the public Discover feed — their lists
+  // would be public until cleanup deletes them (cascading shared_lists),
+  // creating a window for spam/test/offensive content to be visible.
+  if (userId.startsWith('demo-')) {
+    res.status(403).json({ error: 'demo_cannot_publish' })
+    return
+  }
 
   const { listName, name, description, icon, category } = (req.body ?? {}) as PublishBody
   if (!listName || !listName.trim()) {

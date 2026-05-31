@@ -27,16 +27,20 @@ export const useAuthStore = defineStore('auth', () => {
     if (authed) awaitingVerificationEmail.value = null
   })
 
-  // isAdmin lives on the server (env-var allowlist), not on the Better Auth
-  // session. We learn it via /api/account; this ref caches the answer per
-  // signed-in user and is refreshed when the user identity changes.
+  // Server-side flags that aren't on the Better Auth session: isAdmin
+  // (env-var allowlist), isDemo (id starts with 'demo-'), and
+  // signupCarriedDemoData (signup parked demo data, plan choice resolves).
   const isAdmin = ref(false)
+  const isDemo = ref(false)
+  const signupCarriedDemoData = ref(false)
   const adminFetchedForUserId = ref<string | null>(null)
 
   async function refreshAdminFlag(forceUserId?: string | null) {
     const targetId = forceUserId ?? user.value?.id ?? null
     if (!targetId) {
       isAdmin.value = false
+      isDemo.value = false
+      signupCarriedDemoData.value = false
       adminFetchedForUserId.value = null
       return
     }
@@ -44,13 +48,23 @@ export const useAuthStore = defineStore('auth', () => {
       const res = await fetch('/api/account', { credentials: 'include' })
       if (!res.ok) {
         isAdmin.value = false
+        isDemo.value = false
+        signupCarriedDemoData.value = false
         return
       }
-      const body = (await res.json()) as { isAdmin?: boolean }
+      const body = (await res.json()) as {
+        isAdmin?: boolean
+        isDemo?: boolean
+        signupCarriedDemoData?: boolean
+      }
       isAdmin.value = !!body.isAdmin
+      isDemo.value = !!body.isDemo
+      signupCarriedDemoData.value = !!body.signupCarriedDemoData
       adminFetchedForUserId.value = targetId
     } catch {
       isAdmin.value = false
+      isDemo.value = false
+      signupCarriedDemoData.value = false
     }
   }
 
@@ -61,6 +75,7 @@ export const useAuthStore = defineStore('auth', () => {
         refreshAdminFlag(id)
       } else if (!id) {
         isAdmin.value = false
+        isDemo.value = false
         adminFetchedForUserId.value = null
       }
     },
@@ -74,6 +89,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function logout() {
     await authClient.signOut()
     isAdmin.value = false
+    isDemo.value = false
     adminFetchedForUserId.value = null
     await session.value.refetch()
   }
@@ -87,6 +103,8 @@ export const useAuthStore = defineStore('auth', () => {
     needsPlanChoice,
     awaitingVerificationEmail,
     isAdmin,
+    isDemo,
+    signupCarriedDemoData,
     refreshUser,
     refreshAdminFlag,
     logout,

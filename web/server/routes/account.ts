@@ -26,7 +26,24 @@ router.get('/', async (req, res) => {
       res.status(404).json({ error: 'not_found' })
       return
     }
-    res.json({ ...rows[0], isAdmin: isAdminEmail(rows[0].email) })
+    // Pending demo carryover: signup parked the visitor's demo data; the
+    // plan choice on ChoosePlan resolves it (Pro transfers, Free discards).
+    // We only check existence — the row stays in place until either path
+    // explicitly clears it.
+    const flagResult = await query<{ value: unknown }>(
+      `SELECT value FROM app_settings
+        WHERE user_id = $1 AND key = 'pending_demo_carryover'
+        LIMIT 1`,
+      [userId]
+    )
+    const signupCarriedDemoData = (flagResult.rowCount ?? 0) > 0
+    res.json({
+      ...rows[0],
+      isAdmin: isAdminEmail(rows[0].email),
+      // Both the `demo-user` template and per-visitor `demo-<uuid>` users.
+      isDemo: rows[0].id.startsWith('demo-'),
+      signupCarriedDemoData,
+    })
   } catch (err) {
     console.error('[account] GET failed:', err)
     res.status(500).json({ error: String(err) })

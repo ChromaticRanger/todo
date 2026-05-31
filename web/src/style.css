@@ -245,6 +245,19 @@
     @apply bg-bg text-text antialiased;
     font-family: system-ui, -apple-system, sans-serif;
   }
+
+  /* Demo mode — subtle diagonal stripe pattern behind everything so it's
+     visible at a glance without being intrusive. Toggled by App.vue setting
+     data-demo on <html>. */
+  html[data-demo="1"] body {
+    background-image: repeating-linear-gradient(
+      135deg,
+      transparent 0,
+      transparent 24px,
+      color-mix(in oklch, var(--color-accent) 6%, transparent) 24px,
+      color-mix(in oklch, var(--color-accent) 6%, transparent) 25px
+    );
+  }
 }
 
 /* ── Utilities ───────────────────────────────────────────────────────────────── */

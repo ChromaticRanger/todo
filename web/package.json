@@ -19,6 +19,10 @@
     "db:refresh": "bash server/scripts/db-refresh.sh",
     "db:migrate": "tsx server/scripts/run-migrations.ts",
     "migrate:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/run-migrations.ts",
+    "seed:demo": "tsx server/scripts/seed-demo.ts",
+    "seed:demo:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/seed-demo.ts",
+    "cleanup:demo": "tsx server/scripts/cleanup-demo.ts",
+    "cleanup:demo:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/cleanup-demo.ts",
     "db:backfill-user": "tsx server/scripts/backfill-user.ts",
     "ext:dev": "npm --prefix extension run dev",
     "ext:build": "npm --prefix extension run build"

@@ -3,6 +3,28 @@ import { onMounted, onUnmounted, ref } from 'vue'
 
 const year = new Date().getFullYear()
 const scrolled = ref(false)
+const startingDemo = ref(false)
+const demoError = ref<string | null>(null)
+
+async function startDemo() {
+  if (startingDemo.value) return
+  startingDemo.value = true
+  demoError.value = null
+  try {
+    const res = await fetch('/api/demo/start', {
+      method: 'POST',
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`status ${res.status}`)
+    // Hard navigate so the new page boots authenticated as the demo user,
+    // picking up the session cookie just set on the response.
+    window.location.assign('/')
+  } catch (err) {
+    console.error('[demo] start failed', err)
+    demoError.value = 'Demo is temporarily unavailable. Try again in a moment.'
+    startingDemo.value = false
+  }
+}
 
 function onScroll() {
   scrolled.value = window.scrollY > 8
@@ -135,6 +157,12 @@ const features = [
             Use cases
           </a>
           <a
+            href="#demo"
+            class="hidden sm:inline text-sm text-muted hover:text-text transition-colors"
+          >
+            Demo
+          </a>
+          <a
             href="#features"
             class="hidden sm:inline text-sm text-muted hover:text-text transition-colors"
           >
@@ -196,10 +224,10 @@ const features = [
             Get started — it’s free
           </a>
           <a
-            href="#use-cases"
+            href="#demo"
             class="rounded-xl bg-surface ring-1 ring-ring px-5 py-3 text-base font-medium text-text transition-colors hover:bg-surface-hover"
           >
-            See it in action
+            Try the demo
           </a>
         </div>
         <p class="mt-5 text-xs text-muted">
@@ -387,34 +415,174 @@ const features = [
       </div>
     </section>
 
-    <!-- Pricing teaser -->
-    <section id="pricing" class="border-t border-border bg-surface/40">
-      <div class="mx-auto max-w-4xl px-6 py-20 text-center">
-        <p class="text-xs font-semibold uppercase tracking-wider text-accent">
-          Pricing
-        </p>
-        <h2
-          class="mt-3 font-display italic text-4xl font-semibold tracking-tight text-balance"
+    <!-- Live demo CTA — placed after the feature pitch and just before the
+         pricing decision. By this point the visitor knows what the product
+         does; the demo gives them a low-stakes way to verify it before
+         seeing the price. -->
+    <section id="demo" class="relative overflow-hidden border-t border-border">
+      <div
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 -z-10"
+        style="background: radial-gradient(80% 60% at 50% 50%, color-mix(in oklab, var(--color-accent) 12%, transparent), transparent 75%);"
+      />
+      <div class="mx-auto max-w-4xl px-6 py-20 sm:py-24">
+        <div
+          class="rounded-3xl bg-surface ring-1 ring-accent/40 p-8 sm:p-12 text-center shadow-xl dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
         >
-          Free for casual use. £6/month when you want it all.
-        </h2>
-        <p class="mt-5 text-muted text-lg text-balance max-w-xl mx-auto">
-          Up to 3 lists and 50 items on Free, forever. Go Pro for unlimited lists,
-          Calendar, Discover, global search and the browser extension.
-        </p>
-        <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-          <a
-            href="/login?mode=signup"
-            class="rounded-xl bg-accent px-5 py-3 text-base font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+          <p class="text-xs font-semibold uppercase tracking-wider text-accent">
+            Live demo
+          </p>
+          <h2
+            class="mt-3 font-display italic text-4xl sm:text-5xl font-semibold tracking-tight text-balance leading-[1.05]"
           >
-            Get started — it’s free
-          </a>
-          <a
-            href="/login"
-            class="rounded-xl bg-surface ring-1 ring-ring px-5 py-3 text-base font-medium text-text transition-colors hover:bg-surface-hover"
+            Drive a real account for 30 minutes.
+          </h2>
+          <p class="mt-5 text-muted text-lg text-balance max-w-2xl mx-auto">
+            No signup, no credit card. One click drops you into a pre-loaded
+            Pro account with realistic lists, a calendar of events, and
+            Discover content — yours to explore however you like.
+          </p>
+
+          <ul class="mt-8 grid gap-3 sm:grid-cols-3 max-w-2xl mx-auto text-left">
+            <li class="flex items-start gap-2 text-sm text-text">
+              <svg class="size-4 shrink-0 mt-0.5 text-accent" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7 7a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 0 1 1.06-1.06L6.25 10.69l6.47-6.47a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
+              </svg>
+              <span>Everything works — add, edit, drag, complete, snooze</span>
+            </li>
+            <li class="flex items-start gap-2 text-sm text-text">
+              <svg class="size-4 shrink-0 mt-0.5 text-accent" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7 7a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 0 1 1.06-1.06L6.25 10.69l6.47-6.47a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
+              </svg>
+              <span>Your changes persist for the whole session, even after refresh</span>
+            </li>
+            <li class="flex items-start gap-2 text-sm text-text">
+              <svg class="size-4 shrink-0 mt-0.5 text-accent" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path fill-rule="evenodd" d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7 7a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 0 1 1.06-1.06L6.25 10.69l6.47-6.47a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd" />
+              </svg>
+              <span>Sign up any time — upgrade to Pro to keep what you built</span>
+            </li>
+          </ul>
+
+          <div class="mt-10">
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-xl bg-accent px-6 py-3.5 text-base font-semibold text-accent-fg transition-colors hover:bg-accent-hover disabled:opacity-60"
+              :disabled="startingDemo"
+              @click="startDemo"
+            >
+              <svg v-if="!startingDemo" class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+              </svg>
+              <svg v-else class="size-4 animate-spin" viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" />
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z" />
+              </svg>
+              {{ startingDemo ? 'Opening the demo…' : 'Open the demo' }}
+            </button>
+          </div>
+          <p v-if="demoError" class="mt-4 text-xs text-danger">{{ demoError }}</p>
+          <p v-else class="mt-4 text-xs text-muted">
+            You'll be signed into a temporary demo account. 30-minute session
+            — sign up any time before it ends to keep what you've built.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="border-t border-border bg-surface/40">
+      <div class="mx-auto max-w-6xl px-6 py-20">
+        <div class="text-center max-w-2xl mx-auto">
+          <p class="text-xs font-semibold uppercase tracking-wider text-accent">
+            Pricing
+          </p>
+          <h2
+            class="mt-3 font-display italic text-4xl font-semibold tracking-tight text-balance"
           >
-            Sign in
-          </a>
+            Free for casual use. £6/month when you want it all.
+          </h2>
+        </div>
+
+        <div class="mt-12 grid gap-6 md:grid-cols-3 max-w-5xl mx-auto">
+          <!-- Free -->
+          <div class="rounded-2xl bg-surface ring-1 ring-ring p-8 flex flex-col dark:inset-ring dark:inset-ring-white/5">
+            <h3 class="font-display italic text-2xl font-semibold tracking-tight">Free</h3>
+            <p class="mt-1 text-sm text-muted">For casual stashers.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">£0</span>
+              <span class="text-sm text-muted">/forever</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text flex-1">
+              <li>• Up to 3 lists</li>
+              <li>• Up to 50 items across all lists</li>
+              <li>• Todos, bookmarks &amp; notes</li>
+              <li>• Categories with drag-to-reorder</li>
+              <li>• Grid &amp; kanban layouts</li>
+              <li>• Today / Week / Month / Overdue views</li>
+              <li>• Browser extension for bookmarking the current tab</li>
+              <li>• Light &amp; dark themes</li>
+            </ul>
+            <a
+              href="/login?mode=signup"
+              class="mt-8 rounded-xl bg-bg px-4 py-2.5 text-sm font-medium text-text ring-1 ring-ring text-center transition-colors hover:bg-surface-hover"
+            >
+              Start free
+            </a>
+          </div>
+
+          <!-- Pro Monthly -->
+          <div class="rounded-2xl bg-surface ring-1 ring-accent/60 p-8 flex flex-col dark:inset-ring dark:inset-ring-white/5">
+            <h3 class="font-display italic text-2xl font-semibold tracking-tight">Pro · Monthly</h3>
+            <p class="mt-1 text-sm text-muted">For serious stashers.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">£6</span>
+              <span class="text-sm text-muted">/month</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text flex-1">
+              <li>• Everything in Free</li>
+              <li>• Unlimited lists &amp; items</li>
+              <li>• Events as time blocks — start/end times, multi-day, recurring</li>
+              <li>• Overall Schedule calendar — Month &amp; Week views, right-click to add</li>
+              <li>• Global search across lists (Ctrl/⌘K)</li>
+              <li>• Discover — browse, clone &amp; publish community lists</li>
+              <li>• Bookmark import from your browser</li>
+              <li>• Higher API rate limit for power users</li>
+              <li>• Cancel anytime</li>
+            </ul>
+            <a
+              href="/login?mode=signup"
+              class="mt-8 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg text-center transition-colors hover:bg-accent-hover"
+            >
+              Go Pro Monthly
+            </a>
+          </div>
+
+          <!-- Pro Yearly -->
+          <div class="relative rounded-2xl bg-surface ring-1 ring-accent p-8 flex flex-col dark:inset-ring dark:inset-ring-white/5">
+            <span
+              class="absolute -top-3 right-5 rounded-full bg-accent px-2.5 py-0.5 text-xs font-semibold text-accent-fg"
+            >
+              Save ~17%
+            </span>
+            <h3 class="font-display italic text-2xl font-semibold tracking-tight">Pro · Yearly</h3>
+            <p class="mt-1 text-sm text-muted">Best value.</p>
+            <p class="mt-6 tabular-nums">
+              <span class="text-5xl font-semibold text-text">£60</span>
+              <span class="text-sm text-muted">/year</span>
+            </p>
+            <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text flex-1">
+              <li>• Everything in Pro Monthly</li>
+              <li>• 2 months free</li>
+              <li>• Cancel anytime</li>
+            </ul>
+            <a
+              href="/login?mode=signup"
+              class="mt-8 rounded-xl bg-accent px-4 py-2.5 text-sm font-medium text-accent-fg text-center transition-colors hover:bg-accent-hover"
+            >
+              Go Pro Yearly
+            </a>
+          </div>
         </div>
       </div>
     </section>

@@ -17,6 +17,24 @@ router.post('/select-free', async (req, res) => {
       res.status(409).json({ error: 'plan_already_set' })
       return
     }
+    // Discard any parked demo carryover — picking Free means starting fresh
+    // with the seedUserDefaults welcome content the user.create hook
+    // inserted at signup. Delete the demo user (CASCADE wipes its data) and
+    // the pending-row pointer.
+    try {
+      const pending = await query<{ value: { demoUserId?: string } }>(
+        `DELETE FROM app_settings
+          WHERE user_id = $1 AND key = 'pending_demo_carryover'
+          RETURNING value`,
+        [userId]
+      )
+      const demoUserId = pending.rows[0]?.value?.demoUserId
+      if (demoUserId && demoUserId.startsWith('demo-') && demoUserId !== 'demo-user') {
+        await query(`DELETE FROM "user" WHERE id = $1`, [demoUserId])
+      }
+    } catch (err) {
+      console.error('[plan/select-free] carryover discard failed:', err)
+    }
     // tier IS NULL guard means this UPDATE only ever succeeds once per user,
     // so the welcome email fires exactly once on initial Free selection.
     try {

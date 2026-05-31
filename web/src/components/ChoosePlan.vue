@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { authClient } from '../lib/auth-client'
 import { useAuthStore } from '../stores/authStore'
 import { apiFetch } from '../lib/api'
@@ -8,6 +8,11 @@ const authStore = useAuthStore()
 const error = ref('')
 const busy = ref<'free' | 'monthly' | 'yearly' | null>(null)
 const activating = ref(false)
+// True when the user signed up with "Keep my demo work" ticked. The flag
+// rides on the server-stored profile (cleared by /api/account on first read),
+// so the warning surfaces here even if email verification opens the link in
+// a different browser context than the signup tab.
+const carriedDemoData = computed(() => authStore.signupCarriedDemoData)
 
 const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
@@ -88,6 +93,20 @@ onMounted(async () => {
         {{ error }}
       </div>
 
+      <div
+        v-if="carriedDemoData"
+        class="mb-6 rounded-lg bg-warning-bg/40 ring-1 ring-warning-fg/40 px-4 py-3 text-sm text-text"
+      >
+        <p class="font-semibold mb-1">Your demo work is parked.</p>
+        <p class="text-muted">
+          Pick <span class="font-semibold text-text">Pro</span> to move every
+          list, todo, bookmark, note, and event from your demo session into
+          this account. Pick <span class="font-semibold text-text">Free</span>
+          and your demo content is discarded — you'll start fresh with a
+          welcome list.
+        </p>
+      </div>
+
       <div class="grid gap-6 sm:grid-cols-3">
         <!-- Free -->
         <div class="rounded-2xl bg-surface ring-1 ring-ring p-8 flex flex-col justify-between dark:inset-ring dark:inset-ring-white/5">
@@ -105,6 +124,7 @@ onMounted(async () => {
               <li>• Categories with drag-to-reorder</li>
               <li>• Grid &amp; kanban layouts</li>
               <li>• Today / Week / Month / Overdue views</li>
+              <li>• Browser extension for bookmarking the current tab</li>
               <li>• Light &amp; dark themes</li>
             </ul>
           </div>
@@ -129,13 +149,13 @@ onMounted(async () => {
             </p>
             <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
               <li>• Everything in Free</li>
-              <li>• Unlimited lists</li>
-              <li>• Unlimited items</li>
-              <li>• Events — a calendar item type</li>
-              <li>• Overall Schedule — every todo with a due date in one Calendar</li>
+              <li>• Unlimited lists &amp; items</li>
+              <li>• Events as time blocks — start/end times, multi-day, recurring</li>
+              <li>• Overall Schedule calendar — Month &amp; Week views, right-click to add</li>
               <li>• Global search across lists (Ctrl/⌘K)</li>
-              <li>• Discover — browse &amp; clone community lists</li>
+              <li>• Discover — browse, clone &amp; publish community lists</li>
               <li>• Bookmark import from your browser</li>
+              <li>• Higher API rate limit for power users</li>
               <li>• Cancel anytime</li>
             </ul>
           </div>

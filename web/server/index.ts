@@ -16,9 +16,11 @@ import sharedRouter from './routes/shared.js'
 import extensionRouter from './routes/extension.js'
 import accountRouter from './routes/account.js'
 import adminRouter from './routes/admin.js'
+import demoRouter from './routes/demo.js'
 import { authMiddleware } from './middleware/auth.js'
 import { requirePlan } from './middleware/requirePlan.js'
 import { rateLimit } from './middleware/rateLimit.js'
+import { demoNoop } from './middleware/demoNoop.js'
 import { initDb } from './db.js'
 
 const app = express()
@@ -43,7 +45,16 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+// Demo endpoints (/start, /end) must be reachable without an existing
+// session — a cold visitor clicking "See it in action" has no auth yet.
+// Mount BEFORE authMiddleware.
+app.use('/api/demo', demoRouter)
+
 app.use('/api', authMiddleware)
+
+// Silently no-op writes from the shared demo user so visitors can explore
+// the product without polluting the seed for the next visitor.
+app.use('/api', demoNoop)
 
 // Plan selection lives outside requirePlan — a tier-less user must be able
 // to reach /api/plan/select-free on first login.
