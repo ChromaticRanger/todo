@@ -100,6 +100,8 @@ function buildSeed(): SeedTodo[] {
       list_name: 'Home', category: 'Welcome', type: 'note',
       title: 'Welcome to the Stash Squirrel demo',
       description: [
+        "![Stash Squirrel](/stash-squirrel.svg)",
+        "",
         "This is a fully interactive demo account. Click around, drag, edit,",
         "complete, create — **everything works** the same as the real app, and",
         "your changes stick around through page refreshes too.",

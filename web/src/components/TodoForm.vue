@@ -213,7 +213,10 @@ const priorityLabels = [
 
 <template>
   <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-    <div class="bg-surface border border-border-strong rounded-xl w-full max-w-lg dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5 max-h-screen overflow-y-auto">
+    <div
+      class="bg-surface border border-border-strong rounded-xl w-full dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5 max-h-screen overflow-y-auto"
+      :class="type === 'note' ? 'max-w-5xl' : 'max-w-lg'"
+    >
       <div class="p-6">
         <h3 class="text-text font-semibold text-lg mb-5">
           {{ formTitle }}
@@ -252,9 +255,10 @@ const priorityLabels = [
             </label>
             <textarea
               v-model="description"
-              :rows="type === 'note' ? 5 : 2"
+              :rows="type === 'note' ? 12 : 2"
               :placeholder="type === 'note' ? 'Note content…' : 'Optional details…'"
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent resize-none"
+              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              :class="type === 'note' ? 'resize-y min-h-40' : 'resize-none'"
             />
           </div>
 

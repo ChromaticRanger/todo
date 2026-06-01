@@ -286,6 +286,10 @@
   .note-markdown pre code { @apply bg-transparent p-0 rounded-none; }
   .note-markdown blockquote { @apply border-l-2 border-border pl-3 my-2 italic text-muted; }
   .note-markdown hr { @apply my-3 border-border; }
+  .note-markdown img { @apply max-w-full h-auto rounded my-2; }
+  /* SVGs are logos/icons, not photos — cap them small so e.g. the demo
+     welcome note's Stash Squirrel logo doesn't fill the whole card. */
+  .note-markdown img[src$=".svg"] { @apply max-w-20; }
 }
 
 /* ── Utilities ───────────────────────────────────────────────────────────────── */

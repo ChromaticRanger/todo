@@ -8,7 +8,9 @@ import { renderMarkdown } from '../lib/markdown'
 const props = defineProps<{ item: SharedItem }>()
 
 const noteBodyHtml = computed(() =>
-  props.item.type === 'note' ? renderMarkdown(props.item.description ?? '') : ''
+  props.item.type === 'note'
+    ? renderMarkdown(props.item.description ?? '', { allowImages: false })
+    : ''
 )
 </script>
 
