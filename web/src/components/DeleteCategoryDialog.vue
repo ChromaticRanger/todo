@@ -25,10 +25,10 @@ const itemWord = computed(() => (props.itemCount === 1 ? 'item' : 'items'))
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-surface border border-border-strong/60 rounded-xl max-w-md w-full mx-4 overflow-hidden dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5">
-      <div class="px-4 py-2.5 border-b border-border-strong/60 bg-surface-hover/40">
-        <h3 class="text-sm font-semibold text-muted uppercase tracking-wider truncate">
+  <div class="modal-backdrop">
+    <div class="modal-card max-w-md">
+      <div class="border-b border-border-strong/60 bg-surface-hover/40 px-4 py-2.5">
+        <h3 class="truncate text-sm font-semibold uppercase tracking-wider text-muted">
           Delete category "{{ category }}"
         </h3>
       </div>
@@ -55,24 +55,21 @@ const itemWord = computed(() => (props.itemCount === 1 ? 'item' : 'items'))
         </template>
       </div>
 
-      <div class="flex gap-2 justify-end px-4 py-3 border-t border-border-strong/60 bg-surface-hover/20 flex-wrap">
-        <button
-          class="px-4 py-1.5 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors"
-          @click="emit('cancel')"
-        >
+      <div class="modal-footer flex-wrap justify-end">
+        <button class="btn-ghost" @click="emit('cancel')">
           Cancel
         </button>
         <button
           v-if="hasItems && !isGeneral"
           ref="primaryBtn"
-          class="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-medium transition-colors"
+          class="btn-primary"
           @click="emit('move')"
         >
           Move to {{ MOVE_TARGET }}
         </button>
         <button
           :ref="(el) => { if (!hasItems || isGeneral) primaryBtn = el as HTMLButtonElement | null }"
-          class="px-4 py-1.5 rounded-lg bg-danger hover:opacity-85 text-white text-sm font-medium transition-colors"
+          class="btn-danger"
           @click="emit('delete')"
         >
           {{ hasItems ? 'Delete everything' : 'Delete' }}

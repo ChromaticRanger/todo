@@ -93,143 +93,136 @@ function formatDate(iso: string | undefined): string {
 </script>
 
 <template>
-  <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
-    @click.self="emit('close')"
-  >
-    <div
-      class="w-full max-w-md bg-surface border border-border-strong rounded-2xl shadow-2xl p-6 dark:inset-ring dark:inset-ring-white/5"
-    >
-      <h2 class="text-lg font-semibold text-text mb-1">
-        {{ status.published ? 'Update community copy' : 'Publish to community' }}
-      </h2>
-      <p class="text-sm text-muted mb-4">
-        <template v-if="status.published">
-          Your list is currently published. Pushing an update replaces the items
-          on the public copy with what's in your list right now. Existing user
-          clones are unaffected.
-          <span v-if="status.updated_at" class="block text-xs mt-1">
-            Last updated: {{ formatDate(status.updated_at) }}
-          </span>
-        </template>
-        <template v-else>
-          Anyone with a Pro plan will be able to see and clone this list. Items
-          are snapshotted now; you can re-publish later to push updates.
-          Absolute due-dates are not shared (recurrence is).
-        </template>
-      </p>
-
-      <div v-if="loadingStatus" class="flex justify-center py-4">
-        <div class="size-5 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+  <div class="modal-backdrop" @click.self="emit('close')">
+    <div class="modal-card flex max-h-[88vh] max-w-md flex-col">
+      <div class="modal-header">
+        <span class="modal-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="size-5" aria-hidden="true">
+            <path d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.933-2.185 2.25 2.25 0 0 0-3.933 2.185Z" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <h2 class="flex-1 text-base font-semibold text-text">
+          {{ status.published ? 'Update community copy' : 'Publish to community' }}
+        </h2>
+        <button type="button" class="btn-icon" aria-label="Close" @click="emit('close')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5" aria-hidden="true">
+            <path d="M6 18 18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
       </div>
 
-      <form v-else class="space-y-3" @submit.prevent="submit">
-        <label class="block">
-          <span class="block text-xs font-medium text-muted uppercase tracking-wider mb-1">
-            Display name
-          </span>
-          <input
-            v-model="name"
-            type="text"
-            required
-            maxlength="80"
-            class="w-full bg-surface border border-border-strong rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
-          />
-        </label>
-        <label class="block">
-          <span class="block text-xs font-medium text-muted uppercase tracking-wider mb-1">
-            Description
-          </span>
-          <textarea
-            v-model="description"
-            rows="3"
-            maxlength="500"
-            class="w-full bg-surface border border-border-strong rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent resize-none"
-            placeholder="What's this list for?"
-          />
-        </label>
-        <label class="block">
-          <span class="block text-xs font-medium text-muted uppercase tracking-wider mb-1">
-            Category
-          </span>
-          <select
-            v-model="category"
-            class="w-full bg-surface border border-border-strong rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
-          >
-            <option v-for="c in LIST_CATEGORIES" :key="c" :value="c">{{ c }}</option>
-          </select>
-        </label>
-        <div>
-          <div class="flex items-baseline justify-between mb-1.5">
-            <div class="text-xs font-medium text-muted uppercase tracking-wider">
-              Icon
-              <span v-if="icon" aria-hidden="true" class="ml-1.5 align-middle">{{ icon }}</span>
-            </div>
-            <button
-              v-if="icon"
-              type="button"
-              class="text-xs text-muted hover:text-text transition-colors"
-              @click="icon = ''"
-            >Clear</button>
-          </div>
-          <div
-            class="max-h-40 overflow-y-auto rounded-lg border border-border-strong/60 bg-surface-hover/20 p-2"
-          >
-            <div
-              class="grid grid-cols-10 gap-1"
-              role="listbox"
-              aria-label="Pick an icon"
-            >
+      <div v-if="loadingStatus" class="flex justify-center py-10">
+        <div class="size-5 animate-spin rounded-full border-2 border-accent border-t-transparent" />
+      </div>
+
+      <form v-else class="flex min-h-0 flex-col" @submit.prevent="submit">
+        <div class="min-h-0 flex-1 space-y-3 overflow-y-auto scrollbar-thin p-5">
+          <p class="text-sm text-muted">
+            <template v-if="status.published">
+              Your list is currently published. Pushing an update replaces the items
+              on the public copy with what's in your list right now. Existing user
+              clones are unaffected.
+              <span v-if="status.updated_at" class="mt-1 block text-xs">
+                Last updated: {{ formatDate(status.updated_at) }}
+              </span>
+            </template>
+            <template v-else>
+              Anyone with a Pro plan will be able to see and clone this list. Items
+              are snapshotted now; you can re-publish later to push updates.
+              Absolute due-dates are not shared (recurrence is).
+            </template>
+          </p>
+
+          <label class="block">
+            <span class="field-label">Display name</span>
+            <input
+              v-model="name"
+              type="text"
+              name="display-name"
+              required
+              maxlength="80"
+              class="field-input"
+            />
+          </label>
+          <label class="block">
+            <span class="field-label">Description</span>
+            <textarea
+              v-model="description"
+              name="description"
+              rows="3"
+              maxlength="500"
+              class="field-input resize-none"
+              placeholder="What's this list for?"
+            />
+          </label>
+          <label class="block">
+            <span class="field-label">Category</span>
+            <select v-model="category" name="category" class="field-select">
+              <option v-for="c in LIST_CATEGORIES" :key="c" :value="c">{{ c }}</option>
+            </select>
+          </label>
+          <div>
+            <div class="mb-1.5 flex items-baseline justify-between">
+              <div class="text-xs font-medium uppercase tracking-wider text-muted">
+                Icon
+                <span v-if="icon" aria-hidden="true" class="ml-1.5 align-middle">{{ icon }}</span>
+              </div>
               <button
-                v-for="e in EMOJI_OPTIONS"
-                :key="e"
+                v-if="icon"
                 type="button"
-                :title="e"
-                :aria-selected="icon === e"
-                class="aspect-square flex items-center justify-center rounded-md text-lg transition-colors"
-                :class="icon === e
-                  ? 'bg-accent/15 ring-1 ring-accent/40'
-                  : 'hover:bg-surface-hover'"
-                @click="icon = e"
-              >{{ e }}</button>
+                class="text-xs text-muted transition-colors hover:text-text"
+                @click="icon = ''"
+              >Clear</button>
+            </div>
+            <div
+              class="max-h-40 overflow-y-auto rounded-lg border border-border-strong/60 bg-surface-hover/20 p-2"
+            >
+              <div
+                class="grid grid-cols-10 gap-1"
+                role="listbox"
+                aria-label="Pick an icon"
+              >
+                <button
+                  v-for="e in EMOJI_OPTIONS"
+                  :key="e"
+                  type="button"
+                  :title="e"
+                  :aria-selected="icon === e"
+                  class="flex aspect-square items-center justify-center rounded-md text-lg transition-colors"
+                  :class="icon === e
+                    ? 'bg-accent/15 ring-1 ring-accent/40'
+                    : 'hover:bg-surface-hover'"
+                  @click="icon = e"
+                >{{ e }}</button>
+              </div>
             </div>
           </div>
+
+          <p
+            v-if="submitError"
+            class="rounded-lg border border-danger/40 bg-danger-bg/50 px-3 py-2 text-sm text-danger-fg"
+          >
+            {{ submitError }}
+          </p>
         </div>
 
-        <p
-          v-if="submitError"
-          class="rounded-lg border border-danger/40 bg-danger-bg/50 text-danger-fg px-3 py-2 text-sm"
-        >
-          {{ submitError }}
-        </p>
-
-        <div class="flex items-center justify-between gap-2 pt-2">
+        <div class="modal-footer">
           <button
             v-if="status.published"
             type="button"
             :disabled="submitting"
-            class="px-3 py-2 rounded-lg text-sm text-danger hover:bg-danger-bg/40 transition-colors disabled:opacity-50"
+            class="btn-danger-ghost disabled:opacity-50"
             @click="unpublish"
           >
             Unpublish
           </button>
-          <span v-else />
-          <div class="flex items-center gap-2">
-            <button
-              type="button"
-              class="px-3 py-2 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors"
-              @click="emit('close')"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              :disabled="submitting"
-              class="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-medium transition-colors disabled:opacity-60"
-            >
-              {{ submitting ? 'Working…' : status.published ? 'Update' : 'Publish' }}
-            </button>
-          </div>
+          <div class="flex-1" />
+          <button type="button" class="btn-ghost" @click="emit('close')">
+            Cancel
+          </button>
+          <button type="submit" :disabled="submitting" class="btn-primary">
+            {{ submitting ? 'Working…' : status.published ? 'Update' : 'Publish' }}
+          </button>
         </div>
       </form>
     </div>

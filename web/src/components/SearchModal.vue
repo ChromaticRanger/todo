@@ -136,12 +136,10 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 
 <template>
   <div
-    class="fixed inset-0 bg-black/60 flex items-start justify-center pt-[15vh] z-50"
+    class="fixed inset-0 z-50 flex items-start justify-center bg-black/50 pt-[15vh] backdrop-blur-sm"
     @click.self="close"
   >
-    <div
-      class="bg-surface border border-border-strong rounded-xl w-full max-w-2xl mx-4 shadow-2xl dark:shadow-none dark:inset-ring dark:inset-ring-white/5 flex flex-col max-h-[70vh]"
-    >
+    <div class="modal-card mx-4 flex max-h-[70vh] max-w-2xl flex-col">
       <!-- Search input -->
       <div class="flex items-center gap-3 px-4 py-3 border-b border-border">
         <svg class="size-5 text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,7 +158,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
         <span v-if="search.loading" class="size-4 border-2 border-accent border-t-transparent rounded-full animate-spin shrink-0" />
         <button
           type="button"
-          class="text-muted hover:text-text shrink-0"
+          class="btn-icon"
           title="Close (Esc)"
           @click="close"
         >
