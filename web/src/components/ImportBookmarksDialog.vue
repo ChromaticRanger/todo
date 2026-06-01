@@ -212,16 +212,16 @@ function close() {
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-    <div class="bg-surface border border-border-strong/60 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5">
-      <div class="px-4 py-2.5 border-b border-border-strong/60 bg-surface-hover/40 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-muted uppercase tracking-wider">
+  <div class="modal-backdrop">
+    <div class="modal-card flex max-h-[90vh] max-w-2xl flex-col">
+      <div class="flex items-center justify-between border-b border-border-strong/60 bg-surface-hover/40 px-4 py-2.5">
+        <h3 class="text-sm font-semibold uppercase tracking-wider text-muted">
           {{ step === 'success' ? 'Import complete' : 'Import bookmarks' }}
-          <span class="rounded-full bg-accent/15 text-accent text-[10px] font-semibold px-1.5 py-0.5 tracking-wide ml-2">Pro</span>
+          <span class="ml-2 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-accent">Pro</span>
         </h3>
         <button
           type="button"
-          class="text-muted hover:text-text disabled:opacity-50"
+          class="btn-icon disabled:opacity-50"
           :disabled="submitting"
           aria-label="Close"
           @click="close"
@@ -273,10 +273,10 @@ function close() {
 
         <p v-if="errorMsg" class="mt-3 text-sm text-danger-fg">{{ errorMsg }}</p>
 
-        <div class="flex gap-3 justify-end mt-5">
+        <div class="mt-5 flex justify-end gap-3">
           <button
             type="button"
-            class="px-4 py-1.5 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors disabled:opacity-50"
+            class="btn-ghost disabled:opacity-50"
             :disabled="submitting"
             @click="close"
           >
@@ -285,7 +285,7 @@ function close() {
           <button
             v-if="selectedFile"
             type="button"
-            class="px-3 py-1.5 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors disabled:opacity-50"
+            class="btn-ghost disabled:opacity-50"
             :disabled="submitting"
             @click="clearFile"
           >
@@ -294,7 +294,7 @@ function close() {
           <button
             type="button"
             :disabled="!selectedFile || submitting"
-            class="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg text-sm font-medium transition-colors"
+            class="btn-primary"
             @click="submitPreview"
           >
             {{ submitting ? 'Analysing…' : 'Continue' }}
@@ -377,17 +377,18 @@ function close() {
           <input
             v-model="rootList"
             type="text"
+            name="root-list"
             placeholder="List name (default: Imported)"
-            class="w-full bg-bg border border-border-strong rounded-lg px-2 py-1 text-sm focus:outline-none focus:border-accent"
+            class="field-input"
           />
         </div>
 
-        <p v-if="errorMsg" class="text-sm text-danger-fg mb-3">{{ errorMsg }}</p>
+        <p v-if="errorMsg" class="mb-3 text-sm text-danger-fg">{{ errorMsg }}</p>
 
-        <div class="flex gap-3 justify-end">
+        <div class="flex justify-end gap-3">
           <button
             type="button"
-            class="px-4 py-1.5 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors disabled:opacity-50"
+            class="btn-ghost disabled:opacity-50"
             :disabled="submitting"
             @click="step = 'upload'"
           >
@@ -396,7 +397,7 @@ function close() {
           <button
             type="button"
             :disabled="submitting"
-            class="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg text-sm font-medium transition-colors"
+            class="btn-primary"
             @click="submitCommit"
           >
             {{ submitting ? 'Importing…' : 'Import' }}
@@ -420,12 +421,8 @@ function close() {
             </span>
           </p>
         </div>
-        <div class="flex justify-end mt-3">
-          <button
-            type="button"
-            class="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover text-accent-fg text-sm font-medium transition-colors"
-            @click="emit('close')"
-          >
+        <div class="mt-3 flex justify-end">
+          <button type="button" class="btn-primary" @click="emit('close')">
             Done
           </button>
         </div>

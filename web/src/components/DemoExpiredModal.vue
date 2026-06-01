@@ -29,7 +29,7 @@ async function end(next: 'signup' | 'home') {
     <div class="absolute inset-0 bg-bg/85 backdrop-blur-sm" />
 
     <div
-      class="relative max-w-md w-full rounded-2xl bg-surface ring-1 ring-border-strong p-8 shadow-2xl dark:inset-ring dark:inset-ring-white/5"
+      class="animate-modal-in relative w-full max-w-md rounded-2xl bg-surface p-8 shadow-2xl ring-1 ring-border-strong dark:inset-ring dark:inset-ring-white/5"
       role="dialog"
       aria-modal="true"
       aria-labelledby="demo-expired-title"

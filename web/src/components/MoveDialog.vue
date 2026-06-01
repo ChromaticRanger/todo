@@ -90,11 +90,11 @@ const canSubmit = () => {
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-    <div class="bg-surface border border-border-strong/60 rounded-xl max-w-sm w-full mx-4 overflow-hidden dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5">
+  <div class="modal-backdrop">
+    <div class="modal-card max-w-sm">
       <!-- Header (matches category card header) -->
-      <div class="px-4 py-2.5 border-b border-border-strong/60 bg-surface-hover/40">
-        <h3 class="text-sm font-semibold text-muted uppercase tracking-wider truncate">
+      <div class="border-b border-border-strong/60 bg-surface-hover/40 px-4 py-2.5">
+        <h3 class="truncate text-sm font-semibold uppercase tracking-wider text-muted">
           Move "{{ itemTitle }}"
         </h3>
       </div>
@@ -129,16 +129,14 @@ const canSubmit = () => {
           v-if="showNewList()"
           v-model="newListName"
           type="text"
+          name="new-list"
           placeholder="List name"
-          class="w-full mb-4 bg-bg border border-border-strong rounded-lg px-3 py-1.5 text-text text-sm focus:outline-none focus:border-accent"
+          class="field-input mb-4"
         />
 
         <div v-if="selected">
           <div class="text-xs uppercase tracking-wider text-muted mb-2">Category</div>
-          <select
-            v-model="categoryChoice"
-            class="w-full bg-bg border border-border-strong rounded-lg px-3 py-1.5 text-text text-sm focus:outline-none focus:border-accent"
-          >
+          <select v-model="categoryChoice" name="category" class="field-select">
             <option v-for="c in availableCategories" :key="c" :value="c">{{ c }}</option>
             <option :value="NEW_CATEGORY">New category…</option>
           </select>
@@ -147,25 +145,19 @@ const canSubmit = () => {
             v-if="showNewCategory()"
             v-model="newCategoryName"
             type="text"
+            name="new-category"
             placeholder="Category name"
-            class="mt-2 w-full bg-bg border border-border-strong rounded-lg px-3 py-1.5 text-text text-sm focus:outline-none focus:border-accent"
+            class="field-input mt-2"
           />
         </div>
       </div>
 
       <!-- Footer -->
-      <div class="flex gap-3 justify-end px-4 py-3 border-t border-border-strong/60 bg-surface-hover/20">
-        <button
-          class="px-4 py-1.5 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors"
-          @click="emit('cancel')"
-        >
+      <div class="modal-footer justify-end">
+        <button class="btn-ghost" @click="emit('cancel')">
           Cancel
         </button>
-        <button
-          :disabled="!canSubmit()"
-          class="px-4 py-1.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg text-sm font-medium transition-colors"
-          @click="confirm"
-        >
+        <button :disabled="!canSubmit()" class="btn-primary" @click="confirm">
           Move
         </button>
       </div>

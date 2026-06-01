@@ -129,7 +129,7 @@ function openAdd(type: ItemType) {
 
         <div
           v-if="showTypeMenu"
-          class="absolute right-0 top-full mt-1 z-20 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-48"
+          class="absolute right-0 top-full mt-1 z-50 bg-surface border border-border-strong rounded-lg shadow-lg py-1 min-w-48"
         >
           <button
             class="w-full text-left px-3 py-1.5 text-sm text-text hover:bg-surface-hover flex items-center gap-2"
@@ -177,7 +177,7 @@ function openAdd(type: ItemType) {
         <!-- Click-outside overlay -->
         <div
           v-if="showTypeMenu"
-          class="fixed inset-0 z-10"
+          class="fixed inset-0 z-40"
           @click="showTypeMenu = false"
         />
       </div>

@@ -89,39 +89,53 @@ useEscapeKey(() => emit('cancel'))
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-    <div class="bg-surface border border-border-strong rounded-xl w-full max-w-md dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5">
-      <div class="p-6">
-        <h3 class="text-text font-semibold text-lg mb-1">
-          {{ isSnoozed ? 'Reschedule reminder' : 'Remind me later' }}
-        </h3>
-        <p class="text-xs text-muted mb-5 truncate">{{ todo.title }}</p>
-
-        <div
-          v-if="isSnoozed"
-          class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2"
-        >
-          <span class="text-xs text-text">
-            Snoozed until <span class="font-medium">{{ snoozedLabel }}</span>
+  <div class="modal-backdrop">
+    <div class="modal-card max-w-md">
+      <form @submit.prevent="submit">
+        <div class="modal-header">
+          <span class="modal-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="size-5" aria-hidden="true">
+              <path
+                d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
           </span>
-          <button
-            type="button"
-            class="text-xs text-accent hover:text-accent-hover font-medium transition-colors"
-            @click="unsnooze"
-          >
-            Unsnooze
-          </button>
+          <div class="min-w-0 flex-1">
+            <h3 class="text-base font-semibold text-text">
+              {{ isSnoozed ? 'Reschedule reminder' : 'Remind me later' }}
+            </h3>
+            <p class="truncate text-xs text-muted">{{ todo.title }}</p>
+          </div>
         </div>
 
-        <form @submit.prevent="submit" class="space-y-4">
+        <div class="space-y-4 p-5">
+          <div
+            v-if="isSnoozed"
+            class="flex items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2"
+          >
+            <span class="text-xs text-text">
+              Snoozed until <span class="font-medium">{{ snoozedLabel }}</span>
+            </span>
+            <button
+              type="button"
+              class="text-xs font-medium text-accent transition-colors hover:text-accent-hover"
+              @click="unsnooze"
+            >
+              Unsnooze
+            </button>
+          </div>
+
           <div>
-            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Reappear on</label>
+            <label class="field-label">Reappear on</label>
             <input
               ref="snoozeInput"
               v-model="snoozeStr"
               type="date"
+              name="snooze"
               :min="minDate"
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              class="field-input"
             />
           </div>
 
@@ -132,7 +146,7 @@ useEscapeKey(() => emit('cancel'))
               </span>
               <button
                 type="button"
-                class="text-xs text-accent hover:text-accent-hover transition-colors"
+                class="text-xs text-accent transition-colors hover:text-accent-hover"
                 @click="matchSnooze"
               >
                 Match snooze date
@@ -141,29 +155,22 @@ useEscapeKey(() => emit('cancel'))
             <input
               v-model="dueStr"
               type="datetime-local"
-              class="mt-2 w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              name="due"
+              class="field-input mt-2"
               @input="onDueInput"
             />
           </div>
+        </div>
 
-          <div class="flex gap-3 justify-end mt-6">
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
-              @click="emit('cancel')"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              :disabled="!canSubmit"
-              class="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg font-medium transition-colors"
-            >
-              {{ isSnoozed ? 'Reschedule' : 'Snooze' }}
-            </button>
-          </div>
-        </form>
-      </div>
+        <div class="modal-footer justify-end">
+          <button type="button" class="btn-ghost" @click="emit('cancel')">
+            Cancel
+          </button>
+          <button type="submit" :disabled="!canSubmit" class="btn-primary">
+            {{ isSnoozed ? 'Reschedule' : 'Snooze' }}
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </template>

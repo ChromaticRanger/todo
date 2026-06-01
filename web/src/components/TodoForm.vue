@@ -103,6 +103,18 @@ const formTitle = computed(() => {
   return `${action} Todo`
 })
 
+// Leading header icon per type (Heroicons outline paths) — reinforces context
+// at a glance and gives each form a touch of the theme's accent colour.
+const iconPath = computed(() => {
+  if (type.value === 'bookmark')
+    return 'M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0Z'
+  if (type.value === 'note')
+    return 'M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z'
+  if (type.value === 'event')
+    return 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5'
+  return 'M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'
+})
+
 // Category: use a <select> for existing categories + an "Other" option for custom entry.
 const initialCategory = props.initial?.category ?? props.defaultCategory ?? 'General'
 const knownCategories = computed(() => {
@@ -212,49 +224,70 @@ const priorityLabels = [
 </script>
 
 <template>
-  <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-    <div class="bg-surface border border-border-strong rounded-xl w-full max-w-lg dark:shadow-none shadow-2xl dark:inset-ring dark:inset-ring-white/5 max-h-screen overflow-y-auto">
-      <div class="p-6">
-        <h3 class="text-text font-semibold text-lg mb-5">
-          {{ formTitle }}
-        </h3>
+  <div class="modal-backdrop">
+    <div
+      class="modal-card flex max-h-[88vh] flex-col"
+      :class="type === 'note' ? 'max-w-5xl' : 'max-w-lg'"
+    >
+      <form @submit.prevent="submit" class="flex min-h-0 flex-col">
+        <!-- Header: type icon + title + close -->
+        <div class="modal-header">
+          <span class="modal-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" class="size-5" aria-hidden="true">
+              <path :d="iconPath" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </span>
+          <h3 class="flex-1 text-base font-semibold text-text">
+            {{ formTitle }}
+          </h3>
+          <button type="button" class="btn-icon" aria-label="Close" @click="emit('cancel')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5" aria-hidden="true">
+              <path d="M6 18 18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
+        </div>
 
-        <form @submit.prevent="submit" class="space-y-4">
+        <!-- Scrollable body -->
+        <div class="min-h-0 flex-1 space-y-4 overflow-y-auto scrollbar-thin p-5">
 
           <!-- Bookmark: URL first -->
           <div v-if="type === 'bookmark'">
-            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">URL *</label>
+            <label class="field-label">URL *</label>
             <input
               v-model="url"
               type="url"
+              name="url"
               placeholder="https://example.com"
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              class="field-input"
               ref="urlInput"
             />
           </div>
 
           <!-- Title (all types) -->
           <div>
-            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Title *</label>
+            <label class="field-label">Title *</label>
             <input
               v-model="title"
               type="text"
+              name="title"
               :placeholder="type === 'bookmark' ? 'Bookmark title' : type === 'note' ? 'Note title' : type === 'event' ? 'What is happening?' : 'What needs to be done?'"
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              class="field-input"
               ref="titleInput"
             />
           </div>
 
           <!-- Description / Body -->
           <div>
-            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">
+            <label class="field-label">
               {{ type === 'note' ? 'Body' : 'Description' }}
             </label>
             <textarea
               v-model="description"
-              :rows="type === 'note' ? 5 : 2"
+              name="description"
+              :rows="type === 'note' ? 12 : 2"
               :placeholder="type === 'note' ? 'Note content…' : 'Optional details…'"
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent resize-none"
+              class="field-input"
+              :class="type === 'note' ? 'resize-y min-h-40' : 'resize-none'"
             />
           </div>
 
@@ -263,63 +296,60 @@ const priorityLabels = [
                +30 min end. -->
           <div v-if="type === 'event'" class="grid grid-cols-2 gap-3">
             <div>
-              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Start *</label>
+              <label class="field-label">Start *</label>
               <input
                 v-model="dueStr"
                 type="datetime-local"
+                name="start"
                 required
-                class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+                class="field-input"
               />
             </div>
             <div>
-              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">End</label>
+              <label class="field-label">End</label>
               <input
                 v-model="endStr"
                 type="datetime-local"
-                class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+                name="end"
+                class="field-input"
               />
             </div>
           </div>
           <p
             v-if="type === 'event' && endStr && dueStr && (strToEpoch(endStr) ?? 0) <= (strToEpoch(dueStr) ?? 0)"
-            class="text-xs text-danger -mt-1"
+            class="-mt-1 text-xs text-danger"
           >
             End must be after start.
           </p>
 
           <!-- Event-only: Recurrence -->
           <div v-if="type === 'event'">
-            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Repeats</label>
-            <select
-              v-model="eventRepeat"
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
-            >
+            <label class="field-label">Repeats</label>
+            <select v-model="eventRepeat" name="repeats" class="field-select">
               <option value="none">Does not repeat</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
               <option value="yearly">Yearly</option>
             </select>
-            <p v-if="isEdit && eventRepeat !== 'none'" class="text-xs text-muted mt-1">
+            <p v-if="isEdit && eventRepeat !== 'none'" class="mt-1 text-xs text-muted">
               Edits apply to the whole series.
             </p>
           </div>
 
           <div v-if="type === 'event' && eventRepeat !== 'none'">
-            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Ends on (optional)</label>
+            <label class="field-label">Ends on (optional)</label>
             <input
               v-model="recurUntilStr"
               type="date"
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              name="recur-until"
+              class="field-input"
             />
           </div>
 
           <!-- Category (todos / bookmarks / notes only — events live outside lists) -->
           <div v-if="type !== 'event'">
-            <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Category</label>
-            <select
-              v-model="selectedCategory"
-              class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
-            >
+            <label class="field-label">Category</label>
+            <select v-model="selectedCategory" name="category" class="field-select">
               <option v-for="c in knownCategories" :key="c" :value="c">{{ c }}</option>
               <option value="__other__">Other…</option>
             </select>
@@ -327,19 +357,17 @@ const priorityLabels = [
               v-if="selectedCategory === '__other__'"
               v-model="customCategory"
               type="text"
+              name="custom-category"
               placeholder="Category name"
-              class="mt-2 w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+              class="field-input mt-2"
             />
           </div>
 
           <!-- Todo-only fields: Priority, Due date, Repeat -->
           <template v-if="type === 'todo'">
             <div>
-              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Priority</label>
-              <select
-                v-model="priority"
-                class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
-              >
+              <label class="field-label">Priority</label>
+              <select v-model="priority" name="priority" class="field-select">
                 <option v-for="p in priorityLabels" :key="p.value" :value="p.value">
                   {{ p.label }}
                 </option>
@@ -347,65 +375,57 @@ const priorityLabels = [
             </div>
 
             <div>
-              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Due Date &amp; Time</label>
+              <label class="field-label">Due Date &amp; Time</label>
               <input
                 v-model="dueStr"
                 type="datetime-local"
-                class="w-full bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+                name="due"
+                class="field-input"
               />
             </div>
 
             <div>
-              <label class="block text-xs text-muted mb-1 uppercase tracking-wider">Repeat</label>
+              <label class="field-label">Repeat</label>
               <div class="flex gap-2">
                 <input
                   v-model.number="repeatValue"
                   type="number"
+                  name="repeat-value"
                   min="0"
                   placeholder="0"
-                  class="w-20 bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
+                  class="field-input w-20"
                 />
-                <select
-                  v-model="repeatUnit"
-                  class="flex-1 bg-bg border border-border-strong rounded-lg px-3 py-2 text-text text-sm focus:outline-none focus:border-accent"
-                >
+                <select v-model="repeatUnit" name="repeat-unit" class="field-select flex-1">
                   <option value="days">Days</option>
                   <option value="months">Months</option>
                 </select>
               </div>
-              <p v-if="repeatValue > 0" class="text-xs text-accent mt-1">
+              <p v-if="repeatValue > 0" class="mt-1 text-xs text-accent">
                 Repeats every {{ repeatValue }} {{ repeatUnit }}
               </p>
             </div>
           </template>
+        </div>
 
-          <div class="flex gap-3 items-center mt-6">
-            <button
-              v-if="isEdit && type === 'event'"
-              type="button"
-              class="px-3 py-2 rounded-lg text-danger hover:bg-danger-bg transition-colors text-sm"
-              @click="emit('delete')"
-            >
-              Delete
-            </button>
-            <div class="flex-1" />
-            <button
-              type="button"
-              class="px-4 py-2 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
-              @click="emit('cancel')"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              :disabled="!canSubmit"
-              class="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-accent-fg font-medium transition-colors"
-            >
-              {{ isEdit ? 'Save' : 'Add' }}
-            </button>
-          </div>
-        </form>
-      </div>
+        <!-- Footer actions -->
+        <div class="modal-footer">
+          <button
+            v-if="isEdit && type === 'event'"
+            type="button"
+            class="btn-danger-ghost"
+            @click="emit('delete')"
+          >
+            Delete
+          </button>
+          <div class="flex-1" />
+          <button type="button" class="btn-ghost" @click="emit('cancel')">
+            Cancel
+          </button>
+          <button type="submit" :disabled="!canSubmit" class="btn-primary">
+            {{ isEdit ? 'Save' : 'Add' }}
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 </template>
