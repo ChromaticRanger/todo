@@ -25,6 +25,7 @@ import LoginPage from './components/LoginPage.vue'
 import LandingPage from './components/LandingPage.vue'
 import ChoosePlan from './components/ChoosePlan.vue'
 import ConnectExtension from './components/ConnectExtension.vue'
+import ResetPassword from './components/ResetPassword.vue'
 import AccountPage from './components/AccountPage.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
@@ -56,6 +57,11 @@ const isAccountFlow = ref(
 )
 const isAdminFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/admin'
+)
+// Password-reset landing page. Opened from the emailed link (user is signed
+// out), so it renders ahead of every auth-gated branch below.
+const isResetFlow = ref(
+  typeof window !== 'undefined' && window.location.pathname === '/reset-password'
 )
 // Unauthenticated routing: '/' shows the marketing landing page, '/login'
 // shows the sign-in form, anything else (e.g. /connect-extension deep links)
@@ -268,7 +274,8 @@ onMounted(async () => {
     !authStore.needsPlanChoice &&
     !isConnectFlow.value &&
     !isAccountFlow.value &&
-    !isAdminFlow.value
+    !isAdminFlow.value &&
+    !isResetFlow.value
   ) {
     await loadData()
     await settingsStore.loadFromServer()
@@ -357,7 +364,8 @@ function onTourSkip() {
 </script>
 
 <template>
-  <div v-if="authStore.loading && !authStore.isAuthenticated" class="min-h-dvh bg-bg" aria-hidden="true" />
+  <ResetPassword v-if="isResetFlow" />
+  <div v-else-if="authStore.loading && !authStore.isAuthenticated" class="min-h-dvh bg-bg" aria-hidden="true" />
   <LandingPage v-else-if="!authStore.isAuthenticated && isLandingFlow" />
   <!-- Demo visitors can reach /login while still authenticated as their
        ephemeral demo user — that's how the "Sign up to keep my work" flow
