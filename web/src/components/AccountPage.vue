@@ -11,6 +11,7 @@ interface Profile {
   tier: string | null
   tierSource: string | null
   createdAt: string
+  hasPassword: boolean
 }
 
 const authStore = useAuthStore()
@@ -25,6 +26,49 @@ const showDelete = ref(false)
 const confirmText = ref('')
 const deleting = ref(false)
 const deleteError = ref('')
+
+// Change password
+const currentPassword = ref('')
+const newPassword = ref('')
+const confirmPassword = ref('')
+const pwBusy = ref(false)
+const pwError = ref('')
+const pwDone = ref(false)
+
+async function changePassword() {
+  pwError.value = ''
+  pwDone.value = false
+  if (newPassword.value !== confirmPassword.value) {
+    pwError.value = 'New passwords do not match.'
+    return
+  }
+  if (newPassword.value.length < 8) {
+    pwError.value = 'New password must be at least 8 characters.'
+    return
+  }
+  pwBusy.value = true
+  try {
+    // revokeOtherSessions signs out any other devices once the password
+    // changes — the expected behaviour after a credential rotation.
+    const { error } = await authClient.changePassword({
+      currentPassword: currentPassword.value,
+      newPassword: newPassword.value,
+      revokeOtherSessions: true,
+    })
+    if (error) {
+      pwError.value = error.message || 'Could not change your password. Check your current password and try again.'
+    } else {
+      pwDone.value = true
+      currentPassword.value = ''
+      newPassword.value = ''
+      confirmPassword.value = ''
+    }
+  } catch (e) {
+    pwError.value = String(e)
+  } finally {
+    pwBusy.value = false
+  }
+}
 
 function flashBillingError(msg: string) {
   billingError.value = msg
@@ -303,6 +347,79 @@ onMounted(loadProfile)
         >
           {{ billingError }}
         </div>
+      </div>
+
+      <div
+        v-if="profile && profile.hasPassword"
+        class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 dark:inset-ring dark:inset-ring-white/5"
+      >
+        <h2 class="text-base font-semibold mb-1">Password</h2>
+        <p class="text-sm text-muted mb-4">
+          Change the password you use to sign in. You'll stay signed in here, but other
+          devices will be signed out.
+        </p>
+
+        <form @submit.prevent="changePassword" class="flex flex-col gap-4 max-w-sm">
+          <div class="flex flex-col gap-1.5">
+            <label for="current-password" class="text-sm font-medium text-muted">Current password</label>
+            <input
+              id="current-password"
+              type="password"
+              autocomplete="current-password"
+              v-model="currentPassword"
+              required
+              class="rounded-lg bg-bg px-3 py-2 text-sm text-text placeholder-muted ring-1 ring-ring outline-none focus-visible:ring-2 focus-visible:ring-accent -outline-offset-1 max-sm:text-base/6"
+              placeholder="Your current password"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="account-new-password" class="text-sm font-medium text-muted">New password</label>
+            <input
+              id="account-new-password"
+              type="password"
+              autocomplete="new-password"
+              v-model="newPassword"
+              required
+              minlength="8"
+              class="rounded-lg bg-bg px-3 py-2 text-sm text-text placeholder-muted ring-1 ring-ring outline-none focus-visible:ring-2 focus-visible:ring-accent -outline-offset-1 max-sm:text-base/6"
+              placeholder="At least 8 characters"
+            />
+          </div>
+
+          <div class="flex flex-col gap-1.5">
+            <label for="account-confirm-password" class="text-sm font-medium text-muted">Confirm new password</label>
+            <input
+              id="account-confirm-password"
+              type="password"
+              autocomplete="new-password"
+              v-model="confirmPassword"
+              required
+              minlength="8"
+              class="rounded-lg bg-bg px-3 py-2 text-sm text-text placeholder-muted ring-1 ring-ring outline-none focus-visible:ring-2 focus-visible:ring-accent -outline-offset-1 max-sm:text-base/6"
+              placeholder="Re-enter your new password"
+            />
+          </div>
+
+          <div v-if="pwError" class="rounded-lg bg-danger-bg ring-1 ring-danger/60 px-3 py-2 text-sm text-danger-fg">
+            {{ pwError }}
+          </div>
+          <div v-else-if="pwDone" class="rounded-lg bg-accent/10 ring-1 ring-accent/30 px-3 py-2 text-sm text-text">
+            Your password has been updated.
+          </div>
+
+          <button
+            type="submit"
+            :disabled="pwBusy"
+            class="inline-flex items-center justify-center gap-2 self-start rounded-lg bg-bg px-3 py-2 text-sm text-text ring-1 ring-ring hover:bg-surface-hover disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <svg v-if="pwBusy" class="size-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            {{ pwBusy ? 'Updating…' : 'Update password' }}
+          </button>
+        </form>
       </div>
 
       <div class="rounded-2xl bg-surface ring-1 ring-danger/30 p-6 dark:inset-ring dark:inset-ring-white/5">

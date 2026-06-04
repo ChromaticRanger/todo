@@ -37,12 +37,22 @@ router.get('/', async (req, res) => {
       [userId]
     )
     const signupCarriedDemoData = (flagResult.rowCount ?? 0) > 0
+    // OAuth-only users have no credential row, so they can't "change" a
+    // password they never set — the Account page hides that section for them.
+    const credResult = await query(
+      `SELECT 1 FROM account
+        WHERE "userId" = $1 AND "providerId" = 'credential'
+        LIMIT 1`,
+      [userId]
+    )
+    const hasPassword = (credResult.rowCount ?? 0) > 0
     res.json({
       ...rows[0],
       isAdmin: isAdminEmail(rows[0].email),
       // Both the `demo-user` template and per-visitor `demo-<uuid>` users.
       isDemo: rows[0].id.startsWith('demo-'),
       signupCarriedDemoData,
+      hasPassword,
     })
   } catch (err) {
     console.error('[account] GET failed:', err)

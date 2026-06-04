@@ -3,17 +3,21 @@ import { ref, computed } from 'vue'
 import { authClient } from '../lib/auth-client'
 import { useAuthStore } from '../stores/authStore'
 
-type Mode = 'signin' | 'signup'
+type Mode = 'signin' | 'signup' | 'forgot'
 
 const authStore = useAuthStore()
 
-// Honour `?mode=signup` from the marketing CTAs so users land directly in the
-// signup form instead of having to flip the toggle.
+// Honour query hints from elsewhere: `?mode=signup` from the marketing CTAs
+// drops users into the signup form; `?reset=1` (set by an expired reset link)
+// opens the forgot-password form directly.
+const initialParams =
+  typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
 const initialMode: Mode =
-  typeof window !== 'undefined' &&
-  new URLSearchParams(window.location.search).get('mode') === 'signup'
+  initialParams?.get('mode') === 'signup'
     ? 'signup'
-    : 'signin'
+    : initialParams?.get('reset') === '1'
+      ? 'forgot'
+      : 'signin'
 
 const mode = ref<Mode>(initialMode)
 const email = ref('')
@@ -23,6 +27,8 @@ const error = ref('')
 const loading = ref(false)
 const needsVerification = ref(false)
 const resendStatus = ref<'' | 'sending' | 'sent' | 'failed'>('')
+// "Check your inbox" confirmation shown after a reset link is requested.
+const resetSent = ref(false)
 
 // Post-signup "check your inbox" state is held in the auth store so it
 // survives LoginPage being unmounted by the session refetch that signUp
@@ -30,10 +36,47 @@ const resendStatus = ref<'' | 'sending' | 'sent' | 'failed'>('')
 const awaitingVerification = computed(() => !!authStore.awaitingVerificationEmail)
 const awaitingEmail = computed(() => authStore.awaitingVerificationEmail ?? '')
 
-const title = computed(() => (mode.value === 'signin' ? 'Sign in' : 'Create account'))
-const submitLabel = computed(() => (mode.value === 'signin' ? 'Sign in' : 'Sign up'))
+const title = computed(() =>
+  mode.value === 'signin'
+    ? 'Sign in'
+    : mode.value === 'forgot'
+      ? 'Reset password'
+      : 'Create account'
+)
+const submitLabel = computed(() =>
+  mode.value === 'signin' ? 'Sign in' : mode.value === 'forgot' ? 'Send reset link' : 'Sign up'
+)
+
+async function requestReset() {
+  error.value = ''
+  loading.value = true
+  try {
+    // Better Auth emails a link to BETTER_AUTH_URL/api/auth/reset-password/<token>
+    // which, once validated, redirects the browser to this redirectTo with the
+    // token appended — landing the user on our ResetPassword page.
+    const { error: err } = await authClient.requestPasswordReset({
+      email: email.value,
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    if (err) {
+      error.value = err.message || 'Could not send the reset email. Try again in a moment.'
+    } else {
+      // Always confirm regardless of whether the address exists — don't leak
+      // which emails have accounts.
+      resetSent.value = true
+    }
+  } catch (e) {
+    error.value = String(e)
+  } finally {
+    loading.value = false
+  }
+}
 
 async function handleSubmit() {
+  if (mode.value === 'forgot') {
+    await requestReset()
+    return
+  }
   error.value = ''
   resendStatus.value = ''
   needsVerification.value = false
@@ -125,8 +168,15 @@ async function resendVerification(target?: string) {
 function backToSignIn() {
   authStore.awaitingVerificationEmail = null
   resendStatus.value = ''
+  resetSent.value = false
   error.value = ''
   mode.value = 'signin'
+}
+
+function showForgot() {
+  error.value = ''
+  resetSent.value = false
+  mode.value = 'forgot'
 }
 
 async function signInWithGoogle() {
@@ -208,9 +258,35 @@ function toggleMode() {
         </div>
       </div>
 
+      <!-- Reset-link "check your inbox" card -->
+      <div v-else-if="resetSent" class="rounded-2xl bg-surface ring-1 ring-ring p-6 dark:inset-ring dark:inset-ring-white/5">
+        <div class="flex flex-col items-center text-center gap-3">
+          <div class="flex size-12 items-center justify-center rounded-full bg-accent/15 text-accent">
+            <svg class="size-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 class="text-base font-semibold text-text">Check your inbox</h2>
+          <p class="text-sm text-muted text-balance">
+            If an account exists for <span class="text-text font-medium">{{ email }}</span>, we've sent a link to reset your password. The link expires soon.
+          </p>
+          <button
+            type="button"
+            class="mt-2 text-xs text-muted hover:text-text"
+            @click="backToSignIn"
+          >
+            Back to sign in
+          </button>
+        </div>
+      </div>
+
       <!-- Auth card -->
       <div v-else class="rounded-2xl bg-surface ring-1 ring-ring p-6 dark:inset-ring dark:inset-ring-white/5">
         <h2 class="text-base font-semibold text-text mb-4">{{ title }}</h2>
+
+        <p v-if="mode === 'forgot'" class="text-sm text-muted -mt-2 mb-4">
+          Enter your email and we'll send you a link to reset your password.
+        </p>
 
         <!-- Demo carryover preview. The decision to actually move the data
              is deferred to the plan-choice step — Pro transfers, Free
@@ -228,7 +304,7 @@ function toggleMode() {
         </div>
 
         <!-- Social providers -->
-        <div class="flex flex-col gap-2 mb-5">
+        <div v-if="mode !== 'forgot'" class="flex flex-col gap-2 mb-5">
           <button
             type="button"
             @click="signInWithGoogle"
@@ -255,7 +331,7 @@ function toggleMode() {
         </div>
 
         <!-- Divider -->
-        <div class="relative flex items-center gap-3 my-5">
+        <div v-if="mode !== 'forgot'" class="relative flex items-center gap-3 my-5">
           <div class="h-px flex-1 bg-border"></div>
           <span class="text-xs text-muted">or</span>
           <div class="h-px flex-1 bg-border"></div>
@@ -289,8 +365,18 @@ function toggleMode() {
             />
           </div>
 
-          <div class="flex flex-col gap-1.5">
-            <label for="password" class="text-sm font-medium text-muted">Password</label>
+          <div v-if="mode !== 'forgot'" class="flex flex-col gap-1.5">
+            <div class="flex items-center justify-between">
+              <label for="password" class="text-sm font-medium text-muted">Password</label>
+              <button
+                v-if="mode === 'signin'"
+                type="button"
+                class="text-xs text-accent hover:underline"
+                @click="showForgot"
+              >
+                Forgot password?
+              </button>
+            </div>
             <input
               id="password"
               name="password"
@@ -343,6 +429,10 @@ function toggleMode() {
           <template v-if="mode === 'signin'">
             Don't have an account?
             <button type="button" @click="toggleMode" class="text-accent hover:underline">Sign up</button>
+          </template>
+          <template v-else-if="mode === 'forgot'">
+            Remembered it?
+            <button type="button" @click="backToSignIn" class="text-accent hover:underline">Back to sign in</button>
           </template>
           <template v-else>
             Already have an account?
