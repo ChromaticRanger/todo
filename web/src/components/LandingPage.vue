@@ -197,42 +197,63 @@ const features = [
         class="pointer-events-none absolute inset-0 -z-10 opacity-60"
         style="background: radial-gradient(60% 50% at 50% 0%, color-mix(in oklab, var(--color-accent) 30%, transparent), transparent 70%);"
       />
-      <div class="mx-auto max-w-4xl px-6 pt-16 pb-20 sm:pt-24 sm:pb-28 text-center">
-        <p
-          class="inline-flex items-center gap-2 rounded-full bg-surface ring-1 ring-ring px-3 py-1 text-xs text-muted mb-6"
-        >
-          <span class="size-1.5 rounded-full bg-accent" />
-          Todos · Bookmarks · Notes · Events — one list
-        </p>
-        <h1
-          class="font-display italic text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight text-balance leading-[1.05]"
-        >
-          <span>A workspace for everything </span><span
-            class="bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent"
-          >a project needs.</span>
-        </h1>
-        <p class="mt-6 text-lg sm:text-xl text-muted text-balance max-w-2xl mx-auto">
-          Todos, bookmarks and notes — together in one list. Kanban when you need a
-          board, calendar when you need a date. Share your lists, or start from
-          someone else’s.
-        </p>
-        <div class="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <a
-            href="/login?mode=signup"
-            class="rounded-xl bg-accent px-5 py-3 text-base font-medium text-accent-fg transition-colors hover:bg-accent-hover"
-          >
-            Get started — it’s free
-          </a>
-          <a
-            href="#demo"
-            class="rounded-xl bg-surface ring-1 ring-ring px-5 py-3 text-base font-medium text-text transition-colors hover:bg-surface-hover"
-          >
-            Try the demo
-          </a>
+      <div class="mx-auto max-w-[88rem] px-6 pt-16 pb-20 sm:pt-24 sm:pb-28">
+        <div class="grid items-center gap-16 lg:grid-cols-[3fr_4fr]">
+          <!-- Copy -->
+          <div class="text-center lg:text-left">
+            <p
+              class="inline-flex items-center gap-2 rounded-full bg-surface ring-1 ring-ring px-3 py-1 text-xs text-muted mb-6"
+            >
+              <span class="size-1.5 rounded-full bg-accent" />
+              Todos · Bookmarks · Notes · Events — one list
+            </p>
+            <h1
+              class="font-display italic text-5xl sm:text-6xl lg:text-7xl font-semibold tracking-tight text-balance leading-[1.05]"
+            >
+              <span>A workspace for everything </span><span
+                class="bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent"
+              >a project needs.</span>
+            </h1>
+            <p class="mt-6 text-lg sm:text-xl text-muted text-balance max-w-2xl mx-auto lg:mx-0">
+              Todos, bookmarks and notes — together in one list. Kanban when you need a
+              board, calendar when you need a date. Share your lists, or start from
+              someone else’s.
+            </p>
+            <div class="mt-10 flex flex-wrap items-center justify-center lg:justify-start gap-3">
+              <a
+                href="/login?mode=signup"
+                class="rounded-xl bg-accent px-5 py-3 text-base font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+              >
+                Get started — it’s free
+              </a>
+              <a
+                href="#demo"
+                class="rounded-xl bg-surface ring-1 ring-ring px-5 py-3 text-base font-medium text-text transition-colors hover:bg-surface-hover"
+              >
+                Try the demo
+              </a>
+            </div>
+            <p class="mt-5 text-xs text-muted">
+              No credit card. Free forever for casual use.
+            </p>
+          </div>
+
+          <!-- Stash, the mascot -->
+          <div class="relative mx-auto w-full max-w-2xl lg:max-w-none">
+            <video
+              class="w-full rounded-2xl ring-1 ring-border-strong shadow-xl dark:inset-ring dark:inset-ring-white/5"
+              autoplay
+              loop
+              muted
+              playsinline
+              preload="auto"
+              poster="/stash-squirrel-poster.jpg"
+              aria-hidden="true"
+            >
+              <source src="/stash-squirrel.mp4" type="video/mp4" />
+            </video>
+          </div>
         </div>
-        <p class="mt-5 text-xs text-muted">
-          No credit card. Free forever for casual use.
-        </p>
       </div>
     </section>
 

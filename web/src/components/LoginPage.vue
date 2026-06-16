@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { authClient } from '../lib/auth-client'
 import { useAuthStore } from '../stores/authStore'
+import { clearDemoTimer } from '../composables/useDemoTimer'
 
 type Mode = 'signin' | 'signup' | 'forgot'
 
@@ -139,6 +140,10 @@ async function handleSubmit() {
         const msg = err.message || 'Invalid credentials'
         error.value = msg
         if (/verif/i.test(msg)) needsVerification.value = true
+      } else {
+        // Signing in lands on a real account — drop any stale demo countdown
+        // so the end-of-demo modal can't fire over the authenticated session.
+        clearDemoTimer()
       }
     }
   } catch (e) {
