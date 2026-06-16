@@ -18,8 +18,6 @@ const emit = defineEmits<{
 
 const props = defineProps<{ calendarActive?: boolean; discoverActive?: boolean }>()
 
-const appVersion = __APP_VERSION__
-
 const authStore = useAuthStore()
 const todoStore = useTodoStore()
 const listStore = useListStore()
@@ -108,7 +106,6 @@ function openAdd(type: ItemType) {
         >
           Stash Squirrel
         </h1>
-        <span class="text-xs text-muted tracking-wide pl-1 mt-0.5">v{{ appVersion }}</span>
       </div>
     </div>
     <div class="flex items-center gap-2">

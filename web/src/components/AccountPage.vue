@@ -16,6 +16,8 @@ interface Profile {
 
 const authStore = useAuthStore()
 
+const appVersion = __APP_VERSION__
+
 const profile = ref<Profile | null>(null)
 const loadError = ref('')
 
@@ -437,6 +439,10 @@ onMounted(loadProfile)
           Delete account
         </button>
       </div>
+
+      <footer class="mt-8 pt-6 border-t border-border text-center text-xs text-muted">
+        Stash Squirrel · v{{ appVersion }}
+      </footer>
     </div>
 
     <div
