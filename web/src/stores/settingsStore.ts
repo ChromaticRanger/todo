@@ -88,6 +88,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const hasSeenWelcome = ref(true)
   // Transient flag — true while the user-menu replay is open. Not persisted.
   const replayingWelcome = ref(false)
+  // Whether the "due today" reminder modal pops on login. Server-persisted,
+  // toggled from the Account page. Defaults true (opt-out feature).
+  const dueTodayModalEnabled = ref(true)
   // How far back the Completed view fetches. Local-only (no server sync) —
   // a per-device preference, like list collapse state.
   const completedWindow = ref<CompletedWindow>(DEFAULT_COMPLETED_WINDOW)
@@ -137,6 +140,35 @@ export const useSettingsStore = defineStore('settings', () => {
         hasSeenWelcome.value = data.hasSeenWelcome !== false
       }
     } catch {}
+    await loadDueTodayPref()
+  }
+
+  /** Fetch just the due-today-modal preference. Used standalone by the Account
+   *  page, which doesn't run the full loadFromServer. */
+  async function loadDueTodayPref() {
+    try {
+      const res = await apiFetch('/api/settings/due-today-modal')
+      if (res.ok) {
+        const data = (await res.json()) as { enabled?: boolean }
+        dueTodayModalEnabled.value = data.enabled !== false
+      }
+    } catch {}
+  }
+
+  async function setDueTodayModalEnabled(enabled: boolean) {
+    const previous = dueTodayModalEnabled.value
+    dueTodayModalEnabled.value = enabled
+    try {
+      const res = await apiFetch('/api/settings/due-today-modal', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+    } catch (e) {
+      dueTodayModalEnabled.value = previous
+      throw e
+    }
   }
 
   async function completeWelcome() {
@@ -186,10 +218,13 @@ export const useSettingsStore = defineStore('settings', () => {
     mode,
     hasSeenWelcome,
     replayingWelcome,
+    dueTodayModalEnabled,
     completedWindow,
     calendarView,
     loadFromCache,
     loadFromServer,
+    loadDueTodayPref,
+    setDueTodayModalEnabled,
     setTheme,
     setCompletedWindow,
     setCalendarView,

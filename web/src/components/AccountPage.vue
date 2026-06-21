@@ -2,6 +2,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { apiFetch } from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { authClient } from '../lib/auth-client'
 
 interface Profile {
@@ -15,8 +16,29 @@ interface Profile {
 }
 
 const authStore = useAuthStore()
+const settingsStore = useSettingsStore()
 
 const appVersion = __APP_VERSION__
+
+// "Due today" login reminder preference. The /account route doesn't run the
+// app's full settings load, so fetch it here on mount.
+const dueTodayEnabled = ref(true)
+const dueTodayBusy = ref(false)
+const dueTodayError = ref('')
+
+async function toggleDueToday(next: boolean) {
+  dueTodayBusy.value = true
+  dueTodayError.value = ''
+  dueTodayEnabled.value = next
+  try {
+    await settingsStore.setDueTodayModalEnabled(next)
+  } catch {
+    dueTodayEnabled.value = !next
+    dueTodayError.value = "Couldn't save that setting. Please try again."
+  } finally {
+    dueTodayBusy.value = false
+  }
+}
 
 const profile = ref<Profile | null>(null)
 const loadError = ref('')
@@ -193,7 +215,11 @@ async function handleSignOut() {
   window.location.href = '/'
 }
 
-onMounted(loadProfile)
+onMounted(async () => {
+  await loadProfile()
+  await settingsStore.loadDueTodayPref()
+  dueTodayEnabled.value = settingsStore.dueTodayModalEnabled
+})
 </script>
 
 <template>
@@ -348,6 +374,46 @@ onMounted(loadProfile)
           class="mt-4 rounded-lg bg-danger-bg ring-1 ring-danger/60 px-3 py-2 text-sm text-danger-fg"
         >
           {{ billingError }}
+        </div>
+      </div>
+
+      <div
+        v-if="profile"
+        class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 dark:inset-ring dark:inset-ring-white/5"
+      >
+        <h2 class="text-base font-semibold mb-1">Daily reminders</h2>
+        <p class="text-sm text-muted mb-4">
+          Control the reminders Stash Squirrel shows you.
+        </p>
+
+        <div class="flex items-center justify-between gap-4">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-text">"Due today" pop-up on sign-in</div>
+            <div class="text-xs text-muted mt-0.5">
+              When you sign in, show a summary of everything due today across all your lists.
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="dueTodayEnabled"
+            :disabled="dueTodayBusy"
+            class="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface"
+            :class="dueTodayEnabled ? 'bg-accent' : 'bg-muted/30'"
+            @click="toggleDueToday(!dueTodayEnabled)"
+          >
+            <span
+              class="inline-block size-5 transform rounded-full bg-white shadow transition-transform"
+              :class="dueTodayEnabled ? 'translate-x-5' : 'translate-x-0.5'"
+            />
+          </button>
+        </div>
+
+        <div
+          v-if="dueTodayError"
+          class="mt-4 rounded-lg bg-danger-bg ring-1 ring-danger/60 px-3 py-2 text-sm text-danger-fg"
+        >
+          {{ dueTodayError }}
         </div>
       </div>
 
