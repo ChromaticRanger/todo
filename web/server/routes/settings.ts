@@ -93,6 +93,43 @@ router.put('/onboarding', async (req, res) => {
   }
 })
 
+// GET /api/settings/due-today-modal
+// Returns { enabled }. An absent row defaults to enabled=true — the login
+// "due today" reminder is opt-out, so existing users get it until they disable it.
+router.get('/due-today-modal', async (req, res) => {
+  const userId = req.userId!
+  try {
+    const result = await query<{ value: { enabled?: boolean } }>(
+      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'due_today_modal'`,
+      [userId]
+    )
+    const row = result.rows[0]?.value
+    res.json({ enabled: row ? row.enabled !== false : true })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/settings/due-today-modal
+router.put('/due-today-modal', async (req, res) => {
+  const userId = req.userId!
+  const { enabled } = req.body as { enabled?: unknown }
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ error: 'enabled must be a boolean' })
+  }
+  try {
+    await query(
+      `INSERT INTO app_settings (user_id, key, value, updated_at)
+       VALUES ($1, 'due_today_modal', $2, NOW())
+       ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
+      [userId, JSON.stringify({ enabled })]
+    )
+    res.json({ enabled })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/settings/list-order
 router.get('/list-order', async (req, res) => {
   const userId = req.userId!

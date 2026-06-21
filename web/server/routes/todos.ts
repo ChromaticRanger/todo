@@ -306,6 +306,44 @@ router.get('/today', async (req, res) => {
   }
 })
 
+// GET /api/todos/today/all
+// Cross-list "due today" feed for the login reminder modal. Unlike /today it
+// spans every list the user owns (no list filter) and, unlike /calendar, it's
+// not Pro-gated — free users still get their dated todos. Events (one-off and
+// expanded recurring series) are merged in just like the windowed views.
+router.get('/today/all', async (req, res) => {
+  const userId = req.userId!
+  try {
+    const now = Math.floor(Date.now() / 1000)
+    const dayStart = Math.floor(now / 86400) * 86400
+    const to = dayStart + 86400
+    const [main, series] = await Promise.all([
+      query<TodoRow>(
+        buildTodoSelect(
+          // Todos: start-in-window across all lists. Events: overlap with the
+          // day so a multi-day block that touches today still shows.
+          `WHERE user_id = $1 AND status = 0
+           AND due_date IS NOT NULL
+           AND (
+             (type = 'todo' AND due_date >= $2 AND due_date < $3)
+             OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
+                 AND due_date < $3
+                 AND (due_date + COALESCE(duration_seconds, 0)) > $2)
+           )
+           ORDER BY due_date ASC`
+        ),
+        [userId, dayStart, to]
+      ),
+      fetchExpandedEventSeries(userId, dayStart, to),
+    ])
+    const merged = [...main.rows, ...series].map(coerceTodo)
+    merged.sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
+    res.json({ todos: merged })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 // GET /api/todos/week?list=X
 router.get('/week', async (req, res) => {
   const userId = req.userId!

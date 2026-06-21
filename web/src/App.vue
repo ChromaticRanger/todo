@@ -13,7 +13,7 @@ import {
 } from './stores/listPrefsStore'
 import { useCategoryPrefsStore } from './stores/categoryPrefsStore'
 import type { ViewType, ItemType, Todo } from './types/todo'
-import { apiEvents } from './lib/api'
+import { apiEvents, apiFetch } from './lib/api'
 import AppHeader from './components/AppHeader.vue'
 import ListTabs from './components/ListTabs.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
@@ -29,6 +29,7 @@ import ResetPassword from './components/ResetPassword.vue'
 import AccountPage from './components/AccountPage.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
+import DueTodayModal from './components/DueTodayModal.vue'
 import SearchModal from './components/SearchModal.vue'
 import DemoOverlay from './components/DemoOverlay.vue'
 import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
@@ -75,6 +76,8 @@ const addType = ref<ItemType>('todo')
 const rateLimitMessage = ref('')
 const showCategoryDialog = ref(false)
 const showImportDialog = ref(false)
+const showDueTodayModal = ref(false)
+const dueTodayItems = ref<Todo[]>([])
 const categoryMenu = ref<{ x: number; y: number } | null>(null)
 
 function openCategoryDialog() {
@@ -266,6 +269,32 @@ async function loadData() {
   }
 }
 
+// "Due today" reminder. Pops once per browser session (the sessionStorage flag
+// is cleared on logout), so it shows on a fresh sign-in but not on plain
+// reloads. Skipped when disabled in settings or when the first-run welcome tour
+// is on screen, so the two modals never stack.
+const DUE_TODAY_SESSION_KEY = 'due_today_shown'
+async function maybeShowDueToday() {
+  if (!settingsStore.dueTodayModalEnabled) return
+  if (showWelcomeTour.value) return
+  try {
+    if (sessionStorage.getItem(DUE_TODAY_SESSION_KEY)) return
+    // Set the guard before awaiting so the onMounted + user-id-watcher pair
+    // can't both fire the fetch.
+    sessionStorage.setItem(DUE_TODAY_SESSION_KEY, '1')
+  } catch {
+    // sessionStorage unavailable (private mode edge cases) — show once, no guard.
+  }
+  try {
+    const res = await apiFetch('/api/todos/today/all')
+    const data = (await res.json()) as { todos?: Todo[] }
+    dueTodayItems.value = Array.isArray(data.todos) ? data.todos : []
+  } catch {
+    dueTodayItems.value = []
+  }
+  showDueTodayModal.value = true
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   apiEvents.addEventListener('rate-limited', handleRateLimit)
@@ -281,6 +310,7 @@ onMounted(async () => {
     await settingsStore.loadFromServer()
     await listPrefsStore.loadFromServer()
     await categoryPrefsStore.loadFromServer()
+    void maybeShowDueToday()
   }
 })
 
@@ -308,6 +338,11 @@ watch(
       await settingsStore.loadFromServer()
       await listPrefsStore.loadFromServer()
       await categoryPrefsStore.loadFromServer()
+      void maybeShowDueToday()
+    } else {
+      // Logged out (or switching users) — clear the reminder guard so the next
+      // sign-in pops the modal again.
+      try { sessionStorage.removeItem(DUE_TODAY_SESSION_KEY) } catch {}
     }
   }
 )
@@ -541,6 +576,13 @@ function onTourSkip() {
       v-if="showWelcomeTour"
       @done="onTourDone"
       @skip="onTourSkip"
+    />
+
+    <!-- Due-today reminder (on login) -->
+    <DueTodayModal
+      v-if="showDueTodayModal"
+      :items="dueTodayItems"
+      @close="showDueTodayModal = false"
     />
 
     <!-- Global search -->
