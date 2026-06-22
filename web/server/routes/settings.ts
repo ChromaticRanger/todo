@@ -93,38 +93,73 @@ router.put('/onboarding', async (req, res) => {
   }
 })
 
-// GET /api/settings/due-today-modal
-// Returns { enabled }. An absent row defaults to enabled=true — the login
-// "due today" reminder is opt-out, so existing users get it until they disable it.
-router.get('/due-today-modal', async (req, res) => {
+// User behavior preferences (the Settings page). Stored as one JSON blob under
+// the 'preferences' key. Each field is opt-out where it makes sense: an absent
+// row resolves to these defaults, so existing users keep sensible behavior.
+interface Preferences {
+  // Pop the "due today" reminder modal on login.
+  dueTodayModal: boolean
+  // Also list pre-today overdue todos in that modal.
+  dueTodayIncludeOverdue: boolean
+  // Ask for confirmation before deleting an item.
+  confirmBeforeDelete: boolean
+}
+
+const DEFAULT_PREFERENCES: Preferences = {
+  dueTodayModal: true,
+  dueTodayIncludeOverdue: false,
+  confirmBeforeDelete: true,
+}
+
+const PREFERENCE_KEYS = Object.keys(DEFAULT_PREFERENCES) as (keyof Preferences)[]
+
+async function readPreferences(userId: string): Promise<Preferences> {
+  const result = await query<{ value: Partial<Preferences> }>(
+    `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'preferences'`,
+    [userId]
+  )
+  const stored = result.rows[0]?.value ?? {}
+  const merged = { ...DEFAULT_PREFERENCES }
+  for (const k of PREFERENCE_KEYS) {
+    if (typeof stored[k] === 'boolean') merged[k] = stored[k] as boolean
+  }
+  return merged
+}
+
+// GET /api/settings/preferences
+router.get('/preferences', async (req, res) => {
   const userId = req.userId!
   try {
-    const result = await query<{ value: { enabled?: boolean } }>(
-      `SELECT value FROM app_settings WHERE user_id = $1 AND key = 'due_today_modal'`,
-      [userId]
-    )
-    const row = result.rows[0]?.value
-    res.json({ enabled: row ? row.enabled !== false : true })
+    res.json(await readPreferences(userId))
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
 })
 
-// PUT /api/settings/due-today-modal
-router.put('/due-today-modal', async (req, res) => {
+// PUT /api/settings/preferences — accepts a partial; unknown/omitted keys are
+// left untouched. Returns the full merged preferences.
+router.put('/preferences', async (req, res) => {
   const userId = req.userId!
-  const { enabled } = req.body as { enabled?: unknown }
-  if (typeof enabled !== 'boolean') {
-    return res.status(400).json({ error: 'enabled must be a boolean' })
+  const body = (req.body ?? {}) as Record<string, unknown>
+  const updates: Partial<Preferences> = {}
+  for (const k of PREFERENCE_KEYS) {
+    if (k in body) {
+      if (typeof body[k] !== 'boolean') {
+        return res.status(400).json({ error: `${k} must be a boolean` })
+      }
+      updates[k] = body[k] as boolean
+    }
   }
   try {
+    const current = await readPreferences(userId)
+    const merged = { ...current, ...updates }
     await query(
       `INSERT INTO app_settings (user_id, key, value, updated_at)
-       VALUES ($1, 'due_today_modal', $2, NOW())
+       VALUES ($1, 'preferences', $2, NOW())
        ON CONFLICT (user_id, key) DO UPDATE SET value = $2, updated_at = NOW()`,
-      [userId, JSON.stringify({ enabled })]
+      [userId, JSON.stringify(merged)]
     )
-    res.json({ enabled })
+    res.json(merged)
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }

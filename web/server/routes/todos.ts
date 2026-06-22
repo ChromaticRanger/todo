@@ -306,17 +306,25 @@ router.get('/today', async (req, res) => {
   }
 })
 
-// GET /api/todos/today/all
+// GET /api/todos/today/all?includeOverdue=1
 // Cross-list "due today" feed for the login reminder modal. Unlike /today it
 // spans every list the user owns (no list filter) and, unlike /calendar, it's
 // not Pro-gated — free users still get their dated todos. Events (one-off and
 // expanded recurring series) are merged in just like the windowed views.
+// With includeOverdue, pre-today overdue todos (due_date < today's start) are
+// added too; events are never "overdue" (matching the /overdue route).
 router.get('/today/all', async (req, res) => {
   const userId = req.userId!
+  const includeOverdue = req.query.includeOverdue === '1' || req.query.includeOverdue === 'true'
   try {
     const now = Math.floor(Date.now() / 1000)
     const dayStart = Math.floor(now / 86400) * 86400
     const to = dayStart + 86400
+    // Overdue todos are strictly before today's start, so they never overlap
+    // the [dayStart, to) today window — no dedup needed.
+    const overdueClause = includeOverdue
+      ? `OR (type = 'todo' AND due_date < $2)`
+      : ''
     const [main, series] = await Promise.all([
       query<TodoRow>(
         buildTodoSelect(
@@ -329,6 +337,7 @@ router.get('/today/all', async (req, res) => {
              OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
                  AND due_date < $3
                  AND (due_date + COALESCE(duration_seconds, 0)) > $2)
+             ${overdueClause}
            )
            ORDER BY due_date ASC`
         ),
