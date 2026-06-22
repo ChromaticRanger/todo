@@ -88,9 +88,11 @@ export const useSettingsStore = defineStore('settings', () => {
   const hasSeenWelcome = ref(true)
   // Transient flag — true while the user-menu replay is open. Not persisted.
   const replayingWelcome = ref(false)
-  // Whether the "due today" reminder modal pops on login. Server-persisted,
-  // toggled from the Account page. Defaults true (opt-out feature).
+  // Behavior preferences (the Settings page). Server-persisted as one blob;
+  // defaults mirror the server's DEFAULT_PREFERENCES.
   const dueTodayModalEnabled = ref(true)
+  const dueTodayIncludeOverdue = ref(false)
+  const confirmBeforeDelete = ref(true)
   // How far back the Completed view fetches. Local-only (no server sync) —
   // a per-device preference, like list collapse state.
   const completedWindow = ref<CompletedWindow>(DEFAULT_COMPLETED_WINDOW)
@@ -140,33 +142,50 @@ export const useSettingsStore = defineStore('settings', () => {
         hasSeenWelcome.value = data.hasSeenWelcome !== false
       }
     } catch {}
-    await loadDueTodayPref()
+    await loadPreferences()
   }
 
-  /** Fetch just the due-today-modal preference. Used standalone by the Account
-   *  page, which doesn't run the full loadFromServer. */
-  async function loadDueTodayPref() {
+  interface Preferences {
+    dueTodayModal: boolean
+    dueTodayIncludeOverdue: boolean
+    confirmBeforeDelete: boolean
+  }
+
+  function applyPreferences(p: Partial<Preferences>) {
+    if (typeof p.dueTodayModal === 'boolean') dueTodayModalEnabled.value = p.dueTodayModal
+    if (typeof p.dueTodayIncludeOverdue === 'boolean') dueTodayIncludeOverdue.value = p.dueTodayIncludeOverdue
+    if (typeof p.confirmBeforeDelete === 'boolean') confirmBeforeDelete.value = p.confirmBeforeDelete
+  }
+
+  /** Fetch behavior preferences. Used by loadFromServer and standalone by the
+   *  Settings page (which doesn't run the full loadFromServer). */
+  async function loadPreferences() {
     try {
-      const res = await apiFetch('/api/settings/due-today-modal')
-      if (res.ok) {
-        const data = (await res.json()) as { enabled?: boolean }
-        dueTodayModalEnabled.value = data.enabled !== false
-      }
+      const res = await apiFetch('/api/settings/preferences')
+      if (res.ok) applyPreferences((await res.json()) as Partial<Preferences>)
     } catch {}
   }
 
-  async function setDueTodayModalEnabled(enabled: boolean) {
-    const previous = dueTodayModalEnabled.value
-    dueTodayModalEnabled.value = enabled
+  /** Optimistically update one preference, persisting the partial. Reverts the
+   *  local ref on failure. */
+  async function setPreference<K extends keyof Preferences>(key: K, value: boolean) {
+    const refs = {
+      dueTodayModal: dueTodayModalEnabled,
+      dueTodayIncludeOverdue: dueTodayIncludeOverdue,
+      confirmBeforeDelete: confirmBeforeDelete,
+    } as const
+    const target = refs[key]
+    const previous = target.value
+    target.value = value
     try {
-      const res = await apiFetch('/api/settings/due-today-modal', {
+      const res = await apiFetch('/api/settings/preferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
+        body: JSON.stringify({ [key]: value }),
       })
       if (!res.ok) throw new Error('Save failed')
     } catch (e) {
-      dueTodayModalEnabled.value = previous
+      target.value = previous
       throw e
     }
   }
@@ -219,12 +238,14 @@ export const useSettingsStore = defineStore('settings', () => {
     hasSeenWelcome,
     replayingWelcome,
     dueTodayModalEnabled,
+    dueTodayIncludeOverdue,
+    confirmBeforeDelete,
     completedWindow,
     calendarView,
     loadFromCache,
     loadFromServer,
-    loadDueTodayPref,
-    setDueTodayModalEnabled,
+    loadPreferences,
+    setPreference,
     setTheme,
     setCompletedWindow,
     setCalendarView,

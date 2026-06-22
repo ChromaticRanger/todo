@@ -13,13 +13,28 @@ const sorted = computed(() =>
   [...props.items].sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
 )
 
+// Start of today (local), to tell carried-over overdue items apart from today's.
+const startOfToday = (() => {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  return Math.floor(d.getTime() / 1000)
+})()
+
+function isOverdue(t: Todo): boolean {
+  return t.type !== 'event' && t.due_date != null && t.due_date < startOfToday
+}
+
+const hasOverdue = computed(() => sorted.value.some(isOverdue))
+
 // Honor the stored due time — show whatever's on the row, no midnight heuristic.
-function formatDue(epoch: number | null): string {
-  if (epoch == null) return ''
-  return new Date(epoch * 1000).toLocaleTimeString(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  })
+// Items due today show the time; carried-over overdue items show their date.
+function formatDue(t: Todo): string {
+  if (t.due_date == null) return ''
+  const d = new Date(t.due_date * 1000)
+  if (isOverdue(t)) {
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+  }
+  return d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
 
 // Events live in the sentinel '__events__' list — don't surface that name.
@@ -46,7 +61,7 @@ function listLabel(t: Todo): string | null {
           <h3 class="text-base font-semibold text-text">Due today</h3>
           <p class="text-sm text-muted">
             {{ sorted.length
-              ? `You have ${sorted.length} ${sorted.length === 1 ? 'item' : 'items'} due today.`
+              ? `${sorted.length} ${sorted.length === 1 ? 'item' : 'items'} ${hasOverdue ? 'need your attention.' : 'due today.'}`
               : 'Nothing on your plate.' }}
           </p>
         </div>
@@ -76,11 +91,18 @@ function listLabel(t: Todo): string | null {
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-text">{{ item.title }}</p>
               <p class="truncate text-xs text-muted">
+                <span
+                  v-if="isOverdue(item)"
+                  class="mr-1.5 rounded px-1 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-danger/15 text-danger"
+                >Overdue</span>
                 <span v-if="item.type === 'event'">Event</span>
                 <span v-else-if="listLabel(item)">{{ listLabel(item) }}</span>
               </p>
             </div>
-            <span class="shrink-0 text-xs tabular-nums text-muted">{{ formatDue(item.due_date) }}</span>
+            <span
+              class="shrink-0 text-xs tabular-nums"
+              :class="isOverdue(item) ? 'text-danger' : 'text-muted'"
+            >{{ formatDue(item) }}</span>
           </li>
         </ul>
       </div>

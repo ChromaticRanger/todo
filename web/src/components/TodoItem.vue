@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { Todo } from '../types/todo'
 import { Status } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { priorityBorderClass as borderClassFor } from '../lib/priorityClass'
 import { renderMarkdown } from '../lib/markdown'
 import TodoForm from './TodoForm.vue'
@@ -23,6 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const store = useTodoStore()
+const settingsStore = useSettingsStore()
 
 const rootEl = ref<HTMLElement | null>(null)
 const flashing = ref(false)
@@ -138,6 +140,12 @@ async function handleMove(payload: { targetList: string; targetCategory: string 
   showMove.value = false
 }
 
+// Honor the "confirm before deleting" preference: when off, delete in one click.
+function requestDelete() {
+  if (settingsStore.confirmBeforeDelete) showConfirm.value = true
+  else void handleDelete()
+}
+
 async function handleDelete() {
   showConfirm.value = false
   isDeleting.value = true
@@ -209,7 +217,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
       <button
         class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
         title="Delete"
-        @click="showConfirm = true"
+        @click="requestDelete()"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -282,7 +290,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
       <button
         class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
         title="Delete"
-        @click="showConfirm = true"
+        @click="requestDelete()"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -402,7 +410,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
       <button
         class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
         title="Delete"
-        @click="showConfirm = true"
+        @click="requestDelete()"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

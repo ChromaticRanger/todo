@@ -27,6 +27,7 @@ import ChoosePlan from './components/ChoosePlan.vue'
 import ConnectExtension from './components/ConnectExtension.vue'
 import ResetPassword from './components/ResetPassword.vue'
 import AccountPage from './components/AccountPage.vue'
+import SettingsPage from './components/SettingsPage.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
 import DueTodayModal from './components/DueTodayModal.vue'
@@ -58,6 +59,9 @@ const isAccountFlow = ref(
 )
 const isAdminFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/admin'
+)
+const isSettingsFlow = ref(
+  typeof window !== 'undefined' && window.location.pathname === '/settings'
 )
 // Password-reset landing page. Opened from the emailed link (user is signed
 // out), so it renders ahead of every auth-gated branch below.
@@ -286,7 +290,10 @@ async function maybeShowDueToday() {
     // sessionStorage unavailable (private mode edge cases) — show once, no guard.
   }
   try {
-    const res = await apiFetch('/api/todos/today/all')
+    const url = settingsStore.dueTodayIncludeOverdue
+      ? '/api/todos/today/all?includeOverdue=1'
+      : '/api/todos/today/all'
+    const res = await apiFetch(url)
     const data = (await res.json()) as { todos?: Todo[] }
     dueTodayItems.value = Array.isArray(data.todos) ? data.todos : []
   } catch {
@@ -304,6 +311,7 @@ onMounted(async () => {
     !isConnectFlow.value &&
     !isAccountFlow.value &&
     !isAdminFlow.value &&
+    !isSettingsFlow.value &&
     !isResetFlow.value
   ) {
     await loadData()
@@ -408,6 +416,7 @@ function onTourSkip() {
   <LoginPage v-else-if="!authStore.isAuthenticated || (authStore.isDemo && isLoginFlow)" />
   <AdminDashboard v-else-if="isAdminFlow" />
   <AccountPage v-else-if="isAccountFlow" />
+  <SettingsPage v-else-if="isSettingsFlow" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />
   <ConnectExtension v-else-if="isConnectFlow" />
   <div v-else class="h-dvh bg-bg text-text flex flex-col isolate">
