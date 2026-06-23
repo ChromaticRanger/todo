@@ -103,12 +103,15 @@ interface Preferences {
   dueTodayIncludeOverdue: boolean
   // Ask for confirmation before deleting an item.
   confirmBeforeDelete: boolean
+  // Receive the daily email digest (overdue + due today). Opt-in.
+  dailyEmailDigest: boolean
 }
 
 const DEFAULT_PREFERENCES: Preferences = {
   dueTodayModal: true,
   dueTodayIncludeOverdue: false,
   confirmBeforeDelete: true,
+  dailyEmailDigest: false,
 }
 
 const PREFERENCE_KEYS = Object.keys(DEFAULT_PREFERENCES) as (keyof Preferences)[]

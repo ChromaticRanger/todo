@@ -17,6 +17,7 @@ import extensionRouter from './routes/extension.js'
 import accountRouter from './routes/account.js'
 import adminRouter from './routes/admin.js'
 import demoRouter from './routes/demo.js'
+import cronRouter from './routes/cron.js'
 import { authMiddleware } from './middleware/auth.js'
 import { requirePlan } from './middleware/requirePlan.js'
 import { rateLimit } from './middleware/rateLimit.js'
@@ -49,6 +50,10 @@ app.get('/api/health', (_req, res) => {
 // session — a cold visitor clicking "See it in action" has no auth yet.
 // Mount BEFORE authMiddleware.
 app.use('/api/demo', demoRouter)
+
+// Scheduled-job trigger (daily digest). Authenticated by a shared secret in the
+// request, not a user session, so it mounts before authMiddleware.
+app.use('/api/cron', cronRouter)
 
 app.use('/api', authMiddleware)
 

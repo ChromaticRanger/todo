@@ -7,7 +7,7 @@ const settingsStore = useSettingsStore()
 
 const saveError = ref('')
 
-type PrefKey = 'dueTodayModal' | 'dueTodayIncludeOverdue' | 'confirmBeforeDelete'
+type PrefKey = 'dueTodayModal' | 'dueTodayIncludeOverdue' | 'confirmBeforeDelete' | 'dailyEmailDigest'
 
 async function onToggle(key: PrefKey, value: boolean) {
   saveError.value = ''
@@ -91,6 +91,20 @@ onMounted(() => {
             :disabled="!settingsStore.dueTodayModalEnabled"
             label="Include overdue items in the pop-up"
             @update:model-value="onToggle('dueTodayIncludeOverdue', $event)"
+          />
+        </div>
+
+        <div class="mt-4 flex items-center justify-between gap-4 border-t border-border/60 pt-4">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-text">Daily email digest</div>
+            <div class="text-xs text-muted mt-0.5">
+              Get a once-a-day email listing everything overdue and due today. Off by default.
+            </div>
+          </div>
+          <ToggleSwitch
+            :model-value="settingsStore.dailyEmailDigest"
+            label="Send the daily email digest"
+            @update:model-value="onToggle('dailyEmailDigest', $event)"
           />
         </div>
       </div>

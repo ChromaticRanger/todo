@@ -1,0 +1,29 @@
+name: Daily digest
+
+# Rings the bell once a day: posts to the deployed app's cron endpoint, which
+# does the actual work (querying opted-in users and sending the emails). No
+# code runs here beyond a curl — production credentials stay on the server.
+#
+# Setup: add a repository secret CRON_SECRET (Settings → Secrets and variables
+# → Actions) matching the CRON_SECRET env var on the DigitalOcean app.
+#
+# Note: GitHub may delay scheduled runs by a few minutes under load, and
+# pauses schedules after 60 days with no repo activity. The digest_log table
+# makes re-runs (scheduled, manual, or catch-up) safe — nobody is emailed twice.
+
+on:
+  schedule:
+    # 07:00 UTC daily. Change this cron to adjust the send time.
+    - cron: '0 7 * * *'
+  workflow_dispatch: {} # adds a "Run workflow" button for manual testing
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger daily digest
+        run: |
+          curl -fsS -X POST "https://stash-squirrel.com/api/cron/daily-digest" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
+            --max-time 300 \
+            -w "\nHTTP %{http_code}\n"

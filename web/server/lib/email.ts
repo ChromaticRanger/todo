@@ -229,6 +229,130 @@ export async function sendWelcomeEmailFor(
   })
 }
 
+// ── Daily digest ─────────────────────────────────────────────────────────────
+
+export interface DigestItem {
+  title: string
+  /** List name, or null for events / items outside a list. */
+  list: string | null
+  /** Due-date epoch (seconds), used to label overdue items with their date. */
+  due: number | null
+}
+
+// User content goes into the HTML body, so escape it. The other templates only
+// interpolate static strings; the digest is the first to render user input.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+// "Today" is computed on UTC day boundaries (matching the in-app Today view),
+// so overdue dates are formatted in UTC too for consistency.
+function formatOverdueDate(epoch: number | null): string {
+  if (epoch == null) return ''
+  return new Date(epoch * 1000).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+}
+
+function digestSectionHtml(heading: string, color: string, items: DigestItem[], showDate: boolean): string {
+  if (!items.length) return ''
+  const rows = items
+    .map((it) => {
+      const meta: string[] = []
+      if (it.list) meta.push(escapeHtml(it.list))
+      if (showDate && it.due != null) meta.push(`was due ${formatOverdueDate(it.due)}`)
+      const metaHtml = meta.length
+        ? `<span style="color:#888;font-size:13px;"> — ${meta.join(' · ')}</span>`
+        : ''
+      return `<li style="margin:0 0 6px;">${escapeHtml(it.title)}${metaHtml}</li>`
+    })
+    .join('')
+  return `<div style="margin:0 0 24px;">
+      <h3 style="margin:0 0 8px;font-size:15px;font-weight:600;color:${color};">${heading}</h3>
+      <ul style="margin:0;padding-left:20px;font-size:14px;line-height:1.6;color:#1a1a1a;">${rows}</ul>
+    </div>`
+}
+
+/**
+ * Daily reminder digest: everything overdue plus everything due today, grouped.
+ * Callers should skip sending when both lists are empty.
+ */
+export async function sendDigestEmailFor(
+  user: { email: string; name?: string | null },
+  groups: { overdue: DigestItem[]; today: DigestItem[] }
+) {
+  const { overdue, today } = groups
+  const appUrl = APP_URL || 'https://stash-squirrel.com'
+  const manageUrl = `${appUrl}/settings`
+  const greeting = user.name ? `Hi ${user.name},` : 'Hi there,'
+  const intro =
+    overdue.length > 0
+      ? `${greeting} here's what needs your attention today.`
+      : `${greeting} here's what's on for today.`
+
+  // Plain-text alternative.
+  const textParts = ['Your Stash Squirrel digest', intro]
+  if (overdue.length) {
+    textParts.push(
+      `Overdue (${overdue.length}):\n` +
+        overdue
+          .map((it) => {
+            const meta = [it.list, it.due != null ? `was due ${formatOverdueDate(it.due)}` : '']
+              .filter(Boolean)
+              .join(' · ')
+            return `• ${it.title}${meta ? ` — ${meta}` : ''}`
+          })
+          .join('\n')
+    )
+  }
+  if (today.length) {
+    textParts.push(
+      `Due today (${today.length}):\n` +
+        today.map((it) => `• ${it.title}${it.list ? ` — ${it.list}` : ''}`).join('\n')
+    )
+  }
+  textParts.push(`Open Stash Squirrel: ${appUrl}`)
+  textParts.push(`You're receiving this because you turned on the daily digest. Manage it: ${manageUrl}`)
+  const text = textParts.join('\n\n')
+
+  const overdueHtml = digestSectionHtml(`Overdue (${overdue.length})`, '#c92c24', overdue, true)
+  const todayHtml = digestSectionHtml(`Due today (${today.length})`, '#1a1a1a', today, false)
+
+  const html = `<!DOCTYPE html>
+<html>
+  <body style="margin:0;padding:24px;background:#f7f7f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#1a1a1a;">
+    <div style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:16px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <h1 style="margin:0 0 16px;font-size:22px;font-weight:600;background:linear-gradient(135deg,#e53b30,#c92c24,#8b2a1f);-webkit-background-clip:text;background-clip:text;color:transparent;font-style:italic;">Stash Squirrel</h1>
+      <h2 style="margin:0 0 12px;font-size:18px;font-weight:600;">Your day at a glance</h2>
+      <p style="margin:0 0 24px;font-size:14px;line-height:1.5;color:#444;">${intro}</p>
+      ${overdueHtml}
+      ${todayHtml}
+      <p style="margin:0 0 24px;">
+        <a href="${appUrl}" style="display:inline-block;background:#c92c24;color:#ffffff;text-decoration:none;padding:10px 20px;border-radius:10px;font-size:14px;font-weight:500;">Open Stash Squirrel</a>
+      </p>
+      <p style="margin:24px 0 0;font-size:12px;color:#888;">
+        You're receiving this because you turned on the daily digest.
+        <a href="${manageUrl}" style="color:#888;">Manage it in Settings</a>.
+      </p>
+    </div>
+  </body>
+</html>`
+
+  const count = overdue.length + today.length
+  await sendEmail({
+    to: user.email,
+    subject: `Stash Squirrel: ${count} ${count === 1 ? 'item needs' : 'items need'} attention`,
+    text,
+    html,
+  })
+}
+
 export async function sendPasswordResetEmailFor(user: { email: string }, url: string) {
   const link = rewriteAuthLink(url)
   const { text, html } = renderEmail({

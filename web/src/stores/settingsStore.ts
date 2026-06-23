@@ -93,6 +93,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const dueTodayModalEnabled = ref(true)
   const dueTodayIncludeOverdue = ref(false)
   const confirmBeforeDelete = ref(true)
+  const dailyEmailDigest = ref(false)
   // How far back the Completed view fetches. Local-only (no server sync) —
   // a per-device preference, like list collapse state.
   const completedWindow = ref<CompletedWindow>(DEFAULT_COMPLETED_WINDOW)
@@ -149,12 +150,14 @@ export const useSettingsStore = defineStore('settings', () => {
     dueTodayModal: boolean
     dueTodayIncludeOverdue: boolean
     confirmBeforeDelete: boolean
+    dailyEmailDigest: boolean
   }
 
   function applyPreferences(p: Partial<Preferences>) {
     if (typeof p.dueTodayModal === 'boolean') dueTodayModalEnabled.value = p.dueTodayModal
     if (typeof p.dueTodayIncludeOverdue === 'boolean') dueTodayIncludeOverdue.value = p.dueTodayIncludeOverdue
     if (typeof p.confirmBeforeDelete === 'boolean') confirmBeforeDelete.value = p.confirmBeforeDelete
+    if (typeof p.dailyEmailDigest === 'boolean') dailyEmailDigest.value = p.dailyEmailDigest
   }
 
   /** Fetch behavior preferences. Used by loadFromServer and standalone by the
@@ -173,6 +176,7 @@ export const useSettingsStore = defineStore('settings', () => {
       dueTodayModal: dueTodayModalEnabled,
       dueTodayIncludeOverdue: dueTodayIncludeOverdue,
       confirmBeforeDelete: confirmBeforeDelete,
+      dailyEmailDigest: dailyEmailDigest,
     } as const
     const target = refs[key]
     const previous = target.value
@@ -240,6 +244,7 @@ export const useSettingsStore = defineStore('settings', () => {
     dueTodayModalEnabled,
     dueTodayIncludeOverdue,
     confirmBeforeDelete,
+    dailyEmailDigest,
     completedWindow,
     calendarView,
     loadFromCache,

@@ -175,7 +175,7 @@ export function expandEventOccurrences(
 // Loads the user's recurring event series that could produce an occurrence in
 // [from, to] and returns the expanded virtual rows. Cheap: the partial index
 // `todos_event_series_idx` keeps the lookup small.
-async function fetchExpandedEventSeries(
+export async function fetchExpandedEventSeries(
   userId: string,
   from: number,
   to: number
