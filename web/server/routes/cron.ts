@@ -25,8 +25,11 @@ router.post('/daily-digest', async (req, res) => {
   if (!provided || !secretMatches(provided, expected)) {
     return res.status(401).json({ error: 'unauthorized' })
   }
+  // force=1 bypasses the per-user local-hour gate (manual testing); the per-day
+  // dedupe still applies.
+  const force = req.query.force === '1' || req.query.force === 'true'
   try {
-    const summary = await runDailyDigests()
+    const summary = await runDailyDigests({ force })
     console.log('[cron] daily digest run:', summary)
     res.json({ ok: true, ...summary })
   } catch (err) {

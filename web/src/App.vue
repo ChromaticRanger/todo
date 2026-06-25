@@ -302,6 +302,19 @@ async function maybeShowDueToday() {
   showDueTodayModal.value = true
 }
 
+// Auto-detect the browser's timezone and persist it whenever it differs from
+// what's stored (covers first run and the user travelling). Drives the time the
+// daily digest is delivered. Fire-and-forget — a failure just leaves the old
+// value, and we'll try again next load.
+function syncTimezone() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    if (tz && tz !== settingsStore.timezone) void settingsStore.setTimezone(tz)
+  } catch {
+    // Intl unavailable — leave the stored value (UTC fallback) alone.
+  }
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   apiEvents.addEventListener('rate-limited', handleRateLimit)
@@ -318,6 +331,7 @@ onMounted(async () => {
     await settingsStore.loadFromServer()
     await listPrefsStore.loadFromServer()
     await categoryPrefsStore.loadFromServer()
+    syncTimezone()
     void maybeShowDueToday()
   }
 })
@@ -346,6 +360,7 @@ watch(
       await settingsStore.loadFromServer()
       await listPrefsStore.loadFromServer()
       await categoryPrefsStore.loadFromServer()
+      syncTimezone()
       void maybeShowDueToday()
     } else {
       // Logged out (or switching users) — clear the reminder guard so the next
