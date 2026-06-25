@@ -14,6 +14,7 @@ import {
 import { useCategoryPrefsStore } from './stores/categoryPrefsStore'
 import type { ViewType, ItemType, Todo } from './types/todo'
 import { apiEvents, apiFetch } from './lib/api'
+import { eventEnd } from './lib/eventTime'
 import AppHeader from './components/AppHeader.vue'
 import ListTabs from './components/ListTabs.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
@@ -295,7 +296,12 @@ async function maybeShowDueToday() {
       : '/api/todos/today/all'
     const res = await apiFetch(url)
     const data = (await res.json()) as { todos?: Todo[] }
-    dueTodayItems.value = Array.isArray(data.todos) ? data.todos : []
+    const items = Array.isArray(data.todos) ? data.todos : []
+    // Drop events that have already finished today — a 7am class is no longer
+    // "still to happen" by the evening. Todos stay regardless of time (a todo
+    // due today is still actionable); in-progress and upcoming events remain.
+    const nowSec = Math.floor(Date.now() / 1000)
+    dueTodayItems.value = items.filter((t) => t.type !== 'event' || eventEnd(t) > nowSec)
   } catch {
     dueTodayItems.value = []
   }
