@@ -1,21 +1,30 @@
 name: Daily digest
 
-# Rings the bell once a day: posts to the deployed app's cron endpoint, which
-# does the actual work (querying opted-in users and sending the emails). No
-# code runs here beyond a curl — production credentials stay on the server.
+# Rings the bell every hour: posts to the deployed app's cron endpoint, which
+# does the actual work. The job sends only to opted-in users for whom it's
+# currently ~7am in THEIR timezone — that's why this runs hourly rather than
+# once a day. No code runs here beyond a curl; production credentials stay on
+# the server.
 #
 # Setup: add a repository secret CRON_SECRET (Settings → Secrets and variables
 # → Actions) matching the CRON_SECRET env var on the DigitalOcean app.
 #
 # Note: GitHub may delay scheduled runs by a few minutes under load, and
 # pauses schedules after 60 days with no repo activity. The digest_log table
-# makes re-runs (scheduled, manual, or catch-up) safe — nobody is emailed twice.
+# makes re-runs (scheduled, manual, or catch-up) safe — nobody is emailed twice
+# per local day.
 
 on:
   schedule:
-    # 07:00 UTC daily. Change this cron to adjust the send time.
-    - cron: '0 7 * * *'
-  workflow_dispatch: {} # adds a "Run workflow" button for manual testing
+    # Hourly, on the hour (UTC). Each run sends to users whose local time is
+    # the send hour (07:00 by default; set DIGEST_SEND_HOUR on the server).
+    - cron: '0 * * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Send to all opted-in users regardless of their local hour (for testing)'
+        type: boolean
+        default: false
 
 jobs:
   trigger:
@@ -23,7 +32,11 @@ jobs:
     steps:
       - name: Trigger daily digest
         run: |
-          curl -fsS -X POST "https://stash-squirrel.com/api/cron/daily-digest" \
+          URL="https://stash-squirrel.com/api/cron/daily-digest"
+          if [ "${{ inputs.force }}" = "true" ]; then
+            URL="$URL?force=1"
+          fi
+          curl -fsS -X POST "$URL" \
             -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}" \
             --max-time 300 \
             -w "\nHTTP %{http_code}\n"

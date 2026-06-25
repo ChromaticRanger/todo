@@ -107,6 +107,10 @@ onMounted(() => {
             @update:model-value="onToggle('dailyEmailDigest', $event)"
           />
         </div>
+
+        <p v-if="settingsStore.dailyEmailDigest" class="mt-3 text-xs text-muted">
+          Delivered around 7am in your timezone ({{ settingsStore.timezone }}).
+        </p>
       </div>
 
       <!-- Behavior -->

@@ -105,16 +105,34 @@ interface Preferences {
   confirmBeforeDelete: boolean
   // Receive the daily email digest (overdue + due today). Opt-in.
   dailyEmailDigest: boolean
+  // IANA timezone (e.g. 'Europe/London'), auto-detected by the browser. Used to
+  // deliver the digest at ~7am the user's local time. Defaults to UTC.
+  timezone: string
 }
+
+const BOOLEAN_KEYS = [
+  'dueTodayModal',
+  'dueTodayIncludeOverdue',
+  'confirmBeforeDelete',
+  'dailyEmailDigest',
+] as const
 
 const DEFAULT_PREFERENCES: Preferences = {
   dueTodayModal: true,
   dueTodayIncludeOverdue: false,
   confirmBeforeDelete: true,
   dailyEmailDigest: false,
+  timezone: 'UTC',
 }
 
-const PREFERENCE_KEYS = Object.keys(DEFAULT_PREFERENCES) as (keyof Preferences)[]
+function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: tz })
+    return true
+  } catch {
+    return false
+  }
+}
 
 async function readPreferences(userId: string): Promise<Preferences> {
   const result = await query<{ value: Partial<Preferences> }>(
@@ -123,9 +141,10 @@ async function readPreferences(userId: string): Promise<Preferences> {
   )
   const stored = result.rows[0]?.value ?? {}
   const merged = { ...DEFAULT_PREFERENCES }
-  for (const k of PREFERENCE_KEYS) {
+  for (const k of BOOLEAN_KEYS) {
     if (typeof stored[k] === 'boolean') merged[k] = stored[k] as boolean
   }
+  if (typeof stored.timezone === 'string' && stored.timezone) merged.timezone = stored.timezone
   return merged
 }
 
@@ -145,13 +164,20 @@ router.put('/preferences', async (req, res) => {
   const userId = req.userId!
   const body = (req.body ?? {}) as Record<string, unknown>
   const updates: Partial<Preferences> = {}
-  for (const k of PREFERENCE_KEYS) {
+  for (const k of BOOLEAN_KEYS) {
     if (k in body) {
       if (typeof body[k] !== 'boolean') {
         return res.status(400).json({ error: `${k} must be a boolean` })
       }
       updates[k] = body[k] as boolean
     }
+  }
+  if ('timezone' in body) {
+    const tz = body.timezone
+    if (typeof tz !== 'string' || tz.length > 64 || !isValidTimeZone(tz)) {
+      return res.status(400).json({ error: 'timezone must be a valid IANA timezone' })
+    }
+    updates.timezone = tz
   }
   try {
     const current = await readPreferences(userId)

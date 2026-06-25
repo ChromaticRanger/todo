@@ -7,8 +7,11 @@
  * console when RESEND_API_KEY is unset) and as a manual fallback.
  *
  * Usage: `npm run digest:send` (local) or `npm run digest:send:prod`.
+ * By default it only sends to users whose local time is the send hour (like the
+ * scheduled job). Pass FORCE=1 to send to every opted-in user regardless of
+ * their local hour — useful for an immediate manual test.
  *
- * Idempotent per UTC day via the digest_log table, so it's safe to re-run.
+ * Idempotent per local day via the digest_log table, so it's safe to re-run.
  */
 import dotenv from 'dotenv'
 if (process.env.ALLOW_REMOTE_DB !== '1') {
@@ -46,8 +49,9 @@ async function main() {
   // Import after env is set up so db.ts reads the right DATABASE_URL.
   const { runDailyDigests } = await import('../lib/digest.js')
   const { pool } = await import('../db.js')
+  const force = process.env.FORCE === '1' || process.argv.includes('--force')
   try {
-    const summary = await runDailyDigests()
+    const summary = await runDailyDigests({ force })
     console.log('✓ Digest run complete:', summary)
   } finally {
     await pool.end()

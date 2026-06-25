@@ -94,6 +94,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const dueTodayIncludeOverdue = ref(false)
   const confirmBeforeDelete = ref(true)
   const dailyEmailDigest = ref(false)
+  // IANA timezone, auto-detected from the browser. Drives digest delivery time.
+  const timezone = ref('UTC')
   // How far back the Completed view fetches. Local-only (no server sync) —
   // a per-device preference, like list collapse state.
   const completedWindow = ref<CompletedWindow>(DEFAULT_COMPLETED_WINDOW)
@@ -151,6 +153,7 @@ export const useSettingsStore = defineStore('settings', () => {
     dueTodayIncludeOverdue: boolean
     confirmBeforeDelete: boolean
     dailyEmailDigest: boolean
+    timezone: string
   }
 
   function applyPreferences(p: Partial<Preferences>) {
@@ -158,6 +161,24 @@ export const useSettingsStore = defineStore('settings', () => {
     if (typeof p.dueTodayIncludeOverdue === 'boolean') dueTodayIncludeOverdue.value = p.dueTodayIncludeOverdue
     if (typeof p.confirmBeforeDelete === 'boolean') confirmBeforeDelete.value = p.confirmBeforeDelete
     if (typeof p.dailyEmailDigest === 'boolean') dailyEmailDigest.value = p.dailyEmailDigest
+    if (typeof p.timezone === 'string' && p.timezone) timezone.value = p.timezone
+  }
+
+  /** Persist the browser-detected timezone. Fire-and-forget; reverts on failure. */
+  async function setTimezone(tz: string) {
+    const previous = timezone.value
+    timezone.value = tz
+    try {
+      const res = await apiFetch('/api/settings/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ timezone: tz }),
+      })
+      if (!res.ok) throw new Error('Save failed')
+    } catch (e) {
+      timezone.value = previous
+      throw e
+    }
   }
 
   /** Fetch behavior preferences. Used by loadFromServer and standalone by the
@@ -171,7 +192,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
   /** Optimistically update one preference, persisting the partial. Reverts the
    *  local ref on failure. */
-  async function setPreference<K extends keyof Preferences>(key: K, value: boolean) {
+  // Only the boolean preferences go through here; `timezone` has its own setter.
+  type BooleanPrefKey = Exclude<keyof Preferences, 'timezone'>
+  async function setPreference(key: BooleanPrefKey, value: boolean) {
     const refs = {
       dueTodayModal: dueTodayModalEnabled,
       dueTodayIncludeOverdue: dueTodayIncludeOverdue,
@@ -245,12 +268,14 @@ export const useSettingsStore = defineStore('settings', () => {
     dueTodayIncludeOverdue,
     confirmBeforeDelete,
     dailyEmailDigest,
+    timezone,
     completedWindow,
     calendarView,
     loadFromCache,
     loadFromServer,
     loadPreferences,
     setPreference,
+    setTimezone,
     setTheme,
     setCompletedWindow,
     setCalendarView,
