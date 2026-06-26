@@ -14,6 +14,17 @@ const SEND_HOUR = (() => {
   return Number.isInteger(h) && h >= 0 && h <= 23 ? h : 7
 })()
 
+// Catch-up window (hours). The workflow runs hourly and GitHub frequently
+// delays or drops the top-of-hour run, so we accept any run from SEND_HOUR up to
+// SEND_HOUR + this many hours. The per-local-day digest_log dedupe still means
+// exactly one email per day — the first run that lands in the window sends it,
+// so a missed 7am run is caught by the 8/9/10/11am runs rather than skipping the
+// whole day. Override with DIGEST_SEND_WINDOW_HOURS.
+const SEND_WINDOW_HOURS = (() => {
+  const w = Number(process.env.DIGEST_SEND_WINDOW_HOURS)
+  return Number.isInteger(w) && w >= 1 && w <= 12 ? w : 5
+})()
+
 // ── Timezone helpers (no dependencies — Node 22 ships full ICU) ──────────────
 
 function isValidTz(tz: string): boolean {
@@ -186,8 +197,10 @@ export async function runDailyDigests(opts: { force?: boolean } = {}): Promise<D
   for (const user of users) {
     const zoned = zonedNow(user.timezone, nowMs)
 
-    // Only deliver during the user's local send hour (unless forced).
-    if (!force && zoned.hour !== SEND_HOUR) {
+    // Deliver during the user's local send window (unless forced). The per-day
+    // dedupe below means only the first run in the window actually sends.
+    const inWindow = zoned.hour >= SEND_HOUR && zoned.hour < SEND_HOUR + SEND_WINDOW_HOURS
+    if (!force && !inWindow) {
       summary.skippedHour++
       continue
     }
@@ -216,7 +229,14 @@ export async function runDailyDigests(opts: { force?: boolean } = {}): Promise<D
         summary.skippedEmpty++
         continue
       }
-      await sendDigestEmailFor(user, groups)
+      const ok = await sendDigestEmailFor(user, groups)
+      if (!ok) {
+        // Resend rejected it — release the slot so the next run retries instead
+        // of recording a phantom "sent".
+        await query('DELETE FROM digest_log WHERE user_id = $1 AND sent_on = $2', [user.id, sentOn])
+        summary.failed++
+        continue
+      }
       summary.sent++
     } catch (err) {
       console.error('[digest] failed for', user.id, err)

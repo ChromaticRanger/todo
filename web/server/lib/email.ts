@@ -55,18 +55,29 @@ export interface EmailArgs {
   from?: string
 }
 
-export async function sendEmail({ to, subject, text, html, from }: EmailArgs): Promise<void> {
+// Returns true when the message was sent (or logged via the dev console
+// fallback), false when Resend rejected/threw. Callers that care about delivery
+// — e.g. the digest job's idempotency — can branch on this; the transactional
+// callers ignore it as before.
+export async function sendEmail({ to, subject, text, html, from }: EmailArgs): Promise<boolean> {
   if (!resend || !EMAIL_FROM) {
     console.log(`[email] (console fallback — Resend not configured)`)
     console.log(`[email] from=${from ?? EMAIL_FROM ?? '(unset)'}`)
     console.log(`[email] to=${to}`)
     console.log(`[email] subject=${subject}`)
     console.log(`[email] ${text}`)
-    return
+    return true
   }
-  const { error } = await resend.emails.send({ from: from ?? EMAIL_FROM, to, subject, text, html })
-  if (error) {
-    console.error('[email] Resend send failed:', error)
+  try {
+    const { error } = await resend.emails.send({ from: from ?? EMAIL_FROM, to, subject, text, html })
+    if (error) {
+      console.error('[email] Resend send failed:', error)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('[email] Resend send threw:', err)
+    return false
   }
 }
 
@@ -286,7 +297,7 @@ function digestSectionHtml(heading: string, color: string, items: DigestItem[], 
 export async function sendDigestEmailFor(
   user: { email: string; name?: string | null },
   groups: { overdue: DigestItem[]; today: DigestItem[] }
-) {
+): Promise<boolean> {
   const { overdue, today } = groups
   const appUrl = APP_URL || 'https://stash-squirrel.com'
   const manageUrl = `${appUrl}/settings`
@@ -345,7 +356,7 @@ export async function sendDigestEmailFor(
 </html>`
 
   const count = overdue.length + today.length
-  await sendEmail({
+  return await sendEmail({
     to: user.email,
     subject: `Stash Squirrel: ${count} ${count === 1 ? 'item needs' : 'items need'} attention`,
     text,
