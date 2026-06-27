@@ -5,6 +5,7 @@ const props = defineProps<{
   formatted: string
   remainingSeconds: number
   onSignUp: () => void
+  onExit: () => void
 }>()
 
 // In the final ten seconds, switch to a louder warning style so visitors
@@ -22,7 +23,7 @@ const urgent = computed(() => props.remainingSeconds <= 10)
     aria-live="polite"
   >
     <span class="font-semibold">Demo session</span>
-    <span class="opacity-80">explore freely — this account is temporary</span>
+    <span class="opacity-80">explore freely — sign up to save what you create here</span>
     <span class="opacity-60" aria-hidden="true">·</span>
     <span class="tabular-nums">Ends in {{ formatted }}</span>
     <button
@@ -31,6 +32,14 @@ const urgent = computed(() => props.remainingSeconds <= 10)
       @click="onSignUp"
     >
       Sign up
+    </button>
+    <span class="opacity-60" aria-hidden="true">·</span>
+    <button
+      type="button"
+      class="underline underline-offset-2 hover:no-underline font-medium opacity-80"
+      @click="onExit"
+    >
+      Exit demo
     </button>
   </div>
 </template>

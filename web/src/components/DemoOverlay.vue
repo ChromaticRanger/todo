@@ -25,6 +25,18 @@ function goSignUp() {
   clearDemoTimer()
   window.location.assign('/login?mode=signup')
 }
+
+async function goExit() {
+  // Let the visitor bail out before the timer expires. Sign the demo out so
+  // the next page is unauthenticated, then drop them back on the landing page.
+  try {
+    await fetch('/api/demo/end', { method: 'POST', credentials: 'include' })
+  } catch {
+    // best-effort — visitor is leaving anyway
+  }
+  clearDemoTimer()
+  window.location.assign('/')
+}
 </script>
 
 <template>
@@ -32,6 +44,7 @@ function goSignUp() {
     :formatted="formatted"
     :remaining-seconds="remainingSeconds"
     :on-sign-up="goSignUp"
+    :on-exit="goExit"
   />
   <DemoExpiredModal v-if="showExpiredModal" />
 </template>
