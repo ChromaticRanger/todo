@@ -240,13 +240,13 @@ const weekDayBlocks = computed(() => {
     const dayEnd = dayStart + 86400
     const blocks: HourBlock[] = []
     for (const t of todos.value) {
-      if (t.type !== 'event' || t.due_date == null) continue
+      if (t.due_date == null) continue
       const dur = t.duration_seconds ?? 0
       const evStart = t.due_date
       const evEnd = t.due_date + dur
-      // Skip events that don't touch this day.
+      // Skip items that don't touch this day.
       if (evEnd <= dayStart || evStart >= dayEnd) continue
-      // Treat point-in-time events as a 30-min block so they're visible.
+      // Treat point-in-time items (todos / zero-duration events) as a 30-min block so they're visible.
       const visibleStart = Math.max(evStart, dayStart)
       const visibleEndRaw = dur > 0 ? Math.min(evEnd, dayEnd) : Math.min(evStart + 1800, dayEnd)
       const visibleEnd = Math.max(visibleEndRaw, visibleStart + 900) // min 15 min visual
