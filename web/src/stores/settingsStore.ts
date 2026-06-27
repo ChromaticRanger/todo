@@ -6,6 +6,10 @@ export type ThemeName = 'midnight' | 'slate' | 'forest' | 'sunset' | 'rose' | 'm
 export type ThemeMode = 'light' | 'dark'
 export type CompletedWindow = '7d' | '30d' | '90d' | '1y' | 'all'
 export type CalendarView = 'month' | 'week'
+// Which lists a time-windowed filter (Today/Week/Month/Overdue) draws from:
+// just the active list, or every list the user owns.
+export type ListScope = 'list' | 'all'
+export type WindowedView = 'today' | 'week' | 'month' | 'overdue'
 
 interface UiSettings {
   theme: ThemeName
@@ -15,6 +19,7 @@ interface UiSettings {
 const STORAGE_KEY = 'theme_settings'
 const COMPLETED_WINDOW_KEY = 'completed_window'
 const CALENDAR_VIEW_KEY = 'calendar_view'
+const FILTER_SCOPE_KEY = 'filter_scope'
 const DEFAULT: UiSettings = { theme: 'midnight', mode: 'light' }
 const DEFAULT_COMPLETED_WINDOW: CompletedWindow = '30d'
 const DEFAULT_CALENDAR_VIEW: CalendarView = 'month'
@@ -23,6 +28,33 @@ const VALID_THEMES: ThemeName[] = ['midnight', 'slate', 'forest', 'sunset', 'ros
 const VALID_MODES: ThemeMode[] = ['light', 'dark']
 const VALID_COMPLETED_WINDOWS: CompletedWindow[] = ['7d', '30d', '90d', '1y', 'all']
 const VALID_CALENDAR_VIEWS: CalendarView[] = ['month', 'week']
+
+const WINDOWED_VIEWS: WindowedView[] = ['today', 'week', 'month', 'overdue']
+// Default to list-only so behavior matches the pre-toggle app until the user
+// opts a filter into All Lists.
+const DEFAULT_FILTER_SCOPE: Record<WindowedView, ListScope> = {
+  today: 'list', week: 'list', month: 'list', overdue: 'list',
+}
+
+function readFilterScope(): Record<WindowedView, ListScope> {
+  const result = { ...DEFAULT_FILTER_SCOPE }
+  try {
+    const raw = localStorage.getItem(FILTER_SCOPE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<Record<WindowedView, ListScope>>
+      for (const v of WINDOWED_VIEWS) {
+        if (parsed[v] === 'list' || parsed[v] === 'all') result[v] = parsed[v]!
+      }
+    }
+  } catch {}
+  return result
+}
+
+function writeFilterScope(scope: Record<WindowedView, ListScope>) {
+  try {
+    localStorage.setItem(FILTER_SCOPE_KEY, JSON.stringify(scope))
+  } catch {}
+}
 
 function readCompletedWindow(): CompletedWindow {
   try {
@@ -101,6 +133,9 @@ export const useSettingsStore = defineStore('settings', () => {
   const completedWindow = ref<CompletedWindow>(DEFAULT_COMPLETED_WINDOW)
   // Month vs Week layout for the schedule calendar. Local-only.
   const calendarView = ref<CalendarView>(DEFAULT_CALENDAR_VIEW)
+  // Per-filter "This List" vs "All Lists" scope for the time-windowed views.
+  // Independent per view, persisted per-device (local-only, like completedWindow).
+  const filterScope = ref<Record<WindowedView, ListScope>>({ ...DEFAULT_FILTER_SCOPE })
 
   /** Call synchronously before app.mount() to prevent flash. */
   function loadFromCache() {
@@ -110,11 +145,17 @@ export const useSettingsStore = defineStore('settings', () => {
     applyToDom(cached)
     completedWindow.value = readCompletedWindow()
     calendarView.value = readCalendarView()
+    filterScope.value = readFilterScope()
   }
 
   function setCompletedWindow(w: CompletedWindow) {
     completedWindow.value = w
     writeCompletedWindow(w)
+  }
+
+  function setFilterScope(view: WindowedView, scope: ListScope) {
+    filterScope.value = { ...filterScope.value, [view]: scope }
+    writeFilterScope(filterScope.value)
   }
 
   function setCalendarView(v: CalendarView) {
@@ -271,6 +312,7 @@ export const useSettingsStore = defineStore('settings', () => {
     timezone,
     completedWindow,
     calendarView,
+    filterScope,
     loadFromCache,
     loadFromServer,
     loadPreferences,
@@ -279,6 +321,7 @@ export const useSettingsStore = defineStore('settings', () => {
     setTheme,
     setCompletedWindow,
     setCalendarView,
+    setFilterScope,
     completeWelcome,
     replayWelcome,
     dismissReplay,

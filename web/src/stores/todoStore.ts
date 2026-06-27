@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import type { Todo, TodoFormData, ViewType } from '../types/todo'
 import { apiFetch } from '../lib/api'
 import { useCategoryPrefsStore } from './categoryPrefsStore'
-import { useSettingsStore, type CompletedWindow } from './settingsStore'
+import { useSettingsStore, type CompletedWindow, type ListScope, type WindowedView } from './settingsStore'
 
 export const useTodoStore = defineStore('todos', () => {
   const categoryPrefsStore = useCategoryPrefsStore()
@@ -167,11 +167,7 @@ export const useTodoStore = defineStore('todos', () => {
     const listPrefs = categoryPrefsStore.prefs[currentList.value] ?? {}
     for (const k of [...ordered, ...remaining]) {
       const items = map.get(k)!
-      const order = listPrefs[k]?.itemOrder
-      if (!order || order.length === 0) {
-        sorted.set(k, items)
-        continue
-      }
+      const order = listPrefs[k]?.itemOrder ?? []
       const indexOf = new Map<number, number>()
       for (let i = 0; i < order.length; i++) indexOf.set(order[i], i)
       const known: Todo[] = []
@@ -181,7 +177,19 @@ export const useTodoStore = defineStore('todos', () => {
         else unknown.push(t)
       }
       known.sort((a, b) => indexOf.get(a.id)! - indexOf.get(b.id)!)
-      sorted.set(k, [...known, ...unknown])
+      // Slot items not yet in the saved order by priority rather than dumping
+      // them at the end: a High item floats to the top of the category, a Low
+      // sinks to the bottom, and a Medium settles between the two. Equal-priority
+      // items queue after their peers (stable insert). With no saved order this
+      // reproduces the server's priority-sorted order while still placing a
+      // freshly-added item at its correct spot instead of last.
+      const result = known
+      for (const t of unknown) {
+        let idx = result.findIndex((r) => r.priority < t.priority)
+        if (idx === -1) idx = result.length
+        result.splice(idx, 0, t)
+      }
+      sorted.set(k, result)
     }
     return sorted
   })
@@ -221,7 +229,30 @@ export const useTodoStore = defineStore('todos', () => {
 
   function buildUrl(list: string, view: ViewType): string {
     const base = view === 'all' ? '/api/todos' : `/api/todos/${view}`
-    return `${base}?list=${encodeURIComponent(list)}`
+    let url = `${base}?list=${encodeURIComponent(list)}`
+    // Windowed views can opt into a cross-list scope; the server widens the
+    // todo filter to every list when all=1 is present.
+    if (
+      TIME_WINDOWED_VIEWS.includes(view) &&
+      settingsStore.filterScope[view as WindowedView] === 'all'
+    ) {
+      url += '&all=1'
+    }
+    return url
+  }
+
+  // Flip a windowed view between This List / All Lists. Scope is global per
+  // view (it applies whatever list is active), so the cached entry for this
+  // view is dropped on every list, then the active view refetches.
+  function setListScope(view: ViewType, scope: ListScope) {
+    if (!TIME_WINDOWED_VIEWS.includes(view)) return
+    const wv = view as WindowedView
+    if (settingsStore.filterScope[wv] === scope) return
+    settingsStore.setFilterScope(wv, scope)
+    for (const listCache of todosCache.values()) listCache.delete(view)
+    if (currentView.value === view) {
+      void fetchTodos(currentList.value, view)
+    }
   }
 
   async function fetchViewCounts(list: string) {
@@ -461,6 +492,8 @@ export const useTodoStore = defineStore('todos', () => {
       throw e
     }
     invalidateOtherViews(list)
+    // The snoozed row may belong to another list (All Lists windowed view).
+    if (removed && removed.list_name !== list) invalidateList(removed.list_name)
     fetchViewCounts(list)
   }
 
@@ -473,6 +506,7 @@ export const useTodoStore = defineStore('todos', () => {
     if (!res.ok) throw new Error(await res.text())
 
     const item = todos.value.find((t) => t.id === id)
+    const prevPriority = item?.priority
     if (item) {
       if (form.title !== undefined) item.title = form.title
       if (form.description !== undefined) item.description = form.description
@@ -481,8 +515,25 @@ export const useTodoStore = defineStore('todos', () => {
       if ('due_date' in form) item.due_date = form.due_date ?? null
       if ('url' in form) item.url = form.url ?? null
     }
+    // A changed priority should re-slot the item like a freshly-added one. In a
+    // category with no saved manual order byCategory already re-slots reactively;
+    // when a manual order pins the item, drop it from that order so byCategory
+    // treats it as unplaced and re-inserts it at its new priority position.
+    if (item && form.priority !== undefined && form.priority !== prevPriority) {
+      const order = categoryPrefsStore.prefs[currentList.value]?.[item.category]?.itemOrder
+      if (order?.includes(id)) {
+        void categoryPrefsStore.setItemOrder(
+          currentList.value,
+          item.category,
+          order.filter((x) => x !== id),
+        )
+      }
+    }
     if (form.category) registerCategory(currentList.value, form.category || 'General')
     invalidateOtherViews(currentList.value)
+    // The edited row may belong to another list (All Lists windowed view); drop
+    // that list's cache so its views pick up the change on next visit.
+    if (item && item.list_name !== currentList.value) invalidateList(item.list_name)
 
     // Time-windowed views (today/week/month/overdue) filter by due_date,
     // so a changed due_date may push the item in or out of view. Refetch silently.
@@ -503,6 +554,9 @@ export const useTodoStore = defineStore('todos', () => {
     const removed = todos.value.find((t) => t.id === id)
     todos.value = todos.value.filter((t) => t.id !== id)
     invalidateList(currentList.value)
+    // In an All Lists windowed view the deleted row may belong to another list;
+    // drop that list's cache too so it doesn't resurrect on next visit.
+    if (removed && removed.list_name !== currentList.value) invalidateList(removed.list_name)
     // Keep the Completed dropdown count in sync when deleting from there.
     // invalidateList wiped the cached entries, so we only need the ref.
     if (currentView.value === 'completed' && removed?.status === 1) {
@@ -517,12 +571,15 @@ export const useTodoStore = defineStore('todos', () => {
     const index = todos.value.findIndex((t) => t.id === id)
     const removed = index >= 0 ? todos.value[index] : null
     const isRepeating = !!removed && (removed.repeat_days > 0 || removed.repeat_months > 0)
+    // The All Lists windowed views surface todos from other lists, so target the
+    // item's own list — the complete route filters on list_name.
+    const itemList = removed?.list_name ?? list
 
     // Optimistic: remove from current view (all non-'completed' views filter status=0).
     if (index >= 0 && view !== 'completed') todos.value.splice(index, 1)
 
     try {
-      const res = await apiFetch(`/api/todos/${id}/complete?list=${encodeURIComponent(list)}`, {
+      const res = await apiFetch(`/api/todos/${id}/complete?list=${encodeURIComponent(itemList)}`, {
         method: 'POST',
       })
       if (!res.ok) throw new Error(await res.text())
@@ -531,6 +588,7 @@ export const useTodoStore = defineStore('todos', () => {
       throw e
     }
     invalidateOtherViews(list)
+    if (itemList !== list) invalidateList(itemList)
     // Repeating todos may spawn a new row on the server — pull it in without a flash.
     if (isRepeating && view !== 'completed') {
       todosCache.get(list)?.delete(view)
@@ -544,12 +602,15 @@ export const useTodoStore = defineStore('todos', () => {
     const view = currentView.value
     const index = todos.value.findIndex((t) => t.id === id)
     const removed = index >= 0 ? todos.value[index] : null
+    // Target the item's own list — uncomplete filters on list_name and the row
+    // may belong to another list when surfaced in an All Lists windowed view.
+    const itemList = removed?.list_name ?? list
 
     // Optimistic: only the 'completed' view filters status=1, so remove there.
     if (index >= 0 && view === 'completed') todos.value.splice(index, 1)
 
     try {
-      const res = await apiFetch(`/api/todos/${id}/uncomplete?list=${encodeURIComponent(list)}`, {
+      const res = await apiFetch(`/api/todos/${id}/uncomplete?list=${encodeURIComponent(itemList)}`, {
         method: 'POST',
       })
       if (!res.ok) throw new Error(await res.text())
@@ -558,6 +619,7 @@ export const useTodoStore = defineStore('todos', () => {
       throw e
     }
     invalidateOtherViews(list)
+    if (itemList !== list) invalidateList(itemList)
     // Keep the Completed dropdown count and active-window cache total in sync.
     if (view === 'completed') {
       completedTotal.value = Math.max(0, completedTotal.value - 1)
@@ -769,6 +831,7 @@ export const useTodoStore = defineStore('todos', () => {
     notifyEventChanged,
     fetchTodos,
     setCompletedWindow,
+    setListScope,
     addTodo,
     updateTodo,
     deleteTodo,

@@ -5,7 +5,7 @@ import type { Todo, TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { describeRecurrence } from '../lib/recurrence'
 import { useListStore } from '../stores/listStore'
-import { useSettingsStore, type CompletedWindow } from '../stores/settingsStore'
+import { useSettingsStore, type CompletedWindow, type ListScope, type WindowedView } from '../stores/settingsStore'
 import { formatEventDateTimeRange } from '../lib/eventTime'
 import { apiFetch } from '../lib/api'
 import CategoryGroup from './CategoryGroup.vue'
@@ -62,6 +62,18 @@ const draggableCategories = computed({
 })
 
 const showFlat = computed(() => store.currentView === 'completed')
+
+// The time-windowed views carry a This List / All Lists scope toggle.
+const WINDOWED_VIEWS: WindowedView[] = ['today', 'week', 'month', 'overdue']
+const isWindowedView = computed(() =>
+  (WINDOWED_VIEWS as string[]).includes(store.currentView)
+)
+const currentScope = computed<ListScope>(() =>
+  isWindowedView.value ? settingsStore.filterScope[store.currentView as WindowedView] : 'list'
+)
+function setScope(scope: ListScope) {
+  store.setListScope(store.currentView, scope)
+}
 
 const allCategories = computed(() => store.categories)
 
@@ -262,6 +274,34 @@ async function handleEventEditDelete() {
       <span v-if="!store.loading" class="text-sm text-muted">
         {{ store.completedTotal }} {{ store.completedTotal === 1 ? 'item' : 'items' }}
       </span>
+    </div>
+
+    <!-- Scope toggle (time-windowed views only): draw from just the active
+         list, or every list the user owns. Rendered above the Events block and
+         empty state so an empty This List can be switched to All Lists. -->
+    <div v-if="isWindowedView" class="flex items-center gap-2.5 mb-3">
+      <div class="inline-flex rounded-lg border border-border-strong overflow-hidden text-sm shrink-0">
+        <button
+          type="button"
+          class="px-3 py-1 transition-colors"
+          :class="currentScope === 'list'
+            ? 'bg-accent text-accent-fg font-medium'
+            : 'text-muted hover:text-text hover:bg-surface-hover'"
+          @click="setScope('list')"
+        >
+          This List
+        </button>
+        <button
+          type="button"
+          class="px-3 py-1 border-l border-border-strong transition-colors"
+          :class="currentScope === 'all'
+            ? 'bg-accent text-accent-fg font-medium'
+            : 'text-muted hover:text-text hover:bg-surface-hover'"
+          @click="setScope('all')"
+        >
+          All Lists
+        </button>
+      </div>
     </div>
 
     <EmptyState
