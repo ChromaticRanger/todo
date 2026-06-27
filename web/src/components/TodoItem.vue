@@ -4,6 +4,7 @@ import type { Todo } from '../types/todo'
 import { Status } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useListStore } from '../stores/listStore'
 import { priorityBorderClass as borderClassFor } from '../lib/priorityClass'
 import { renderMarkdown } from '../lib/markdown'
 import TodoForm from './TodoForm.vue'
@@ -25,6 +26,7 @@ const emit = defineEmits<{
 
 const store = useTodoStore()
 const settingsStore = useSettingsStore()
+const listStore = useListStore()
 
 const rootEl = ref<HTMLElement | null>(null)
 const flashing = ref(false)
@@ -114,6 +116,21 @@ const repeatStr = computed(() => {
   if (props.todo.repeat_months > 0) return `↻ ${props.todo.repeat_months}mo`
   return null
 })
+
+// In an All Lists windowed view, todos from other lists surface alongside the
+// active list's items — label them with their own list so their origin is clear.
+// Null when the item already belongs to the active list (the normal case).
+const foreignList = computed(() =>
+  props.todo.list_name && props.todo.list_name !== props.currentList
+    ? props.todo.list_name
+    : null
+)
+
+// Jump to the item's own list. Switching the active list triggers App's
+// activeList watcher, which refetches the current view for that list.
+function goToForeignList() {
+  if (foreignList.value) listStore.setActiveList(foreignList.value)
+}
 
 function openBookmark() {
   if (window.getSelection()?.toString()) return
@@ -366,6 +383,18 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
       </div>
 
       <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+        <button
+          v-if="foreignList"
+          type="button"
+          class="inline-flex items-center gap-1 text-xs text-muted bg-surface-hover hover:bg-accent/15 hover:text-accent rounded px-1.5 py-0.5 max-w-40 transition-colors cursor-pointer"
+          :title="`Go to list: ${foreignList}`"
+          @click.stop="goToForeignList"
+        >
+          <svg class="size-3 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v7a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+          </svg>
+          <span class="truncate">{{ foreignList }}</span>
+        </button>
         <span
           v-if="dueDateStr"
           class="text-xs"

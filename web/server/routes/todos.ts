@@ -57,16 +57,26 @@ export function coerceTodo(row: TodoRow) {
 // Spawn-on-completion model for recurring TODOS only. Events use virtual
 // expansion at read time (see `expandEventOccurrences` below) because they
 // never get completed — there's no natural trigger to spawn the next row.
-async function spawnRepeatingTodos(userId: string, listName: string) {
+// Spawns the next occurrence for any completed-but-not-yet-spawned repeating
+// todos. Scoped to `listName` by default; pass `undefined` to spawn across
+// every list the user owns (used by the cross-list "All Lists" windowed views,
+// so a repeating todo in any list surfaces its next occurrence).
+async function spawnRepeatingTodos(userId: string, listName?: string) {
+  const params: unknown[] = [userId]
+  let listFilter = ''
+  if (listName !== undefined) {
+    params.push(listName)
+    listFilter = 'AND list_name = $2'
+  }
   const result = await query<TodoRow>(
     `SELECT * FROM todos
      WHERE user_id = $1
-       AND list_name = $2
+       ${listFilter}
        AND status = 1
        AND spawned_next = 0
        AND type = 'todo'
        AND (repeat_days > 0 OR repeat_months > 0)`,
-    [userId, listName]
+    params
   )
 
   const now = Math.floor(Date.now() / 1000)
@@ -90,7 +100,7 @@ async function spawnRepeatingTodos(userId: string, listName: string) {
        VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0)`,
       [
         userId,
-        listName,
+        todo.list_name,
         todo.title,
         todo.description,
         todo.category,
@@ -254,36 +264,47 @@ router.get('/', async (req, res) => {
   }
 })
 
-// Events live outside any user list, but should still surface on every
-// time-windowed view (Today / Week / Month) regardless of which list is
-// active. Recurring event series are excluded here — they're expanded
-// virtually by `fetchExpandedEventSeries` and merged in by each route.
-//
-// Todos use start-in-window filtering. Events use overlap filtering so a
-// multi-day block appears in every window it touches.
-const TIME_WINDOWED_SCOPE =
-  `(list_name = $2 AND type = 'todo' AND due_date >= $3 AND due_date < $4)
-   OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
-       AND due_date < $4
-       AND (due_date + COALESCE(duration_seconds, 0)) > $3)`
-
 // Shared helper for the today/week/month routes: fetch the regular rows from
 // the time-windowed scope and merge expanded recurring-event occurrences.
+//
+// Todos use start-in-window filtering. Events use overlap filtering so a
+// multi-day block appears in every window it touches. Events always span every
+// list (they live outside any list); `allLists` controls only the todo branch —
+// when true the `list_name = $2` restriction is dropped so todos due in the
+// window surface regardless of which list they belong to.
 async function fetchWindowedScope(
   userId: string,
   list: string,
   from: number,
-  to: number
+  to: number,
+  allLists: boolean
 ) {
+  // Placeholders shift because the all-lists query drops the `list` param: the
+  // window bounds are $2/$3 when there's no list filter, $3/$4 otherwise.
+  const [scope, params] = allLists
+    ? [
+        `(type = 'todo' AND due_date >= $2 AND due_date < $3)
+         OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
+             AND due_date < $3
+             AND (due_date + COALESCE(duration_seconds, 0)) > $2)`,
+        [userId, from, to],
+      ]
+    : [
+        `(list_name = $2 AND type = 'todo' AND due_date >= $3 AND due_date < $4)
+         OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
+             AND due_date < $4
+             AND (due_date + COALESCE(duration_seconds, 0)) > $3)`,
+        [userId, list, from, to],
+      ]
   const [main, series] = await Promise.all([
     query<TodoRow>(
       buildTodoSelect(
         `WHERE user_id = $1 AND status = 0
          AND due_date IS NOT NULL
-         AND (${TIME_WINDOWED_SCOPE})
+         AND (${scope})
          ORDER BY due_date ASC`
       ),
-      [userId, list, from, to]
+      params as unknown[]
     ),
     fetchExpandedEventSeries(userId, from, to),
   ])
@@ -292,15 +313,22 @@ async function fetchWindowedScope(
   return merged
 }
 
-// GET /api/todos/today?list=X
+// Shared parse for the `?all=1` scope flag on the windowed routes.
+function wantsAllLists(req: { query: Record<string, unknown> }): boolean {
+  return req.query.all === '1' || req.query.all === 'true'
+}
+
+// GET /api/todos/today?list=X&all=1
+// With all=1 the scope spans every list (todos from all lists, not just `list`).
 router.get('/today', async (req, res) => {
   const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
+  const allLists = wantsAllLists(req)
   try {
-    await spawnRepeatingTodos(userId, list)
+    await spawnRepeatingTodos(userId, allLists ? undefined : list)
     const now = Math.floor(Date.now() / 1000)
     const dayStart = Math.floor(now / 86400) * 86400
-    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 86400) })
+    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 86400, allLists) })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -353,29 +381,31 @@ router.get('/today/all', async (req, res) => {
   }
 })
 
-// GET /api/todos/week?list=X
+// GET /api/todos/week?list=X&all=1
 router.get('/week', async (req, res) => {
   const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
+  const allLists = wantsAllLists(req)
   try {
-    await spawnRepeatingTodos(userId, list)
+    await spawnRepeatingTodos(userId, allLists ? undefined : list)
     const now = Math.floor(Date.now() / 1000)
     const dayStart = Math.floor(now / 86400) * 86400
-    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 7 * 86400) })
+    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 7 * 86400, allLists) })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
 })
 
-// GET /api/todos/month?list=X
+// GET /api/todos/month?list=X&all=1
 router.get('/month', async (req, res) => {
   const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
+  const allLists = wantsAllLists(req)
   try {
-    await spawnRepeatingTodos(userId, list)
+    await spawnRepeatingTodos(userId, allLists ? undefined : list)
     const now = Math.floor(Date.now() / 1000)
     const dayStart = Math.floor(now / 86400) * 86400
-    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 30 * 86400) })
+    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 30 * 86400, allLists) })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -506,23 +536,28 @@ router.get('/counts', async (req, res) => {
   }
 })
 
-// GET /api/todos/overdue?list=X
+// GET /api/todos/overdue?list=X&all=1
 // Events are intentionally excluded — once an event's date passes it has
 // simply taken place, it is not "overdue" in the actionable sense.
+// With all=1 the scope spans every list, not just `list`.
 router.get('/overdue', async (req, res) => {
   const userId = req.userId!
   const list = (req.query.list as string) || 'todos'
+  const allLists = wantsAllLists(req)
   try {
-    await spawnRepeatingTodos(userId, list)
+    await spawnRepeatingTodos(userId, allLists ? undefined : list)
+    const [listFilter, params] = allLists
+      ? ['', [userId]]
+      : ['AND list_name = $2', [userId, list]]
     const result = await query<TodoRow>(
       buildTodoSelect(
         `WHERE user_id = $1 AND status = 0
-         AND list_name = $2 AND type = 'todo'
+         ${listFilter} AND type = 'todo'
          AND due_date IS NOT NULL
          AND due_date < EXTRACT(EPOCH FROM NOW())::BIGINT
          ORDER BY due_date ASC`
       ),
-      [userId, list]
+      params as unknown[]
     )
     res.json({ todos: result.rows.map(coerceTodo) })
   } catch (err) {
