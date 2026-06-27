@@ -167,11 +167,7 @@ export const useTodoStore = defineStore('todos', () => {
     const listPrefs = categoryPrefsStore.prefs[currentList.value] ?? {}
     for (const k of [...ordered, ...remaining]) {
       const items = map.get(k)!
-      const order = listPrefs[k]?.itemOrder
-      if (!order || order.length === 0) {
-        sorted.set(k, items)
-        continue
-      }
+      const order = listPrefs[k]?.itemOrder ?? []
       const indexOf = new Map<number, number>()
       for (let i = 0; i < order.length; i++) indexOf.set(order[i], i)
       const known: Todo[] = []
@@ -181,7 +177,19 @@ export const useTodoStore = defineStore('todos', () => {
         else unknown.push(t)
       }
       known.sort((a, b) => indexOf.get(a.id)! - indexOf.get(b.id)!)
-      sorted.set(k, [...known, ...unknown])
+      // Slot items not yet in the saved order by priority rather than dumping
+      // them at the end: a High item floats to the top of the category, a Low
+      // sinks to the bottom, and a Medium settles between the two. Equal-priority
+      // items queue after their peers (stable insert). With no saved order this
+      // reproduces the server's priority-sorted order while still placing a
+      // freshly-added item at its correct spot instead of last.
+      const result = known
+      for (const t of unknown) {
+        let idx = result.findIndex((r) => r.priority < t.priority)
+        if (idx === -1) idx = result.length
+        result.splice(idx, 0, t)
+      }
+      sorted.set(k, result)
     }
     return sorted
   })
