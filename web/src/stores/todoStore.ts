@@ -481,6 +481,7 @@ export const useTodoStore = defineStore('todos', () => {
     if (!res.ok) throw new Error(await res.text())
 
     const item = todos.value.find((t) => t.id === id)
+    const prevPriority = item?.priority
     if (item) {
       if (form.title !== undefined) item.title = form.title
       if (form.description !== undefined) item.description = form.description
@@ -488,6 +489,20 @@ export const useTodoStore = defineStore('todos', () => {
       if (form.priority !== undefined) item.priority = form.priority
       if ('due_date' in form) item.due_date = form.due_date ?? null
       if ('url' in form) item.url = form.url ?? null
+    }
+    // A changed priority should re-slot the item like a freshly-added one. In a
+    // category with no saved manual order byCategory already re-slots reactively;
+    // when a manual order pins the item, drop it from that order so byCategory
+    // treats it as unplaced and re-inserts it at its new priority position.
+    if (item && form.priority !== undefined && form.priority !== prevPriority) {
+      const order = categoryPrefsStore.prefs[currentList.value]?.[item.category]?.itemOrder
+      if (order?.includes(id)) {
+        void categoryPrefsStore.setItemOrder(
+          currentList.value,
+          item.category,
+          order.filter((x) => x !== id),
+        )
+      }
     }
     if (form.category) registerCategory(currentList.value, form.category || 'General')
     invalidateOtherViews(currentList.value)
