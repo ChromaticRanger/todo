@@ -469,7 +469,7 @@ async function handleEventEditDelete() {
           </div>
           <button
             v-if="store.currentView === 'completed'"
-            class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+            class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors opacity-0 group-hover:opacity-100 touch:opacity-100 shrink-0"
             title="Delete"
             @click.stop="confirmDeleteId = todo.id"
           >

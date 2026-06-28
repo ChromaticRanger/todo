@@ -89,7 +89,7 @@ async function handleDelete() {
   >
     <!-- Drag handle (hover-revealed, top-left) -->
     <span
-      class="item-drag-handle absolute bottom-0 left-0 z-10 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm text-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity"
+      class="item-drag-handle absolute bottom-0 left-0 z-10 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm text-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity"
       title="Drag to reorder"
       @click.stop.prevent
     >
@@ -101,7 +101,7 @@ async function handleDelete() {
     </span>
     <!-- Action overlay (hover-revealed, top-right) -->
     <div
-      class="absolute top-0 right-0 z-10 flex items-center gap-0.5 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+      class="absolute top-0 right-0 z-10 flex items-center gap-0.5 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity"
     >
       <button
         class="p-0.5 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"

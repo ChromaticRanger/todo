@@ -3,6 +3,17 @@
 /* ── Dark mode variant — driven by data-mode attribute ──────────────────────── */
 @custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 
+/* ── Touch variant — devices without hover (tablets, phones) ─────────────────── */
+/* Used to permanently reveal item action buttons that are otherwise hover-only,
+   since touch screens have no :hover state to trigger group-hover. */
+@custom-variant touch (@media (hover: none));
+
+/* On touch devices, reveal the action buttons (rename/publish/delete) only on the
+   currently-selected list tab — keeps the other tabs uncluttered. */
+@media (hover: none) {
+  .tab-selected .tab-action { opacity: 1; }
+}
+
 @theme {
   --font-display: "Fraunces", ui-serif, Georgia, serif;
   --font-display--font-variation-settings: "SOFT" 100, "opsz" 144;

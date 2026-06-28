@@ -184,7 +184,7 @@ onBeforeUnmount(() => {
       :key="list"
       class="list-tab-handle group flex items-center gap-2 px-3 py-1 rounded-t-lg text-sm font-medium whitespace-nowrap transition-colors border-b-2 cursor-pointer select-none"
       :class="listStore.activeList === list
-        ? 'border-accent text-accent bg-surface-hover/60'
+        ? 'tab-selected border-accent text-accent bg-surface-hover/60'
         : 'border-transparent text-muted hover:text-text hover:bg-surface-hover/40'"
       @click="selectList(list)"
     >

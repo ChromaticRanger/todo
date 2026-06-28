@@ -212,7 +212,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     </div>
 
     <!-- Actions (visible on hover) -->
-    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" @click.stop>
+    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity flex-shrink-0" @click.stop>
       <button
         class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
         title="Edit"
@@ -285,7 +285,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     </div>
 
     <!-- Actions (visible on hover) -->
-    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity flex-shrink-0">
       <button
         class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
         title="Edit"
@@ -407,7 +407,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     </div>
 
     <!-- Actions (visible on hover) -->
-    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity flex-shrink-0">
       <button
         class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
         title="Edit"
