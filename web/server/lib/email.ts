@@ -361,6 +361,8 @@ export async function sendDigestEmailFor(
     subject: `Stash Squirrel: ${count} ${count === 1 ? 'item needs' : 'items need'} attention`,
     text,
     html,
+    // Sent from the monitored support inbox so replies reach a person.
+    from: SUPPORT_FROM,
   })
 }
 
