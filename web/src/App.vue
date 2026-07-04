@@ -16,6 +16,7 @@ import type { ViewType, ItemType, Todo } from './types/todo'
 import { apiEvents, apiFetch } from './lib/api'
 import { eventEnd } from './lib/eventTime'
 import AppHeader from './components/AppHeader.vue'
+import MobileNav from './components/MobileNav.vue'
 import ListTabs from './components/ListTabs.vue'
 import ViewSwitcher from './components/ViewSwitcher.vue'
 import ListView from './components/ListView.vue'
@@ -458,7 +459,7 @@ function onTourSkip() {
     </div>
 
     <!-- View switcher -->
-    <div v-if="mode === 'lists'" class="px-4 py-1.5 border-b border-border/60 bg-surface/20 flex items-center justify-between gap-4">
+    <div v-if="mode === 'lists'" class="px-4 py-1.5 border-b border-border/60 bg-surface/20 flex flex-wrap items-center justify-between gap-2">
       <ViewSwitcher :current="currentView" :counts="todoStore.viewCounts" @change="onViewChange" />
 
       <div v-if="isCategoryView" class="flex items-center gap-2 shrink-0">
@@ -554,6 +555,17 @@ function onTourSkip() {
       />
       <OverallSchedule v-else />
     </main>
+
+    <!-- Mobile bottom navigation (hidden at md and up) -->
+    <MobileNav
+      :mode="mode"
+      @add="openAddForm"
+      @toggle-calendar="toggleCalendar"
+      @toggle-discover="toggleDiscover"
+      @search="searchStore.openSearch()"
+      @import="showImportDialog = true"
+      @go-lists="mode = 'lists'"
+    />
 
     <!-- Error toast -->
     <div

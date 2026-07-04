@@ -8,6 +8,13 @@
    since touch screens have no :hover state to trigger group-hover. */
 @custom-variant touch (@media (hover: none));
 
+/* ── Landscape-phone variant — phones held sideways ──────────────────────────── */
+/* Landscape phones are wider than the `md` breakpoint (≈844–932px) so they get
+   the full desktop header, but their short height distinguishes them from real
+   desktops/tablets. Used to trim header chrome (e.g. the brand wordmark) that
+   would otherwise crowd the action buttons. */
+@custom-variant landscape-phone (@media (orientation: landscape) and (max-height: 500px));
+
 /* On touch devices, reveal the action buttons (rename/publish/delete) only on the
    currently-selected list tab — keeps the other tabs uncluttered. */
 @media (hover: none) {
