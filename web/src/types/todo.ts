@@ -36,6 +36,11 @@ export interface Todo {
   snoozed_until: number | null
   recur_until: number | null
   duration_seconds: number | null
+  color: string | null
+  all_day: boolean
+  // Present only on expanded recurring-event occurrences: the original
+  // cadence-generated start, used as the key when editing a single occurrence.
+  occurrence_start?: number | null
 }
 
 export interface TodoFormData {
@@ -50,4 +55,6 @@ export interface TodoFormData {
   url: string | null
   recur_until?: number | null
   duration_seconds?: number | null
+  color?: string | null
+  all_day?: boolean
 }

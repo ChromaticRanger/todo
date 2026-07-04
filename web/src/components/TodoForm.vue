@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from 'vue'
 import type { Todo, TodoFormData, ItemType } from '../types/todo'
 import { Priority } from '../types/todo'
 import { useEscapeKey } from '../composables/useEscapeKey'
+import { EVENT_COLORS, swatchColor } from '../lib/eventColor'
+import ToggleSwitch from './ToggleSwitch.vue'
 
 const props = defineProps<{
   initial?: Todo
@@ -24,6 +26,8 @@ const title = ref(props.initial?.title ?? '')
 const description = ref(props.initial?.description ?? '')
 const url = ref(props.initial?.url ?? '')
 const priority = ref<Priority>(props.initial?.priority ?? Priority.MEDIUM)
+// Per-item calendar colour (events + todos). null = default / theme accent.
+const color = ref<string | null>(props.initial?.color ?? null)
 function epochToDatetimeLocalStr(epoch: number): string {
   const d = new Date(epoch * 1000)
   const pad = (n: number) => String(n).padStart(2, '0')
@@ -53,6 +57,37 @@ function computeInitialEndStr(): string {
   return ''
 }
 const endStr = ref(computeInitialEndStr())
+
+// ── All-day events ──────────────────────────────────────────────────────────
+// An all-day event stores its start at local midnight and a duration that is a
+// whole number of days. The form edits it via two date-only inputs (start +
+// inclusive end day) instead of the datetime pair.
+function epochToDateInput(epoch: number): string {
+  const d = new Date(epoch * 1000)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+function dateInputToLocalMidnight(s: string): number | null {
+  if (!s) return null
+  const t = new Date(s + 'T00:00:00').getTime()
+  return Number.isFinite(t) ? Math.floor(t / 1000) : null
+}
+const allDay = ref(props.initial?.all_day ?? false)
+const startDateStr = ref(
+  props.initial?.due_date != null
+    ? epochToDateInput(props.initial.due_date)
+    : props.initialDue != null
+      ? epochToDateInput(props.initialDue)
+      : ''
+)
+// End is the last *inclusive* day. A 1-day event ends on its start day.
+const endDateStr = ref((() => {
+  if (props.initial?.all_day && props.initial.due_date != null) {
+    const days = Math.max(1, Math.round((props.initial.duration_seconds ?? 86400) / 86400))
+    return epochToDateInput(props.initial.due_date + (days - 1) * 86400)
+  }
+  return startDateStr.value
+})())
 const repeatUnit = ref<'days' | 'months'>(
   (props.initial?.repeat_months ?? 0) > 0 ? 'months' : 'days'
 )
@@ -146,13 +181,20 @@ const canSubmit = computed(() => {
   if (!title.value.trim()) return false
   if (type.value === 'bookmark' && !url.value.trim()) return false
   if (type.value === 'event') {
-    if (!dueStr.value) return false
-    // End must be after start when both are set. End is optional for legacy
-    // point-in-time events; we only block invalid ranges.
-    if (endStr.value) {
-      const s = strToEpoch(dueStr.value)
-      const e = strToEpoch(endStr.value)
-      if (s == null || e == null || e <= s) return false
+    if (allDay.value) {
+      if (!startDateStr.value) return false
+      const s = dateInputToLocalMidnight(startDateStr.value)
+      const e = dateInputToLocalMidnight(endDateStr.value || startDateStr.value)
+      if (s == null || e == null || e < s) return false
+    } else {
+      if (!dueStr.value) return false
+      // End must be after start when both are set. End is optional for legacy
+      // point-in-time events; we only block invalid ranges.
+      if (endStr.value) {
+        const s = strToEpoch(dueStr.value)
+        const e = strToEpoch(endStr.value)
+        if (s == null || e == null || e <= s) return false
+      }
     }
   }
   return true
@@ -161,9 +203,14 @@ const canSubmit = computed(() => {
 function submit() {
   if (!canSubmit.value) return
 
-  const due_date = dueStr.value
-    ? Math.floor(new Date(dueStr.value).getTime() / 1000)
-    : null
+  // All-day events derive start/duration from whole days; everything else uses
+  // the datetime-local start (and, for events, the optional end).
+  const isAllDayEvent = type.value === 'event' && allDay.value
+  const due_date = isAllDayEvent
+    ? dateInputToLocalMidnight(startDateStr.value)
+    : dueStr.value
+      ? Math.floor(new Date(dueStr.value).getTime() / 1000)
+      : null
 
   let rd = 0
   let rm = 0
@@ -180,10 +227,16 @@ function submit() {
     }
   }
 
-  // Compute duration from end - start. Blank end on an event submits as null
+  // Compute duration. All-day: span from start day through the inclusive end
+  // day (so a single day = 86400). Timed: end - start, blank end → null
   // (server treats null/0 as legacy point-in-time).
   let duration_seconds: number | null = null
-  if (type.value === 'event' && due_date != null && endStr.value) {
+  if (isAllDayEvent && due_date != null) {
+    const endEpoch = dateInputToLocalMidnight(endDateStr.value || startDateStr.value)
+    if (endEpoch != null && endEpoch >= due_date) {
+      duration_seconds = (endEpoch - due_date) + 86400
+    }
+  } else if (type.value === 'event' && due_date != null && endStr.value) {
     const endEpoch = strToEpoch(endStr.value)
     if (endEpoch != null && endEpoch > due_date) {
       duration_seconds = endEpoch - due_date
@@ -202,6 +255,8 @@ function submit() {
     url: type.value === 'bookmark' ? url.value.trim() : null,
     recur_until: type.value === 'event' ? recurUntil : null,
     duration_seconds: type.value === 'event' ? duration_seconds : null,
+    color: type.value === 'event' || type.value === 'todo' ? color.value : null,
+    all_day: type.value === 'event' ? allDay.value : false,
   })
 }
 
@@ -291,10 +346,16 @@ const priorityLabels = [
             />
           </div>
 
-          <!-- Event-only: Start (required) and End. End is optional so legacy
+          <!-- Event-only: All-day toggle + date/time range. -->
+          <div v-if="type === 'event'" class="flex items-center justify-between">
+            <label class="field-label mb-0">All day</label>
+            <ToggleSwitch v-model="allDay" label="All day" />
+          </div>
+
+          <!-- Timed event: Start (required) and End. End is optional so legacy
                point-in-time events keep working; new events default to a
                +30 min end. -->
-          <div v-if="type === 'event'" class="grid grid-cols-2 gap-3">
+          <div v-if="type === 'event' && !allDay" class="grid grid-cols-2 gap-3">
             <div>
               <label class="field-label">Start *</label>
               <input
@@ -316,11 +377,35 @@ const priorityLabels = [
             </div>
           </div>
           <p
-            v-if="type === 'event' && endStr && dueStr && (strToEpoch(endStr) ?? 0) <= (strToEpoch(dueStr) ?? 0)"
+            v-if="type === 'event' && !allDay && endStr && dueStr && (strToEpoch(endStr) ?? 0) <= (strToEpoch(dueStr) ?? 0)"
             class="-mt-1 text-xs text-danger"
           >
             End must be after start.
           </p>
+
+          <!-- All-day event: date-only start + inclusive end day. -->
+          <div v-if="type === 'event' && allDay" class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="field-label">Start *</label>
+              <input
+                v-model="startDateStr"
+                type="date"
+                name="start-date"
+                required
+                class="field-input"
+              />
+            </div>
+            <div>
+              <label class="field-label">End</label>
+              <input
+                v-model="endDateStr"
+                type="date"
+                name="end-date"
+                :min="startDateStr"
+                class="field-input"
+              />
+            </div>
+          </div>
 
           <!-- Event-only: Recurrence -->
           <div v-if="type === 'event'">
@@ -344,6 +429,39 @@ const priorityLabels = [
               name="recur-until"
               class="field-input"
             />
+          </div>
+
+          <!-- Colour (events + todos) — how the item is tinted on the calendar. -->
+          <div v-if="type === 'event' || type === 'todo'">
+            <label class="field-label">Colour</label>
+            <div class="flex flex-wrap items-center gap-2">
+              <!-- "Default" = no custom colour (item uses the theme accent). Shown
+                   as a neutral slashed swatch so it never looks like the accent-
+                   coloured palette entry (which would duplicate it per theme). -->
+              <button
+                type="button"
+                class="size-7 rounded-full border-2 transition-transform hover:scale-110"
+                :class="color === null ? 'border-accent ring-2 ring-accent/40' : 'border-border'"
+                :style="{
+                  backgroundColor: 'var(--color-surface-hover)',
+                  backgroundImage: 'linear-gradient(135deg, transparent 44%, var(--color-muted) 44%, var(--color-muted) 56%, transparent 56%)',
+                }"
+                title="Default (theme colour)"
+                aria-label="Default colour"
+                @click="color = null"
+              />
+              <button
+                v-for="c in EVENT_COLORS"
+                :key="c"
+                type="button"
+                class="size-7 rounded-full border-2 transition-transform hover:scale-110"
+                :class="color === c ? 'border-text ring-2 ring-accent/40' : 'border-transparent'"
+                :style="{ background: swatchColor(c) }"
+                :title="c"
+                :aria-label="c"
+                @click="color = c"
+              />
+            </div>
           </div>
 
           <!-- Category (todos / bookmarks / notes only — events live outside lists) -->

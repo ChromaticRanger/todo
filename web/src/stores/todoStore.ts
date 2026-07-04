@@ -446,6 +446,8 @@ export const useTodoStore = defineStore('todos', () => {
       snoozed_until: null,
       recur_until: null,
       duration_seconds: null,
+      color: form.color ?? null,
+      all_day: form.all_day ?? false,
     }
 
     if (list === currentList.value) todos.value.push(newTodo)
@@ -514,6 +516,8 @@ export const useTodoStore = defineStore('todos', () => {
       if (form.priority !== undefined) item.priority = form.priority
       if ('due_date' in form) item.due_date = form.due_date ?? null
       if ('url' in form) item.url = form.url ?? null
+      if ('color' in form) item.color = form.color ?? null
+      if ('all_day' in form) item.all_day = form.all_day ?? false
     }
     // A changed priority should re-slot the item like a freshly-added one. In a
     // category with no saved manual order byCategory already re-slots reactively;

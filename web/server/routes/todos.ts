@@ -31,6 +31,23 @@ export interface TodoRow {
   snoozed_until: number | null
   recur_until: number | null
   duration_seconds: number | null
+  color: string | null
+  all_day: boolean
+  // Set only on expanded recurring occurrences: the original cadence-generated
+  // start, used as the stable key for per-occurrence overrides. Not a column.
+  occurrence_start?: number
+}
+
+// Fixed palette for per-item calendar colours. Keys map to CSS tokens
+// (--evt-<key>) on the client (see src/lib/eventColor.ts). NULL means
+// "default / theme accent". Kept in sync with EVENT_COLORS on the client.
+export const COLOR_KEYS = [
+  'rose', 'amber', 'emerald', 'sky', 'violet', 'fuchsia', 'teal', 'orange',
+] as const
+
+function normalizeColor(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  return (COLOR_KEYS as readonly string[]).includes(value) ? value : null
 }
 
 // pg serializes BIGINT/NUMERIC as strings; coerce to numbers for the client
@@ -51,6 +68,9 @@ export function coerceTodo(row: TodoRow) {
     snoozed_until: row.snoozed_until != null ? Number(row.snoozed_until) : null,
     recur_until: row.recur_until != null ? Number(row.recur_until) : null,
     duration_seconds: row.duration_seconds != null ? Number(row.duration_seconds) : null,
+    color: row.color ?? null,
+    all_day: !!row.all_day,
+    occurrence_start: row.occurrence_start != null ? Number(row.occurrence_start) : null,
   }
 }
 
@@ -129,10 +149,16 @@ async function spawnRepeatingTodos(userId: string, listName?: string) {
 
 const MAX_OCCURRENCES_PER_SERIES = 500 // safety cap; v1 presets never reach this
 
+export interface OccurrenceOverride {
+  due: number | null
+  dur: number | null
+}
+
 export function expandEventOccurrences(
   series: TodoRow[],
   from: number,
-  to: number
+  to: number,
+  overrides?: Map<string, OccurrenceOverride>
 ): TodoRow[] {
   const out: TodoRow[] = []
   for (const ev of series) {
@@ -174,7 +200,20 @@ export function expandEventOccurrences(
 
     let safety = 0
     while (occ < to && occ <= until && safety++ < MAX_OCCURRENCES_PER_SERIES) {
-      out.push({ ...ev, due_date: occ })
+      // Apply a per-occurrence override (keyed on the ORIGINAL start) if one
+      // exists, then only emit when the final [start, end) still overlaps the
+      // window. `occurrence_start` carries the original key back to the client.
+      const ov = overrides?.get(`${Number(ev.id)}:${occ}`)
+      const finalDue = ov && ov.due != null ? ov.due : occ
+      const finalDur = ov && ov.dur != null ? ov.dur : dur
+      if (finalDue < to && finalDue + finalDur > from) {
+        out.push({
+          ...ev,
+          due_date: finalDue,
+          duration_seconds: finalDur > 0 ? finalDur : ev.duration_seconds,
+          occurrence_start: occ,
+        })
+      }
       if (stepDays > 0) occ += stepDays * 86400
       else occ = addMonths(occ, stepMonths)
     }
@@ -204,7 +243,28 @@ export async function fetchExpandedEventSeries(
     ),
     [userId, from, to]
   )
-  return expandEventOccurrences(result.rows, from, to)
+  // Load per-occurrence overrides for the fetched series so expansion can apply
+  // "this occurrence" edits.
+  let overrides: Map<string, OccurrenceOverride> | undefined
+  const seriesIds = result.rows.map((r) => Number(r.id))
+  if (seriesIds.length > 0) {
+    const ov = await query<{
+      series_id: string; occurrence_start: string
+      new_due_date: string | null; new_duration_seconds: string | null
+    }>(
+      `SELECT series_id, occurrence_start, new_due_date, new_duration_seconds
+       FROM event_overrides WHERE user_id = $1 AND series_id = ANY($2::bigint[])`,
+      [userId, seriesIds]
+    )
+    overrides = new Map()
+    for (const r of ov.rows) {
+      overrides.set(`${Number(r.series_id)}:${Number(r.occurrence_start)}`, {
+        due: r.new_due_date != null ? Number(r.new_due_date) : null,
+        dur: r.new_duration_seconds != null ? Number(r.new_duration_seconds) : null,
+      })
+    }
+  }
+  return expandEventOccurrences(result.rows, from, to, overrides)
 }
 
 export function buildTodoSelect(extra = ''): string {
@@ -212,7 +272,7 @@ export function buildTodoSelect(extra = ''): string {
     EXTRACT(EPOCH FROM created_at)::BIGINT AS created_at,
     EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at,
     due_date, repeat_days, repeat_months, spawned_next, type, url, snoozed_until,
-    recur_until, duration_seconds
+    recur_until, duration_seconds, color, all_day
   FROM todos ${extra}`
 }
 
@@ -675,6 +735,8 @@ router.post('/', async (req, res) => {
     url = null,
     recur_until = null,
     duration_seconds = null,
+    color = null,
+    all_day = false,
   } = req.body as Partial<{
     list_name: string
     title: string
@@ -688,6 +750,8 @@ router.post('/', async (req, res) => {
     url: string | null
     recur_until: number | null
     duration_seconds: number | null
+    color: string | null
+    all_day: boolean
   }>
 
   if (!title) return res.status(400).json({ error: 'Title is required' })
@@ -731,6 +795,9 @@ router.post('/', async (req, res) => {
     type === 'event' && duration_seconds != null && Number(duration_seconds) > 0
       ? Number(duration_seconds)
       : null
+  const effectiveColor = normalizeColor(color)
+  // all_day is event-only; ignore it on other types.
+  const effectiveAllDay = type === 'event' ? !!all_day : false
 
   try {
     if (req.plan === 'free') {
@@ -750,9 +817,9 @@ router.post('/', async (req, res) => {
     const result = await query<{ id: number }>(
       `INSERT INTO todos
          (user_id, list_name, title, description, category, priority, status,
-          due_date, repeat_days, repeat_months, spawned_next, type, url, recur_until, duration_seconds)
-       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0,$10,$11,$12,$13) RETURNING id`,
-      [userId, effectiveList, title, description, effectiveCategory, priority, effectiveDue, effectiveRepeatDays, effectiveRepeatMonths, type, effectiveUrl, effectiveRecurUntil, effectiveDuration]
+          due_date, repeat_days, repeat_months, spawned_next, type, url, recur_until, duration_seconds, color, all_day)
+       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0,$10,$11,$12,$13,$14,$15) RETURNING id`,
+      [userId, effectiveList, title, description, effectiveCategory, priority, effectiveDue, effectiveRepeatDays, effectiveRepeatMonths, type, effectiveUrl, effectiveRecurUntil, effectiveDuration, effectiveColor, effectiveAllDay]
     )
     res.status(201).json({ id: Number(result.rows[0].id) })
   } catch (err) {
@@ -774,6 +841,8 @@ router.put('/:id', async (req, res) => {
     repeat_months: number
     recur_until: number | null
     duration_seconds: number | null
+    color: string | null
+    all_day: boolean
   }>
   const { title, description, category, priority, due_date, url } = body
 
@@ -783,6 +852,8 @@ router.put('/:id', async (req, res) => {
   const hasRepeatMonths = Object.prototype.hasOwnProperty.call(body, 'repeat_months')
   const hasRecurUntil = Object.prototype.hasOwnProperty.call(body, 'recur_until')
   const hasDuration = Object.prototype.hasOwnProperty.call(body, 'duration_seconds')
+  const hasColor = Object.prototype.hasOwnProperty.call(body, 'color')
+  const hasAllDay = Object.prototype.hasOwnProperty.call(body, 'all_day')
 
   try {
     // Validate event recurrence presets when the row is (or is becoming) an
@@ -834,7 +905,9 @@ router.put('/:id', async (req, res) => {
          repeat_days     = CASE WHEN $9::BOOLEAN  THEN $7  ELSE repeat_days     END,
          repeat_months   = CASE WHEN $10::BOOLEAN THEN $8  ELSE repeat_months   END,
          recur_until     = CASE WHEN $11::BOOLEAN THEN $12 ELSE recur_until     END,
-         duration_seconds = CASE WHEN $15::BOOLEAN THEN $16 ELSE duration_seconds END
+         duration_seconds = CASE WHEN $15::BOOLEAN THEN $16 ELSE duration_seconds END,
+         color           = CASE WHEN $17::BOOLEAN THEN $18 ELSE color           END,
+         all_day         = CASE WHEN $19::BOOLEAN THEN $20 ELSE all_day         END
        WHERE id = $13 AND user_id = $14`,
       [
         title,
@@ -853,9 +926,22 @@ router.put('/:id', async (req, res) => {
         userId,
         hasDuration,
         nextDuration,
+        hasColor,
+        hasColor ? normalizeColor(body.color) : null,
+        hasAllDay,
+        hasAllDay ? !!body.all_day : false,
       ]
     )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
+    // A base edit is a whole-series change ("all occurrences"); drop any
+    // per-occurrence overrides so exceptions don't linger against a shifted
+    // series. No-op for non-recurring rows.
+    await query(
+      `DELETE FROM event_overrides o USING todos t
+       WHERE o.series_id = t.id AND t.id = $1 AND o.user_id = $2
+         AND t.type = 'event' AND (t.repeat_days > 0 OR t.repeat_months > 0)`,
+      [req.params.id, userId]
+    )
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -871,6 +957,106 @@ router.delete('/:id', async (req, res) => {
       [req.params.id, userId]
     )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
+    // Clear any per-occurrence overrides for a deleted recurring series.
+    await query(
+      'DELETE FROM event_overrides WHERE series_id = $1 AND user_id = $2',
+      [req.params.id, userId]
+    )
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/todos/:id/occurrence — move/resize a SINGLE occurrence of a
+// recurring event ("this occurrence") by upserting an override keyed on the
+// original occurrence start. "All occurrences" uses the base PUT above.
+router.put('/:id/occurrence', async (req, res) => {
+  const userId = req.userId!
+  const seriesId = req.params.id
+  const { occurrence_start, due_date, duration_seconds = null } = req.body as Partial<{
+    occurrence_start: number
+    due_date: number | null
+    duration_seconds: number | null
+  }>
+
+  if (occurrence_start == null || !Number.isInteger(Number(occurrence_start))) {
+    return res.status(400).json({ error: 'occurrence_start is required' })
+  }
+  if (due_date == null || !Number.isInteger(Number(due_date))) {
+    return res.status(400).json({ error: 'due_date is required' })
+  }
+  if (duration_seconds != null) {
+    const d = Number(duration_seconds)
+    if (!Number.isInteger(d) || d < 0 || d > 14 * 86400) {
+      return res.status(400).json({ error: 'invalid_duration_seconds' })
+    }
+  }
+
+  try {
+    // The series must exist, belong to the user, and be an event.
+    const cur = await query<{ type: string }>(
+      'SELECT type FROM todos WHERE id = $1 AND user_id = $2',
+      [seriesId, userId]
+    )
+    if (cur.rowCount === 0) return res.status(404).json({ error: 'Not found' })
+    if (cur.rows[0].type !== 'event') {
+      return res.status(400).json({ error: 'not_an_event' })
+    }
+
+    const nextDur = duration_seconds != null && Number(duration_seconds) > 0
+      ? Number(duration_seconds)
+      : null
+    await query(
+      `INSERT INTO event_overrides
+         (user_id, series_id, occurrence_start, new_due_date, new_duration_seconds)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (series_id, occurrence_start)
+       DO UPDATE SET new_due_date = $4, new_duration_seconds = $5`,
+      [userId, seriesId, Number(occurrence_start), Number(due_date), nextDur]
+    )
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PUT /api/todos/:id/series-shift — move/resize a WHOLE recurring series ("all
+// occurrences") by shifting its anchor by `delta_seconds` and setting an
+// absolute duration. Clears per-occurrence overrides since the base moved.
+router.put('/:id/series-shift', async (req, res) => {
+  const userId = req.userId!
+  const seriesId = req.params.id
+  const { delta_seconds = 0, duration_seconds = null } = req.body as Partial<{
+    delta_seconds: number
+    duration_seconds: number | null
+  }>
+  const delta = Number(delta_seconds)
+  if (!Number.isInteger(delta)) {
+    return res.status(400).json({ error: 'invalid_delta_seconds' })
+  }
+  if (duration_seconds != null) {
+    const d = Number(duration_seconds)
+    if (!Number.isInteger(d) || d < 0 || d > 14 * 86400) {
+      return res.status(400).json({ error: 'invalid_duration_seconds' })
+    }
+  }
+  const nextDur = duration_seconds != null && Number(duration_seconds) > 0
+    ? Number(duration_seconds)
+    : null
+  try {
+    const result = await query(
+      `UPDATE todos
+         SET due_date = due_date + $1,
+             duration_seconds = $2
+       WHERE id = $3 AND user_id = $4 AND type = 'event'`,
+      [delta, nextDur, seriesId, userId]
+    )
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
+    await query(
+      'DELETE FROM event_overrides WHERE series_id = $1 AND user_id = $2',
+      [seriesId, userId]
+    )
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
