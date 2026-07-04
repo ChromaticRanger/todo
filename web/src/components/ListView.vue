@@ -7,6 +7,7 @@ import { describeRecurrence } from '../lib/recurrence'
 import { useListStore } from '../stores/listStore'
 import { useSettingsStore, type CompletedWindow, type ListScope, type WindowedView } from '../stores/settingsStore'
 import { formatEventDateTimeRange } from '../lib/eventTime'
+import { colorVar } from '../lib/eventColor'
 import { apiFetch } from '../lib/api'
 import CategoryGroup from './CategoryGroup.vue'
 import EmptyState from './EmptyState.vue'
@@ -322,7 +323,7 @@ async function handleEventEditDelete() {
          any list/category, so they sit above the category grid). -->
     <div
       v-if="!store.loading && !showFlat && store.eventsInView.length > 0"
-      class="mb-4 bg-surface border border-border-strong/60 rounded-xl p-3 dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
+      class="mb-4 w-full sm:w-1/2 bg-surface border border-border-strong/60 rounded-xl p-3 dark:inset-ring dark:inset-ring-white/5 dark:shadow-none"
     >
       <div class="flex items-center gap-2 mb-2 text-xs uppercase tracking-wider text-muted">
         <svg class="size-3.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -334,7 +335,8 @@ async function handleEventEditDelete() {
         <button
           v-for="ev in store.eventsInView"
           :key="eventRowKey(ev)"
-          class="text-left flex items-center gap-2 rounded-lg px-2 py-1.5 bg-accent/10 hover:bg-accent/20 border-l-4 border-accent transition-colors"
+          class="text-left flex items-center gap-2 rounded-lg px-2 py-1.5 cal-chip border-l-4 transition-colors"
+          :style="colorVar(ev.color)"
           @click="openEditEvent(ev)"
         >
           <span class="flex-1 truncate text-sm text-text">{{ ev.title }}</span>
