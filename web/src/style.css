@@ -52,6 +52,16 @@
   --color-success-fg:   oklch(0.73 0.14 155);
   --color-warning-bg:   oklch(0.22 0.06 70);
   --color-warning-fg:   oklch(0.77 0.17 70);
+  /* Calendar event palette (dark defaults). Fixed keys consumed via
+     var(--evt-<key>) by src/lib/eventColor.ts; light overrides below. */
+  --evt-rose:    oklch(0.65 0.20 15);
+  --evt-amber:   oklch(0.75 0.15 70);
+  --evt-emerald: oklch(0.70 0.15 160);
+  --evt-sky:     oklch(0.70 0.14 235);
+  --evt-violet:  oklch(0.65 0.20 293);
+  --evt-fuchsia: oklch(0.68 0.24 330);
+  --evt-teal:    oklch(0.72 0.13 205);
+  --evt-orange:  oklch(0.70 0.17 45);
 }
 
 /* ── Per-mode semantic overrides (danger/warning/success + color-scheme) ─────── */
@@ -75,6 +85,15 @@
   --color-success-fg: oklch(0.4 0.13 155);
   --color-warning-bg: oklch(0.97 0.05 80);
   --color-warning-fg: oklch(0.45 0.13 70);
+  /* Calendar event palette — darker/more saturated for contrast on light surfaces. */
+  --evt-rose:    oklch(0.58 0.22 15);
+  --evt-amber:   oklch(0.62 0.15 70);
+  --evt-emerald: oklch(0.58 0.15 160);
+  --evt-sky:     oklch(0.58 0.15 235);
+  --evt-violet:  oklch(0.55 0.22 293);
+  --evt-fuchsia: oklch(0.58 0.25 330);
+  --evt-teal:    oklch(0.58 0.13 205);
+  --evt-orange:  oklch(0.62 0.18 45);
 }
 
 /* ── Theme palettes ──────────────────────────────────────────────────────────── */
@@ -380,6 +399,25 @@
     @apply -mr-1 flex size-8 shrink-0 items-center justify-center rounded-lg text-muted transition-colors
            hover:bg-surface-hover hover:text-text
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring;
+  }
+
+  /* ── Calendar coloured items ───────────────────────────────────────────────
+     Both read the `--evt` custom property (set per item via colorVar() in
+     src/lib/eventColor.ts). `--evt` defaults to the theme accent, so an item
+     with no colour looks exactly as it did before. */
+  .cal-chip {
+    background: color-mix(in oklab, var(--evt, var(--color-accent)) 15%, transparent);
+    border-color: var(--evt, var(--color-accent));
+  }
+  .cal-chip:hover {
+    background: color-mix(in oklab, var(--evt, var(--color-accent)) 25%, transparent);
+  }
+  .cal-block {
+    background: color-mix(in oklab, var(--evt, var(--color-accent)) 20%, transparent);
+    border-color: var(--evt, var(--color-accent));
+  }
+  .cal-block:hover {
+    background: color-mix(in oklab, var(--evt, var(--color-accent)) 30%, transparent);
   }
 }
 
