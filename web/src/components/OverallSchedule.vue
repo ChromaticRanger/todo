@@ -1040,7 +1040,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
     <p v-if="error" class="text-sm text-danger mb-2">{{ error }}</p>
 
     <!-- Desktop / tablet month grid -->
-    <div v-if="settingsStore.calendarView === 'month'" class="hidden sm:flex sm:flex-col flex-1 min-h-0">
+    <div v-if="settingsStore.calendarView === 'month'" class="hidden md:flex md:flex-col flex-1 min-h-0">
       <div class="grid grid-cols-7 text-xs text-muted uppercase tracking-wider mb-1">
         <div v-for="d in WEEKDAY_LABELS" :key="d" class="px-2 py-1">{{ d }}</div>
       </div>
@@ -1158,7 +1158,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
     </div>
 
     <!-- Desktop / tablet week hour grid -->
-    <div v-if="settingsStore.calendarView === 'week'" class="hidden sm:flex sm:flex-col flex-1 min-h-0">
+    <div v-if="settingsStore.calendarView === 'week'" class="hidden md:flex md:flex-col flex-1 min-h-0">
       <!-- Day headers: spacer + 7 columns. Sticky below the calendar nav so
            they stay visible while the hour grid (or the outer container)
            scrolls. The top offset clears the sticky nav above it. -->
@@ -1334,7 +1334,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
     </div>
 
     <!-- Mobile agenda list -->
-    <div class="sm:hidden space-y-3">
+    <div class="md:hidden space-y-3">
       <div v-if="agendaDays.length === 0 && !loading" class="text-center text-muted py-12 text-sm">
         No scheduled todos {{ emptyPreposition }} {{ monthLabel }}
       </div>

@@ -274,12 +274,12 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
 
     <!-- Content -->
     <div class="flex-1 min-w-0 select-text">
-      <div class="text-sm text-text leading-5 font-medium">{{ todo.title }}</div>
+      <div class="text-sm text-text leading-5 font-medium break-words">{{ todo.title }}</div>
       <!-- Note body is Markdown. v-html is safe here because markdown-it
            is configured with html:false (raw <script>/<iframe> are escaped). -->
       <div
         v-if="todo.description"
-        class="note-markdown mt-0.5 text-xs text-muted leading-relaxed"
+        class="note-markdown mt-0.5 text-xs text-muted leading-relaxed break-words"
         v-html="noteBodyHtml"
       ></div>
     </div>
@@ -353,9 +353,9 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     </button>
 
     <!-- Content -->
-    <div class="flex-1 select-text">
+    <div class="flex-1 min-w-0 select-text">
       <span
-        class="text-sm text-text leading-5 flex items-baseline gap-1.5 whitespace-nowrap"
+        class="text-sm text-text leading-5 break-words"
         :class="isCompleted ? 'line-through text-muted' : ''"
       >
         <BookmarkFavicon
@@ -363,7 +363,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
           :url="embeddedTitleUrl"
           :title="todo.title"
           size="xs"
-          class="self-center"
+          class="align-middle mr-1"
         />
         <template v-for="part in titleParts" :key="part.value">
           <a
@@ -378,7 +378,7 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
         </template>
       </span>
 
-      <div v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed">
+      <div v-if="todo.description" class="mt-0.5 text-xs text-muted leading-relaxed break-words">
         {{ todo.description }}
       </div>
 

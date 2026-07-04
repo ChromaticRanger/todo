@@ -32,12 +32,14 @@ const POPOVER_GAP = 16
  * room. Falls back to centering when the rect is null or doesn't fit anywhere.
  */
 const popoverStyle = computed(() => {
+  // Never exceed the viewport — on narrow phones the fixed 340px would overflow.
+  const width = Math.min(POPOVER_WIDTH, window.innerWidth - 16)
   if (!props.rect) {
     return {
       top: '50%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
-      width: `${POPOVER_WIDTH}px`,
+      width: `${width}px`,
     }
   }
   const r = props.rect
@@ -58,7 +60,7 @@ const popoverStyle = computed(() => {
       top: '50%',
       left: '50%',
       transform: 'translate(-50%, -50%)',
-      width: `${POPOVER_WIDTH}px`,
+      width: `${width}px`,
     }
   }
 
@@ -78,25 +80,25 @@ const popoverStyle = computed(() => {
   switch (side) {
     case 'bottom':
       top = r.top + r.height + POPOVER_GAP
-      left = clamp(r.left + r.width / 2 - POPOVER_WIDTH / 2, 8, vw - POPOVER_WIDTH - 8)
+      left = clamp(r.left + r.width / 2 - width / 2, 8, vw - width - 8)
       break
     case 'top':
       top = Math.max(8, r.top - POPOVER_GAP - 200)
-      left = clamp(r.left + r.width / 2 - POPOVER_WIDTH / 2, 8, vw - POPOVER_WIDTH - 8)
+      left = clamp(r.left + r.width / 2 - width / 2, 8, vw - width - 8)
       break
     case 'right':
       top = clamp(r.top + r.height / 2 - 100, 8, vh - 220)
-      left = Math.min(vw - POPOVER_WIDTH - 8, r.left + r.width + POPOVER_GAP)
+      left = Math.min(vw - width - 8, r.left + r.width + POPOVER_GAP)
       break
     case 'left':
       top = clamp(r.top + r.height / 2 - 100, 8, vh - 220)
-      left = Math.max(8, r.left - POPOVER_GAP - POPOVER_WIDTH)
+      left = Math.max(8, r.left - POPOVER_GAP - width)
       break
   }
   return {
     top: `${top}px`,
     left: `${left}px`,
-    width: `${POPOVER_WIDTH}px`,
+    width: `${width}px`,
   }
 })
 

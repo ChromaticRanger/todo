@@ -99,16 +99,18 @@ function openAdd(type: ItemType) {
   <div class="flex-shrink-0">
   <header class="bg-surface border-b border-border px-4 py-3 flex items-center justify-between">
     <div class="flex items-center gap-2">
-      <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-12" />
-      <div class="flex flex-col leading-none">
+      <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-8 md:size-12" />
+      <div class="flex flex-col leading-none landscape-phone:hidden">
         <h1
-          class="font-display italic text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
+          class="font-display italic text-xl md:text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
         >
           Stash Squirrel
         </h1>
       </div>
     </div>
     <div class="flex items-center gap-2">
+      <!-- Secondary actions — collapsed into the mobile bottom nav below md -->
+      <div class="hidden md:flex items-center gap-2">
       <!-- Add button with type dropdown -->
       <div data-tour="add-buttons" class="relative">
         <button
@@ -284,6 +286,8 @@ function openAdd(type: ItemType) {
         </svg>
         Admin
       </a>
+
+      </div>
 
       <!-- Current user / Account link. The Account page is hidden for demo
            visitors (it would expose Sign out, Delete account, billing) — the

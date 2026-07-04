@@ -386,7 +386,7 @@ async function handleEventEditDelete() {
         <!-- Left carousel button -->
         <button
           v-if="canScrollLeft"
-          class="fixed left-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-surface/90 border border-border-strong text-muted hover:text-text hover:bg-surface-hover transition-colors dark:shadow-none shadow-lg"
+          class="fixed left-4 top-1/2 -translate-y-1/2 z-10 hidden md:flex items-center justify-center size-8 rounded-full bg-surface/90 border border-border-strong text-muted hover:text-text hover:bg-surface-hover transition-colors dark:shadow-none shadow-lg"
           @click="scrollLeft"
         >
           <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -426,7 +426,7 @@ async function handleEventEditDelete() {
         <!-- Right carousel button -->
         <button
           v-if="canScrollRight"
-          class="fixed right-4 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center size-8 rounded-full bg-surface/90 border border-border-strong text-muted hover:text-text hover:bg-surface-hover transition-colors dark:shadow-none shadow-lg"
+          class="fixed right-4 top-1/2 -translate-y-1/2 z-10 hidden md:flex items-center justify-center size-8 rounded-full bg-surface/90 border border-border-strong text-muted hover:text-text hover:bg-surface-hover transition-colors dark:shadow-none shadow-lg"
           @click="scrollRight"
         >
           <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
