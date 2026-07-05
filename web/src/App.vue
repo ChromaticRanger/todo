@@ -31,6 +31,7 @@ import ResetPassword from './components/ResetPassword.vue'
 import AccountPage from './components/AccountPage.vue'
 import SettingsPage from './components/SettingsPage.vue'
 import AdminDashboard from './components/AdminDashboard.vue'
+import BlogView from './components/BlogView.vue'
 import WelcomeTour from './components/WelcomeTour.vue'
 import DueTodayModal from './components/DueTodayModal.vue'
 import SearchModal from './components/SearchModal.vue'
@@ -61,6 +62,11 @@ const isAccountFlow = ref(
 )
 const isAdminFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/admin'
+)
+// Blog / product-updates area — /blog (list) and /blog/<slug> (post). Signed-in
+// only, so it renders inside the auth-gated chain below.
+const isBlogFlow = ref(
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/blog')
 )
 const isSettingsFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/settings'
@@ -470,6 +476,7 @@ function onTourSkip() {
        hands off to the promote endpoint without losing the demo session. -->
   <LoginPage v-else-if="!authStore.isAuthenticated || (authStore.isDemo && isLoginFlow)" />
   <AdminDashboard v-else-if="isAdminFlow" />
+  <BlogView v-else-if="isBlogFlow" />
   <AccountPage v-else-if="isAccountFlow" />
   <SettingsPage v-else-if="isSettingsFlow" />
   <ChoosePlan v-else-if="authStore.needsPlanChoice" />

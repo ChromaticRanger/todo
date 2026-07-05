@@ -13,6 +13,7 @@ import planRouter from './routes/plan.js'
 import searchRouter from './routes/search.js'
 import importRouter from './routes/import.js'
 import sharedRouter from './routes/shared.js'
+import blogRouter from './routes/blog.js'
 import extensionRouter from './routes/extension.js'
 import accountRouter from './routes/account.js'
 import adminRouter from './routes/admin.js'
@@ -76,6 +77,10 @@ app.use('/api/account', accountRouter)
 // Admin Dashboard routes — gated by ADMIN_EMAILS, not by tier, so we mount
 // before requirePlan.
 app.use('/api/admin', adminRouter)
+
+// Blog reads are for any signed-in user regardless of tier, so mount before
+// requirePlan. Writes/uploads live under /api/admin/blog (admin-gated).
+app.use('/api/blog', blogRouter)
 
 // Everything below requires the user to have chosen a plan.
 app.use('/api', requirePlan)
