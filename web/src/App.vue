@@ -129,10 +129,28 @@ function openAddForm(type: ItemType) {
 const currentView = ref<ViewType>('all')
 const mode = ref<'lists' | 'calendar' | 'discover'>('lists')
 const showColumnsMenu = ref(false)
+// Set when the user clicks the "show in calendar" icon on a filter-list event.
+// Consumed by OverallSchedule on mount to anchor + highlight that event; cleared
+// on a normal calendar open so the plain Schedule button still lands on today.
+const calendarJumpTarget = ref<{ key: string; dueDate: number } | null>(null)
 
 function toggleCalendar() {
   if (authStore.tier !== 'pro') return
-  mode.value = mode.value === 'calendar' ? 'lists' : 'calendar'
+  if (mode.value === 'calendar') {
+    mode.value = 'lists'
+  } else {
+    calendarJumpTarget.value = null
+    mode.value = 'calendar'
+  }
+}
+
+function jumpToEventInCalendar(ev: Todo) {
+  if (authStore.tier !== 'pro') return
+  calendarJumpTarget.value = {
+    key: `${ev.id}-${ev.due_date ?? 0}`,
+    dueDate: ev.due_date ?? Math.floor(Date.now() / 1000),
+  }
+  mode.value = 'calendar'
 }
 
 function toggleDiscover() {
@@ -548,12 +566,13 @@ function onTourSkip() {
         :grid-columns="gridColumns"
         :highlight-id="highlightItemId"
         @highlight-cleared="clearHighlight"
+        @jump-to-calendar="jumpToEventInCalendar"
       />
       <DiscoverView
         v-else-if="mode === 'discover'"
         @cloned-to-list="handleClonedToList"
       />
-      <OverallSchedule v-else />
+      <OverallSchedule v-else :jump-target="calendarJumpTarget" />
     </main>
 
     <!-- Mobile bottom navigation (hidden at md and up) -->

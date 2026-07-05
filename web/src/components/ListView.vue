@@ -3,6 +3,7 @@ import { computed, ref, onMounted, onUnmounted, onUpdated } from 'vue'
 import draggable from 'vuedraggable'
 import type { Todo, TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
+import { useAuthStore } from '../stores/authStore'
 import { describeRecurrence } from '../lib/recurrence'
 import { useListStore } from '../stores/listStore'
 import { useSettingsStore, type CompletedWindow, type ListScope, type WindowedView } from '../stores/settingsStore'
@@ -25,6 +26,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'highlight-cleared': []
+  'jump-to-calendar': [event: Todo]
 }>()
 
 // Full class strings (not concatenated) so Tailwind's JIT picks them up.
@@ -39,6 +41,7 @@ const GRID_COLUMN_CLASSES: Record<2 | 3 | 4 | 5, string> = {
 const gridColumnClasses = computed(() => GRID_COLUMN_CLASSES[props.gridColumns])
 
 const store = useTodoStore()
+const authStore = useAuthStore()
 const listStore = useListStore()
 const settingsStore = useSettingsStore()
 
@@ -332,17 +335,34 @@ async function handleEventEditDelete() {
         Events
       </div>
       <div class="flex flex-col gap-1.5">
-        <button
+        <div
           v-for="ev in store.eventsInView"
           :key="eventRowKey(ev)"
-          class="text-left flex items-center gap-2 rounded-lg px-2 py-1.5 cal-chip border-l-4 transition-colors"
+          class="flex items-center rounded-lg cal-chip border-l-4 transition-colors"
           :style="colorVar(ev.color)"
-          @click="openEditEvent(ev)"
         >
-          <span class="flex-1 truncate text-sm text-text">{{ ev.title }}</span>
-          <span v-if="eventRecurrenceLabel(ev)" class="text-[10px] text-accent/80 shrink-0" :title="eventRecurrenceLabel(ev)">↻ {{ eventRecurrenceLabel(ev) }}</span>
-          <span class="text-xs text-muted shrink-0">{{ formatEventTime(ev) }}</span>
-        </button>
+          <button
+            type="button"
+            class="text-left flex-1 min-w-0 flex items-center gap-2 px-2 py-1.5"
+            @click="openEditEvent(ev)"
+          >
+            <span class="flex-1 truncate text-sm text-text">{{ ev.title }}</span>
+            <span v-if="eventRecurrenceLabel(ev)" class="text-[10px] text-accent/80 shrink-0" :title="eventRecurrenceLabel(ev)">↻ {{ eventRecurrenceLabel(ev) }}</span>
+            <span class="text-xs text-muted shrink-0">{{ formatEventTime(ev) }}</span>
+          </button>
+          <button
+            v-if="authStore.tier === 'pro'"
+            type="button"
+            class="shrink-0 self-stretch flex items-center pl-1 pr-2 text-muted/60 hover:text-accent transition-colors"
+            :title="`Show “${ev.title}” in the calendar`"
+            aria-label="Show in calendar"
+            @click="emit('jump-to-calendar', ev)"
+          >
+            <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
 

@@ -12,6 +12,12 @@ import { colorVar } from '../lib/eventColor'
 import { useCalendarDrag, type DragMode } from '../composables/useCalendarDrag'
 import TodoForm from './TodoForm.vue'
 
+const props = defineProps<{
+  // When set, the calendar opens anchored on this event's date and briefly
+  // highlights it — the "jump to event" action from the filter-list Events block.
+  jumpTarget?: { key: string; dueDate: number } | null
+}>()
+
 const todoStore = useTodoStore()
 const listStore = useListStore()
 const settingsStore = useSettingsStore()
@@ -19,12 +25,19 @@ const settingsStore = useSettingsStore()
 const today = new Date()
 // Single anchor Date for the visible range. For month mode it's the 1st of the
 // shown month; for week mode it's the Monday of the shown week. Initialise
-// based on the persisted view mode so a reload lands on the current bucket.
+// based on the persisted view mode so a reload lands on the current bucket — or,
+// when jumping to an event, on that event's date instead of today.
+const anchorBase = props.jumpTarget ? new Date(props.jumpTarget.dueDate * 1000) : today
 const viewAnchor = ref<Date>(
   settingsStore.calendarView === 'week'
-    ? startOfWeek(today)
-    : new Date(today.getFullYear(), today.getMonth(), 1)
+    ? startOfWeek(anchorBase)
+    : new Date(anchorBase.getFullYear(), anchorBase.getMonth(), 1)
 )
+
+// Transient highlight for the "jump to event" action: the eventKey of the
+// event to ring, cleared on a timer once the jump has landed.
+const highlightKey = ref<string | null>(null)
+let highlightTimer: ReturnType<typeof setTimeout> | null = null
 
 const todos = ref<Todo[]>([])
 const loading = ref(false)
@@ -667,6 +680,21 @@ function scrollWeekTo8am() {
   })
 }
 
+// Ring the jumped-to event for a few seconds and, in week mode, scroll its hour
+// into view. Called on mount when a jumpTarget prop is present.
+function applyHighlight(target: { key: string; dueDate: number }) {
+  highlightKey.value = target.key
+  if (highlightTimer) clearTimeout(highlightTimer)
+  highlightTimer = setTimeout(() => { highlightKey.value = null }, 3000)
+  if (settingsStore.calendarView === 'week') {
+    nextTick(() => {
+      if (!hourGridScroll.value) return
+      const hour = new Date(target.dueDate * 1000).getHours()
+      hourGridScroll.value.scrollTop = Math.max(0, (hour - 1) * HOUR_PX)
+    })
+  }
+}
+
 // Right-click on the hour grid: derive the time from the click's Y offset and
 // snap to 15 min. The cell day is passed by the caller.
 function onHourCellContextMenu(e: MouseEvent, date: Date) {
@@ -714,9 +742,12 @@ watch(() => todoStore.eventsVersion, () => { fetchCalendar() })
 onMounted(() => {
   fetchCalendar()
   if (settingsStore.calendarView === 'week') {
-    scrollWeekTo8am()
+    // applyHighlight does its own hour-aware scroll when jumping, so skip the
+    // default 8am scroll in that case to avoid a visible double-jump.
+    if (!props.jumpTarget) scrollWeekTo8am()
     startNowTick()
   }
+  if (props.jumpTarget) applyHighlight(props.jumpTarget)
 })
 
 // Toggle the now-tick + auto-scroll whenever the view mode changes at runtime.
@@ -950,6 +981,17 @@ function eventKey(t: Todo): string {
   return `${t.id}-${t.due_date ?? 0}`
 }
 
+function isHighlighted(t: Todo): boolean {
+  return t.type === 'event' && highlightKey.value !== null && eventKey(t) === highlightKey.value
+}
+
+// Halo class applied to the event currently jumped-to (empty otherwise). Shared
+// across every calendar surface so month, week and agenda all light up the same
+// event. z-10 lifts it over neighbours so the ring isn't clipped by them.
+function highlightClass(t: Todo): string {
+  return isHighlighted(t) ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg z-10' : ''
+}
+
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     if (editing.value || creatingDue.value != null) return // TodoForm handles its own escape
@@ -974,6 +1016,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', onReposition)
   window.removeEventListener('scroll', onReposition, true)
   stopNowTick()
+  if (highlightTimer) clearTimeout(highlightTimer)
 })
 
 // Recompute on month change in case the popover was open during a re-render.
@@ -1078,6 +1121,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
             v-for="t in chipsFor(cell.date).visible"
             :key="t.type === 'event' ? eventKey(t) : t.id"
             class="group/chip relative text-left touch-none cursor-grab active:cursor-grabbing"
+            :class="highlightClass(t)"
             :title="t.type === 'event' ? `Event · ${formatEventTime(t)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
             @pointerdown="onItemPointerDown($event, t, 'move')"
           >
@@ -1125,7 +1169,8 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
             <button
               v-for="t in dayItems(cell.date)"
               :key="t.type === 'event' ? eventKey(t) : t.id"
-              class="block w-full text-left"
+              class="block w-full text-left rounded"
+              :class="highlightClass(t)"
               :title="t.type === 'event' ? `Event · ${formatEventTime(t)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
               @click="openEdit(t)"
             >
@@ -1198,6 +1243,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
             v-for="bar in weekAllDayBars.bars"
             :key="bar.key"
             class="group/aday absolute rounded cal-block border-l-4 flex items-center overflow-hidden px-1.5 text-left text-[11px] transition-colors touch-none cursor-grab active:cursor-grabbing"
+            :class="highlightClass(bar.todo)"
             :style="{
               top: `${bar.row * (ALLDAY_BAR_PX + 2)}px`,
               height: `${ALLDAY_BAR_PX}px`,
@@ -1277,6 +1323,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
               v-for="b in blocksFor(cell.date)"
               :key="b.key"
               class="group absolute rounded-md cal-block border-l-4 text-left text-[11px] overflow-hidden px-1.5 py-0.5 transition-colors touch-none cursor-grab active:cursor-grabbing"
+              :class="highlightClass(b.todo)"
               :style="{
                 top: `${b.topPx}px`,
                 height: `${b.heightPx}px`,
@@ -1351,7 +1398,8 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
           <button
             v-for="t in day.items"
             :key="t.type === 'event' ? eventKey(t) : t.id"
-            class="w-full text-left"
+            class="w-full text-left rounded"
+            :class="highlightClass(t)"
             :title="t.type === 'event' ? `Event · ${formatEventTime(t)}${eventRecurrenceLabel(t) ? ' · ' + eventRecurrenceLabel(t) : ''}` : `${t.list_name} : ${t.category}`"
             @click="openEdit(t)"
           >
