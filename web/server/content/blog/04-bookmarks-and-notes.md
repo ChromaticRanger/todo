@@ -13,6 +13,8 @@ Alongside todos, you can now save:
 - **Bookmarks** — links you want to come back to, each one showing the site's little icon so it's easy to spot at a glance
 - **Notes** — for the things that aren't tasks at all: ideas, snippets, reminders, lists within lists
 
+![Bookmarks with site icons sitting alongside notes and todos in a list](/blog-images/bookmarks-and-notes.png)
+
 Notes grew up over time too. They started as plain text, then learned to understand **Markdown**, so you can add headings, bold, links and lists. Later they learned to show **images** as well, which turned a humble note into something closer to a scrapbook page.
 
 Getting the little icons on bookmarks right was a surprisingly deep rabbit hole — I ended up with several fallbacks so that even awkward sites end up with a sensible icon rather than a blank square.

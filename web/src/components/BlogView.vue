@@ -57,6 +57,21 @@ function fmtDate(value: string | null): string {
   return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+// markdown-it renders a standalone image as `<p><img ...></p>`. Upgrade those to
+// a <figure> and surface the alt text as a caption, so screenshots read as
+// intentional figures. This only reshapes the renderer's own (already-escaped,
+// html:false) output — no user HTML is introduced, so it stays XSS-safe.
+function renderBody(markdown: string): string {
+  return renderMarkdown(markdown).replace(
+    /<p>\s*(<img\b[^>]*>)\s*<\/p>/g,
+    (_full, img: string) => {
+      const alt = /\balt="([^"]*)"/.exec(img)?.[1] ?? ''
+      const caption = alt ? `<figcaption>${alt}</figcaption>` : ''
+      return `<figure class="shot">${img}${caption}</figure>`
+    }
+  )
+}
+
 async function loadList() {
   try {
     const res = await apiFetch('/api/blog')
@@ -88,7 +103,7 @@ async function loadPost(slug: string) {
     post.value = body.post
     prevPost.value = body.neighbours?.prev ?? null
     nextPost.value = body.neighbours?.next ?? null
-    bodyHtml.value = renderMarkdown(post.value.body)
+    bodyHtml.value = renderBody(post.value.body)
   } catch (e) {
     error.value = String(e)
   }
@@ -372,10 +387,27 @@ onMounted(async () => {
   color: var(--ink-soft);
   font-style: italic;
 }
+.blog-root .prose :deep(figure) {
+  margin: 28px 0;
+}
 .blog-root .prose :deep(img) {
+  display: block;
   max-width: 100%;
   height: auto;
-  border-radius: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: #fff;
+}
+/* Screenshots get a soft lift off the paper; inline images stay flat. */
+.blog-root .prose :deep(figure.shot img) {
+  box-shadow: 0 1px 2px rgba(31, 26, 23, 0.08), 0 10px 28px rgba(31, 26, 23, 0.07);
+}
+.blog-root .prose :deep(figcaption) {
+  margin-top: 10px;
+  text-align: center;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--ink-soft);
 }
 .blog-root .prose :deep(code) {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;

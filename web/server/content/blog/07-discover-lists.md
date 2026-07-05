@@ -16,6 +16,8 @@ Here's how it works:
 - You can **publish** your own lists to Discover, so other people can find them.
 - And when a list catches your eye, you can **clone it into your own account** with a click and make it your own — tweak it, add to it, delete the bits you don't need. Your copy is yours; the original stays put.
 
+![The Discover shelf of curated and community lists](/blog-images/discover.png)
+
 Published lists keep their categories intact when you clone them, so the structure someone thoughtfully built comes across too, not just the raw items.
 
 Discover is still young, and I think it's one of the more interesting directions the app could grow in. A todo app is useful; a todo app that quietly shares good ideas between people is something a bit more special.
