@@ -18,6 +18,15 @@ const props = defineProps<{
   jumpTarget?: { key: string; dueDate: number } | null
 }>()
 
+const emit = defineEmits<{
+  // Reveal a calendar todo back in its list + category (the mirror of the
+  // filter-list "show in calendar" jump).
+  'jump-to-list': [todo: Todo]
+}>()
+
+// List-bullet glyph for the "reveal in list" control on todo chips.
+const LIST_ICON_PATH = 'M8 6h11M8 12h11M8 18h11M3.5 6h.01M3.5 12h.01M3.5 18h.01'
+
 const todoStore = useTodoStore()
 const listStore = useListStore()
 const settingsStore = useSettingsStore()
@@ -981,8 +990,14 @@ function eventKey(t: Todo): string {
   return `${t.id}-${t.due_date ?? 0}`
 }
 
+// Stable key used to match a jumped-to item against its rendered chips. Events
+// carry their occurrence's due_date (a series has many); todos are unique by id.
+function itemHighlightKey(t: Todo): string {
+  return t.type === 'event' ? eventKey(t) : `todo-${t.id}`
+}
+
 function isHighlighted(t: Todo): boolean {
-  return t.type === 'event' && highlightKey.value !== null && eventKey(t) === highlightKey.value
+  return highlightKey.value !== null && itemHighlightKey(t) === highlightKey.value
 }
 
 // Halo class applied to the event currently jumped-to (empty otherwise). Shared
@@ -1138,6 +1153,20 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
               <span v-else class="size-1.5 rounded-full shrink-0" :class="listColour(t.list_name)" />
               <span class="truncate flex-1">{{ t.title }}</span>
               <span v-if="t.type === 'event' && eventRecurrenceLabel(t)" class="text-[10px] text-accent/80 shrink-0" aria-label="Recurring">↻</span>
+              <!-- Reveal-in-list (todos only): jump back to this todo in its list + category. -->
+              <span
+                v-if="t.type !== 'event'"
+                role="button"
+                aria-label="Show in list"
+                :title="`Show “${t.title}” in ${t.list_name} · ${t.category}`"
+                class="shrink-0 -mr-0.5 text-muted/50 hover:text-accent transition-colors cursor-pointer"
+                @pointerdown.stop
+                @click.stop="emit('jump-to-list', t)"
+              >
+                <svg class="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" :d="LIST_ICON_PATH" />
+                </svg>
+              </span>
             </span>
             <!-- Expand handle: drag the right edge across cells to span days (events only). -->
             <div
@@ -1187,6 +1216,19 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
                 <span v-else class="size-1.5 rounded-full shrink-0" :class="listColour(t.list_name)" />
                 <span class="truncate flex-1">{{ t.title }}</span>
                 <span v-if="t.type === 'event' && eventRecurrenceLabel(t)" class="text-[10px] text-accent/80 shrink-0" aria-label="Recurring">↻</span>
+                <span
+                  v-if="t.type !== 'event'"
+                  role="button"
+                  aria-label="Show in list"
+                  :title="`Show “${t.title}” in ${t.list_name} · ${t.category}`"
+                  class="shrink-0 text-muted/60 hover:text-accent transition-colors cursor-pointer"
+                  @pointerdown.stop
+                  @click.stop="emit('jump-to-list', t)"
+                >
+                  <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" :d="LIST_ICON_PATH" />
+                  </svg>
+                </span>
               </span>
             </button>
           </div>
@@ -1256,6 +1298,20 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
             @pointerdown="onItemPointerDown($event, bar.todo, 'move')"
           >
             <span class="truncate font-medium text-text pointer-events-none">{{ bar.todo.title }}</span>
+            <!-- Reveal-in-list (todos only), inset so it clears the resize grip. -->
+            <div
+              v-if="bar.todo.type !== 'event'"
+              role="button"
+              aria-label="Show in list"
+              :title="`Show “${bar.todo.title}” in ${bar.todo.list_name} · ${bar.todo.category}`"
+              class="absolute inset-y-0 right-2 flex items-center text-muted/70 hover:text-accent opacity-0 group-hover/aday:opacity-100 transition-opacity cursor-pointer"
+              @pointerdown.stop
+              @click.stop="emit('jump-to-list', bar.todo)"
+            >
+              <svg class="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" :d="LIST_ICON_PATH" />
+              </svg>
+            </div>
             <!-- Resize handle: drag the right edge to extend/shrink the span. -->
             <div
               class="absolute inset-y-0 right-0 w-2 cursor-ew-resize opacity-0 group-hover/aday:opacity-100"
@@ -1350,6 +1406,20 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
                   @pointerdown.stop="onItemPointerDown($event, b.todo, 'resize-end')"
                 />
               </template>
+              <!-- Reveal-in-list (todos only). -->
+              <div
+                v-else
+                role="button"
+                aria-label="Show in list"
+                :title="`Show “${b.todo.title}” in ${b.todo.list_name} · ${b.todo.category}`"
+                class="absolute top-0 right-0 p-0.5 text-muted/70 hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                @pointerdown.stop
+                @click.stop="emit('jump-to-list', b.todo)"
+              >
+                <svg class="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" :d="LIST_ICON_PATH" />
+                </svg>
+              </div>
             </button>
 
             <!-- Drag ghost for this column -->
@@ -1417,6 +1487,19 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
               <span class="truncate flex-1">{{ t.title }}</span>
               <span v-if="t.type === 'event' && eventRecurrenceLabel(t)" class="text-[10px] text-accent/80 shrink-0" aria-label="Recurring">↻</span>
               <span class="text-[10px] text-muted shrink-0">{{ t.type === 'event' ? formatEventTime(t) : t.list_name }}</span>
+              <span
+                v-if="t.type !== 'event'"
+                role="button"
+                aria-label="Show in list"
+                :title="`Show “${t.title}” in ${t.list_name} · ${t.category}`"
+                class="shrink-0 text-muted/60 hover:text-accent transition-colors cursor-pointer"
+                @pointerdown.stop
+                @click.stop="emit('jump-to-list', t)"
+              >
+                <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" :d="LIST_ICON_PATH" />
+                </svg>
+              </span>
             </span>
           </button>
         </div>

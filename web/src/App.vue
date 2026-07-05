@@ -144,11 +144,14 @@ function toggleCalendar() {
   }
 }
 
-function jumpToEventInCalendar(ev: Todo) {
+// Lists → Calendar: the "show in calendar" icon on a filter-list event or on a
+// todo's due date. The key must match how OverallSchedule keys each item type
+// (events by id+due_date, todos by id) so the right one gets highlighted.
+function revealInCalendar(item: Todo) {
   if (authStore.tier !== 'pro') return
   calendarJumpTarget.value = {
-    key: `${ev.id}-${ev.due_date ?? 0}`,
-    dueDate: ev.due_date ?? Math.floor(Date.now() / 1000),
+    key: item.type === 'event' ? `${item.id}-${item.due_date ?? 0}` : `todo-${item.id}`,
+    dueDate: item.due_date ?? Math.floor(Date.now() / 1000),
   }
   mode.value = 'calendar'
 }
@@ -249,8 +252,10 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-async function onSearchSelect(item: Todo) {
-  searchStore.closeSearch()
+// Switch to the Lists view, land on the list + view that contains `item`, then
+// highlight-and-scroll to it. Shared by global search and the calendar's
+// "reveal in list" jump.
+async function revealTodoInList(item: Todo) {
   if (mode.value !== 'lists') mode.value = 'lists'
 
   const targetView: ViewType = item.status === 1 ? 'completed' : 'all'
@@ -280,6 +285,16 @@ async function onSearchSelect(item: Todo) {
   }
 
   highlightItemId.value = item.id
+}
+
+async function onSearchSelect(item: Todo) {
+  searchStore.closeSearch()
+  await revealTodoInList(item)
+}
+
+// Calendar → Lists: the "reveal in list" icon on a calendar todo chip.
+function jumpToTodoInList(item: Todo) {
+  void revealTodoInList(item)
 }
 
 function clearHighlight() {
@@ -566,13 +581,13 @@ function onTourSkip() {
         :grid-columns="gridColumns"
         :highlight-id="highlightItemId"
         @highlight-cleared="clearHighlight"
-        @jump-to-calendar="jumpToEventInCalendar"
+        @jump-to-calendar="revealInCalendar"
       />
       <DiscoverView
         v-else-if="mode === 'discover'"
         @cloned-to-list="handleClonedToList"
       />
-      <OverallSchedule v-else :jump-target="calendarJumpTarget" />
+      <OverallSchedule v-else :jump-target="calendarJumpTarget" @jump-to-list="jumpToTodoInList" />
     </main>
 
     <!-- Mobile bottom navigation (hidden at md and up) -->

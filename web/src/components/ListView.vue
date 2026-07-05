@@ -392,6 +392,7 @@ async function handleEventEditDelete() {
               layout="grid"
               :highlight-id="props.highlightId"
               @highlight-cleared="emit('highlight-cleared')"
+              @jump-to-calendar="emit('jump-to-calendar', $event)"
             />
           </div>
         </template>
@@ -438,6 +439,7 @@ async function handleEventEditDelete() {
                 layout="kanban"
                 :highlight-id="props.highlightId"
                 @highlight-cleared="emit('highlight-cleared')"
+                @jump-to-calendar="emit('jump-to-calendar', $event)"
               />
             </div>
           </template>

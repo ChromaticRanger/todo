@@ -5,6 +5,7 @@ import { Status } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useListStore } from '../stores/listStore'
+import { useAuthStore } from '../stores/authStore'
 import { priorityBorderClass as borderClassFor } from '../lib/priorityClass'
 import { renderMarkdown } from '../lib/markdown'
 import TodoForm from './TodoForm.vue'
@@ -22,11 +23,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'highlight-cleared': []
+  'jump-to-calendar': [todo: Todo]
 }>()
 
 const store = useTodoStore()
 const settingsStore = useSettingsStore()
 const listStore = useListStore()
+const authStore = useAuthStore()
 
 const rootEl = ref<HTMLElement | null>(null)
 const flashing = ref(false)
@@ -397,10 +400,22 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
         </button>
         <span
           v-if="dueDateStr"
-          class="text-xs"
+          class="inline-flex items-center gap-1 text-xs"
           :class="isDueOverdue ? 'text-danger font-medium' : 'text-muted'"
         >
-          {{ isDueOverdue ? '⚠ ' : '' }}{{ dueDateStr }}
+          <button
+            v-if="authStore.tier === 'pro'"
+            type="button"
+            class="shrink-0 hover:text-accent transition-colors cursor-pointer"
+            :title="`Show “${todo.title}” in the calendar`"
+            aria-label="Show in calendar"
+            @click.stop="emit('jump-to-calendar', todo)"
+          >
+            <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+          <span>{{ isDueOverdue ? '⚠ ' : '' }}{{ dueDateStr }}</span>
         </span>
         <span v-if="repeatStr" class="text-xs text-accent">{{ repeatStr }}</span>
       </div>
