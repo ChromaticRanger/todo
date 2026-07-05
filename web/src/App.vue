@@ -129,10 +129,31 @@ function openAddForm(type: ItemType) {
 const currentView = ref<ViewType>('all')
 const mode = ref<'lists' | 'calendar' | 'discover'>('lists')
 const showColumnsMenu = ref(false)
+// Set when the user clicks the "show in calendar" icon on a filter-list event.
+// Consumed by OverallSchedule on mount to anchor + highlight that event; cleared
+// on a normal calendar open so the plain Schedule button still lands on today.
+const calendarJumpTarget = ref<{ key: string; dueDate: number } | null>(null)
 
 function toggleCalendar() {
   if (authStore.tier !== 'pro') return
-  mode.value = mode.value === 'calendar' ? 'lists' : 'calendar'
+  if (mode.value === 'calendar') {
+    mode.value = 'lists'
+  } else {
+    calendarJumpTarget.value = null
+    mode.value = 'calendar'
+  }
+}
+
+// Lists → Calendar: the "show in calendar" icon on a filter-list event or on a
+// todo's due date. The key must match how OverallSchedule keys each item type
+// (events by id+due_date, todos by id) so the right one gets highlighted.
+function revealInCalendar(item: Todo) {
+  if (authStore.tier !== 'pro') return
+  calendarJumpTarget.value = {
+    key: item.type === 'event' ? `${item.id}-${item.due_date ?? 0}` : `todo-${item.id}`,
+    dueDate: item.due_date ?? Math.floor(Date.now() / 1000),
+  }
+  mode.value = 'calendar'
 }
 
 function toggleDiscover() {
@@ -231,8 +252,10 @@ function handleKeydown(e: KeyboardEvent) {
   }
 }
 
-async function onSearchSelect(item: Todo) {
-  searchStore.closeSearch()
+// Switch to the Lists view, land on the list + view that contains `item`, then
+// highlight-and-scroll to it. Shared by global search and the calendar's
+// "reveal in list" jump.
+async function revealTodoInList(item: Todo) {
   if (mode.value !== 'lists') mode.value = 'lists'
 
   const targetView: ViewType = item.status === 1 ? 'completed' : 'all'
@@ -262,6 +285,16 @@ async function onSearchSelect(item: Todo) {
   }
 
   highlightItemId.value = item.id
+}
+
+async function onSearchSelect(item: Todo) {
+  searchStore.closeSearch()
+  await revealTodoInList(item)
+}
+
+// Calendar → Lists: the "reveal in list" icon on a calendar todo chip.
+function jumpToTodoInList(item: Todo) {
+  void revealTodoInList(item)
 }
 
 function clearHighlight() {
@@ -548,12 +581,13 @@ function onTourSkip() {
         :grid-columns="gridColumns"
         :highlight-id="highlightItemId"
         @highlight-cleared="clearHighlight"
+        @jump-to-calendar="revealInCalendar"
       />
       <DiscoverView
         v-else-if="mode === 'discover'"
         @cloned-to-list="handleClonedToList"
       />
-      <OverallSchedule v-else />
+      <OverallSchedule v-else :jump-target="calendarJumpTarget" @jump-to-list="jumpToTodoInList" />
     </main>
 
     <!-- Mobile bottom navigation (hidden at md and up) -->

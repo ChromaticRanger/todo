@@ -87,9 +87,11 @@ async function handleDelete() {
       flashing ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : '',
     ]"
   >
-    <!-- Drag handle (hover-revealed, top-left) -->
+    <!-- Drag handle. Desktop: hover-revealed, bottom-left. Touch: always shown,
+         so centre it vertically in the left gutter, clear of the favicon and name
+         (the action buttons sit in the opposite, right-hand gutter). -->
     <span
-      class="item-drag-handle absolute bottom-0 left-0 z-10 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm text-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity"
+      class="item-drag-handle absolute bottom-0 left-0 z-10 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm text-muted cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity touch:top-1/2 touch:bottom-auto touch:-translate-y-1/2"
       title="Drag to reorder"
       @click.stop.prevent
     >
@@ -99,9 +101,11 @@ async function handleDelete() {
         <circle cx="6" cy="13" r="1.2" /><circle cx="10" cy="13" r="1.2" />
       </svg>
     </span>
-    <!-- Action overlay (hover-revealed, top-right) -->
+    <!-- Action overlay (hover-revealed, top-right). On touch it's always visible,
+         so stack it vertically there to clear the favicon instead of banding
+         across the top of it; desktop keeps the compact horizontal hover-bar. -->
     <div
-      class="absolute top-0 right-0 z-10 flex items-center gap-0.5 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity"
+      class="absolute top-0 right-0 z-10 flex items-center gap-0.5 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity touch:flex-col"
     >
       <button
         class="p-0.5 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
@@ -132,13 +136,15 @@ async function handleDelete() {
       </button>
     </div>
 
-    <!-- Clickable tile -->
+    <!-- Clickable tile. On touch, widen it and reserve a gutter on each side (px)
+         so the favicon centres between the drag handle (left) and the action
+         column (right), both clear of the icon and name. -->
     <a
       :href="todo.url ?? undefined"
       target="_blank"
       rel="noopener noreferrer"
       :title="todo.title"
-      class="flex flex-col items-center w-16 rounded-lg p-1 hover:bg-surface-hover transition-colors"
+      class="flex flex-col items-center w-16 rounded-lg p-1 hover:bg-surface-hover transition-colors touch:w-24 touch:px-6"
     >
       <BookmarkFavicon :url="todo.url" :title="todo.title" size="lg" />
       <span class="mt-1 w-full text-center text-[11px] leading-tight text-text truncate">

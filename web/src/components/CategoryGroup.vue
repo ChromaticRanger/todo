@@ -21,6 +21,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'highlight-cleared': []
+  'jump-to-calendar': [todo: Todo]
 }>()
 
 const store = useTodoStore()
@@ -336,6 +337,7 @@ async function handleMoveToGeneral() {
                 :current-list="listStore.activeList"
                 :highlight-id="props.highlightId ?? null"
                 @highlight-cleared="emit('highlight-cleared')"
+                @jump-to-calendar="emit('jump-to-calendar', $event)"
               />
             </div>
           </template>
@@ -350,7 +352,7 @@ async function handleMoveToGeneral() {
           :animation="150"
           ghost-class="opacity-40"
           :disabled="!dragEnabled"
-          class="flex flex-wrap gap-1.5 min-h-[1.5rem]"
+          class="flex flex-wrap justify-center gap-1.5 min-h-[1.5rem]"
           @update:model-value="onBookmarksReorder"
         >
           <template #item="{ element: todo }">
@@ -385,6 +387,7 @@ async function handleMoveToGeneral() {
                 :current-list="listStore.activeList"
                 :highlight-id="props.highlightId ?? null"
                 @highlight-cleared="emit('highlight-cleared')"
+                @jump-to-calendar="emit('jump-to-calendar', $event)"
               />
             </div>
           </template>
