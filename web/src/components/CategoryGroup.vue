@@ -352,7 +352,7 @@ async function handleMoveToGeneral() {
           :animation="150"
           ghost-class="opacity-40"
           :disabled="!dragEnabled"
-          class="flex flex-wrap gap-1.5 min-h-[1.5rem]"
+          class="flex flex-wrap justify-center gap-1.5 min-h-[1.5rem]"
           @update:model-value="onBookmarksReorder"
         >
           <template #item="{ element: todo }">

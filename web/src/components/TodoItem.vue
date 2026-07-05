@@ -7,6 +7,7 @@ import { useSettingsStore } from '../stores/settingsStore'
 import { useListStore } from '../stores/listStore'
 import { useAuthStore } from '../stores/authStore'
 import { priorityBorderClass as borderClassFor } from '../lib/priorityClass'
+import { colorVar } from '../lib/eventColor'
 import { renderMarkdown } from '../lib/markdown'
 import TodoForm from './TodoForm.vue'
 import MoveDialog from './MoveDialog.vue'
@@ -75,6 +76,12 @@ const noteBodyHtml = computed(() => isNote.value ? renderMarkdown(props.todo.des
 const priorityBorderClass = computed(() =>
   isTodo.value ? borderClassFor(props.todo.priority) : 'border-l-border-strong'
 )
+
+// A per-item colour (set in the edit popup) tints the row background, matching
+// how the calendar chips render it. Left border keeps showing priority. `--evt`
+// is consumed by the `.item-tint` class in style.css.
+const hasColor = computed(() => props.todo.color != null)
+const colorTintStyle = computed(() => hasColor.value ? colorVar(props.todo.color) : undefined)
 
 const isCompleted = computed(() => props.todo.status === Status.COMPLETED)
 
@@ -324,12 +331,14 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     v-else
     ref="rootEl"
     data-item-type="todo"
-    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 bg-surface-hover/40 hover:bg-surface-hover dark:bg-surface-hover/80 transition duration-200 ease-out group"
+    class="flex items-center gap-3 px-3 py-2 rounded-lg border-l-8 transition duration-200 ease-out group"
     :class="[
       priorityBorderClass,
+      hasColor ? 'item-tint' : 'bg-surface-hover/40 hover:bg-surface-hover dark:bg-surface-hover/80',
       isDeleting ? 'opacity-0 scale-95 -translate-x-2 pointer-events-none' : (isCompleted ? 'opacity-60' : ''),
       flashing ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg' : '',
     ]"
+    :style="colorTintStyle"
   >
     <span
       class="item-drag-handle flex-shrink-0 -ml-1 text-muted cursor-grab active:cursor-grabbing"

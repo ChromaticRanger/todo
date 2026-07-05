@@ -426,6 +426,15 @@
   .cal-block:hover {
     background: color-mix(in oklab, var(--evt, var(--color-accent)) 30%, transparent);
   }
+
+  /* Coloured list rows (TodoItem): mix the item's `--evt` colour into the row
+     background, same source as the calendar chips. Border stays priority-driven. */
+  .item-tint {
+    background: color-mix(in oklab, var(--evt, var(--color-accent)) 15%, transparent);
+  }
+  .item-tint:hover {
+    background: color-mix(in oklab, var(--evt, var(--color-accent)) 25%, transparent);
+  }
 }
 
 @layer utilities {
