@@ -1,6 +1,9 @@
-import { Router } from 'express'
+import { Router, type Request, type Response, type NextFunction } from 'express'
+import multer from 'multer'
 import { query } from '../db.js'
 import { requireAdmin } from '../middleware/requireAdmin.js'
+import { parseFrontmatter, FrontmatterError } from '../lib/frontmatter.js'
+import { upsertBlogPost } from '../lib/blogPosts.js'
 
 const router = Router()
 
@@ -257,6 +260,139 @@ router.post('/users/:id/tier', async (req, res) => {
     res.json({ ok: true, tier, tierSource: 'comp' })
   } catch (err) {
     console.error('[admin] tier toggle failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Blog management — upload/list/publish/delete posts.
+// ---------------------------------------------------------------------------
+
+const MAX_POST_BYTES = 512 * 1024
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_POST_BYTES, files: 1 },
+})
+
+// Mirror import.ts: translate multer errors into clean JSON responses.
+function uploadSingle(req: Request, res: Response, next: NextFunction) {
+  upload.single('file')(req, res, (err: unknown) => {
+    if (!err) return next()
+    const e = err as { code?: string; message?: string }
+    if (e.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'file_too_large', limit_bytes: MAX_POST_BYTES })
+    }
+    return res.status(400).json({ error: 'upload_failed', message: e.message ?? String(err) })
+  })
+}
+
+interface BlogRow {
+  id: number
+  slug: string
+  title: string
+  summary: string
+  is_published: boolean
+  published_at: Date | null
+  updated_at: Date
+}
+
+// GET /api/admin/blog — every post incl. drafts, newest first.
+router.get('/blog', async (_req, res) => {
+  try {
+    const { rows } = await query<BlogRow>(
+      `SELECT id, slug, title, summary, is_published, published_at, updated_at
+         FROM blog_posts
+        ORDER BY COALESCE(published_at, created_at) DESC`
+    )
+    res.json({ posts: rows })
+  } catch (err) {
+    console.error('[admin] blog list failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// POST /api/admin/blog — upload a .md file; upsert by slug so re-uploading edits.
+router.post('/blog', uploadSingle, async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: 'file_required' })
+    return
+  }
+  let parsed
+  try {
+    parsed = parseFrontmatter(req.file.buffer.toString('utf8'))
+  } catch (err) {
+    if (err instanceof FrontmatterError) {
+      res.status(400).json({ error: 'invalid_frontmatter', message: err.message })
+      return
+    }
+    console.error('[admin] blog parse failed:', err)
+    res.status(500).json({ error: 'parse_failed' })
+    return
+  }
+  if (!parsed.body) {
+    res.status(400).json({ error: 'empty_body', message: 'The post has no body content.' })
+    return
+  }
+  try {
+    const post = await upsertBlogPost(parsed, req.adminEmail ?? '')
+    console.info(`[admin] ${req.adminEmail} uploaded blog post "${parsed.slug}" (published=${parsed.published})`)
+    res.json({ post })
+  } catch (err) {
+    console.error('[admin] blog upsert failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PATCH /api/admin/blog/:id — publish / unpublish without a re-upload.
+router.patch('/blog/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  const isPublished = req.body?.is_published
+  if (!Number.isInteger(id) || typeof isPublished !== 'boolean') {
+    res.status(400).json({ error: 'is_published (boolean) is required' })
+    return
+  }
+  try {
+    const { rows } = await query<BlogRow>(
+      `UPDATE blog_posts SET
+         is_published = $1,
+         published_at = CASE
+           WHEN $1 AND published_at IS NULL THEN NOW()
+           WHEN NOT $1 THEN NULL
+           ELSE published_at
+         END,
+         updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, slug, title, summary, is_published, published_at, updated_at`,
+      [isPublished, id]
+    )
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'not_found' })
+      return
+    }
+    res.json({ post: rows[0] })
+  } catch (err) {
+    console.error('[admin] blog publish toggle failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// DELETE /api/admin/blog/:id — delete a post (reactions cascade).
+router.delete('/blog/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'invalid id' })
+    return
+  }
+  try {
+    const { rowCount } = await query(`DELETE FROM blog_posts WHERE id = $1`, [id])
+    if (rowCount === 0) {
+      res.status(404).json({ error: 'not_found' })
+      return
+    }
+    console.info(`[admin] ${req.adminEmail} deleted blog post #${id}`)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[admin] blog delete failed:', err)
     res.status(500).json({ error: String(err) })
   }
 })

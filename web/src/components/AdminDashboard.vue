@@ -213,6 +213,117 @@ async function toggleTier(u: UserRow | UserDetail['user'], nextTier: 'free' | 'p
   }
 }
 
+// ---- Blog management ----
+interface BlogPost {
+  id: number
+  slug: string
+  title: string
+  summary: string
+  is_published: boolean
+  published_at: string | null
+  updated_at: string
+}
+
+const blogPosts = ref<BlogPost[]>([])
+const blogError = ref('')
+const blogLoading = ref(false)
+const uploading = ref(false)
+const uploadMsg = ref('')
+const blogFileInput = ref<HTMLInputElement | null>(null)
+const blogBusyId = ref<number | null>(null)
+
+async function loadBlog() {
+  blogLoading.value = true
+  blogError.value = ''
+  try {
+    const res = await apiFetch('/api/admin/blog')
+    if (res.status === 403) {
+      accessDenied.value = true
+      return
+    }
+    if (!res.ok) {
+      blogError.value = `Blog list failed (HTTP ${res.status}).`
+      return
+    }
+    blogPosts.value = ((await res.json()) as { posts: BlogPost[] }).posts
+  } catch (e) {
+    blogError.value = String(e)
+  } finally {
+    blogLoading.value = false
+  }
+}
+
+async function onBlogFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  uploading.value = true
+  uploadMsg.value = ''
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    const res = await apiFetch('/api/admin/blog', { method: 'POST', body: form })
+    const body = (await res.json().catch(() => ({}))) as {
+      post?: BlogPost
+      message?: string
+      error?: string
+    }
+    if (!res.ok) {
+      uploadMsg.value = `⚠️ ${body.message || body.error || `Upload failed (HTTP ${res.status}).`}`
+      return
+    }
+    uploadMsg.value = body.post
+      ? `✓ Saved "${body.post.title}" (${body.post.is_published ? 'published' : 'draft'}).`
+      : '✓ Saved.'
+    await loadBlog()
+  } catch (e) {
+    uploadMsg.value = `⚠️ ${String(e)}`
+  } finally {
+    uploading.value = false
+    if (blogFileInput.value) blogFileInput.value.value = ''
+  }
+}
+
+async function togglePublish(post: BlogPost) {
+  blogBusyId.value = post.id
+  blogError.value = ''
+  try {
+    const res = await apiFetch(`/api/admin/blog/${post.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_published: !post.is_published }),
+    })
+    if (!res.ok) {
+      blogError.value = `Publish toggle failed (HTTP ${res.status}).`
+      return
+    }
+    const updated = ((await res.json()) as { post: BlogPost }).post
+    Object.assign(post, updated)
+  } catch (e) {
+    blogError.value = String(e)
+  } finally {
+    blogBusyId.value = null
+  }
+}
+
+async function deletePost(post: BlogPost) {
+  if (!window.confirm(`Delete "${post.title}"? This can't be undone.`)) return
+  blogBusyId.value = post.id
+  blogError.value = ''
+  try {
+    const res = await apiFetch(`/api/admin/blog/${post.id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      blogError.value = `Delete failed (HTTP ${res.status}).`
+      return
+    }
+    blogPosts.value = blogPosts.value.filter((p) => p.id !== post.id)
+  } catch (e) {
+    blogError.value = String(e)
+  } finally {
+    blogBusyId.value = null
+  }
+}
+
 function backToApp() {
   window.location.href = '/'
 }
@@ -227,6 +338,7 @@ function prevPage() {
 onMounted(() => {
   loadStats()
   loadUsers()
+  loadBlog()
 })
 </script>
 
@@ -412,6 +524,102 @@ onMounted(() => {
                 Next
               </button>
             </div>
+          </div>
+        </div>
+
+        <!-- Blog -->
+        <div class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 dark:inset-ring dark:inset-ring-white/5">
+          <div class="flex flex-wrap items-center gap-3 mb-2">
+            <h2 class="text-base font-semibold mr-auto">Blog</h2>
+            <label
+              class="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover cursor-pointer"
+              :class="{ 'opacity-50 pointer-events-none': uploading }"
+            >
+              <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 12V3m0 0L8 7m4-4l4 4" />
+              </svg>
+              {{ uploading ? 'Uploading…' : 'Upload .md' }}
+              <input
+                ref="blogFileInput"
+                type="file"
+                accept=".md,.markdown,text/markdown"
+                class="hidden"
+                :disabled="uploading"
+                @change="onBlogFile"
+              />
+            </label>
+          </div>
+          <p class="text-xs text-muted mb-4">
+            Upload a Markdown file with a front-matter block
+            (<code class="font-mono text-text">title</code>,
+            <code class="font-mono text-text">slug</code>,
+            <code class="font-mono text-text">summary</code>,
+            <code class="font-mono text-text">published</code>).
+            Re-uploading the same slug edits the post.
+          </p>
+
+          <div v-if="uploadMsg" class="mb-3 rounded-lg bg-bg ring-1 ring-ring px-3 py-2 text-sm text-text">
+            {{ uploadMsg }}
+          </div>
+          <div v-if="blogError" class="mb-3 rounded-lg bg-danger-bg ring-1 ring-danger/60 px-3 py-2 text-sm text-danger-fg">
+            {{ blogError }}
+          </div>
+
+          <div class="overflow-x-auto -mx-2">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs uppercase tracking-wide text-muted">
+                  <th class="font-medium px-2 py-2">Title</th>
+                  <th class="font-medium px-2 py-2">Slug</th>
+                  <th class="font-medium px-2 py-2">Status</th>
+                  <th class="font-medium px-2 py-2">Updated</th>
+                  <th class="font-medium px-2 py-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="blogLoading && blogPosts.length === 0">
+                  <td colspan="5" class="px-2 py-6 text-center text-muted">Loading…</td>
+                </tr>
+                <tr v-else-if="blogPosts.length === 0">
+                  <td colspan="5" class="px-2 py-6 text-center text-muted">No posts yet. Upload one to get started.</td>
+                </tr>
+                <tr v-for="post in blogPosts" :key="post.id" class="border-t border-border/60">
+                  <td class="px-2 py-2 font-medium text-text">{{ post.title }}</td>
+                  <td class="px-2 py-2 font-mono text-xs text-muted">{{ post.slug }}</td>
+                  <td class="px-2 py-2">
+                    <span
+                      class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                      :class="post.is_published ? 'bg-accent/15 text-accent' : 'bg-muted/15 text-muted'"
+                    >
+                      {{ post.is_published ? 'Published' : 'Draft' }}
+                    </span>
+                  </td>
+                  <td class="px-2 py-2 text-muted">{{ fmtDate(post.updated_at) }}</td>
+                  <td class="px-2 py-2 text-right whitespace-nowrap">
+                    <a
+                      :href="`/blog/${post.slug}`"
+                      class="inline-block rounded-lg bg-bg px-2.5 py-1 text-xs font-medium text-text ring-1 ring-ring hover:bg-surface-hover mr-1"
+                    >View</a>
+                    <button
+                      type="button"
+                      class="rounded-lg bg-bg px-2.5 py-1 text-xs font-medium text-text ring-1 ring-ring hover:bg-surface-hover disabled:opacity-50 mr-1"
+                      :disabled="blogBusyId === post.id"
+                      @click="togglePublish(post)"
+                    >
+                      {{ blogBusyId === post.id ? '…' : post.is_published ? 'Unpublish' : 'Publish' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="rounded-lg bg-bg px-2.5 py-1 text-xs font-medium text-danger-fg ring-1 ring-danger/40 hover:bg-danger-bg disabled:opacity-50"
+                      :disabled="blogBusyId === post.id"
+                      @click="deletePost(post)"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </template>
