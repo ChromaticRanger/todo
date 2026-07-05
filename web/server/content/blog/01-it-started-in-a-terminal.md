@@ -19,6 +19,8 @@ Over a few weeks it grew the features I kept reaching for:
 - A `--json` flag so other tools could read my todos
 - Even a small **MCP server**, so I could ask Claude to manage the list for me
 
+![An early version of the command-line app that started it all](/blog-images/command-line.png)
+
 It was never meant to be a product. It was a tool for an audience of one. But the more I used it, the more I wished I could *see* it all — colours, drag-and-drop, a calendar. The terminal could only take the idea so far.
 
 That itch is what turned a script into the thing you're using now. More on that next time.

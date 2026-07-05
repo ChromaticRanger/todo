@@ -18,6 +18,8 @@ That last step mattered more than any feature. Your lists, your bookmarks, your 
 
 Somewhere in the middle of all this, the app got its name. It had been going by something forgettable, and one day **Stash Squirrel** stuck: a place to stash the things you'll want later, kept safe until you need them. It fit so well I never looked back. (The squirrel came shortly after, and has been the mascot ever since.)
 
+![Stash Squirrel, the mascot that gave the app its name](/blog-images/squirrel.jpg)
+
 With the doors open and a name on the sign, I could finally start building the things that make Stash Squirrel more than a todo list.
 
 Do you like the name? I still smile at it. Let me know what you think.

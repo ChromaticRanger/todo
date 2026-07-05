@@ -16,6 +16,10 @@ This was one of the longest-running threads in the whole project, added to again
 - I added a **weekly hour-grid** view for time-blocking your day in proper detail.
 - And most recently, calendar entries got **colours**, **all-day** support, and the ability to **drag and resize** them right on the grid, with past events gently fading so today stands out.
 
+![Todos and events laid out across the month](/blog-images/calendar-month.png)
+
+![The weekly hour-grid view, for time-blocking a day in detail](/blog-images/calendar-week.png)
+
 The nicest touch is a small one: you can now **jump straight from a todo to its spot on the calendar**, and back again. The list and the calendar stopped being two separate places and became two views of the same thing.
 
 The calendar is the feature I probably use most myself. If there's a scheduling habit of yours it doesn't fit yet, I'd really like to hear about it.

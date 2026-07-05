@@ -16,6 +16,8 @@ A few of the things that landed:
 - **Drag-and-drop, everywhere.** Reorder items, move them between categories, rearrange whole lists and cards by hand. If it looks like you should be able to drag it, you probably can.
 - **Snooze and priorities.** Push a task out to future-you, and let higher-priority items settle naturally toward the top.
 
+![The same list shown as kanban-style columns](/blog-images/views-kanban.png)
+
 None of these are headline features on their own. Together, though, they're what makes the app feel like *yours* after a week rather than a tool you're borrowing.
 
 If there's a way you wish you could arrange things that the app doesn't support yet, that's exactly the kind of feedback I want. Tell me.
