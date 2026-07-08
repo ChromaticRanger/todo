@@ -10,6 +10,7 @@ import type { TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useListStore } from '../stores/listStore'
 import { useCategoryPrefsStore } from '../stores/categoryPrefsStore'
+import { useItemDrag } from '../composables/useItemDrag'
 
 const props = defineProps<{
   category: string
@@ -27,6 +28,15 @@ const emit = defineEmits<{
 const store = useTodoStore()
 const listStore = useListStore()
 const categoryPrefsStore = useCategoryPrefsStore()
+
+// Shared across all cards so a drag begun in one reveals the drop zones in all.
+const { dragging } = useItemDrag()
+function onItemDragStart() {
+  dragging.value = true
+}
+function onItemDragEnd() {
+  dragging.value = false
+}
 const showAddForm = ref(false)
 const addType = ref<ItemType>('todo')
 const showTypeMenu = ref(false)
@@ -328,6 +338,8 @@ async function handleMoveToGeneral() {
           :disabled="!dragEnabled"
           class="space-y-2 min-h-[1.5rem]"
           @update:model-value="onListReorder"
+          @start="onItemDragStart"
+          @end="onItemDragEnd"
         >
           <template #item="{ element: todo }">
             <div :key="todo.id" :data-type="todo.type ?? 'todo'">
@@ -352,8 +364,11 @@ async function handleMoveToGeneral() {
           :animation="150"
           ghost-class="opacity-40"
           :disabled="!dragEnabled"
-          class="flex flex-wrap justify-center gap-1.5 min-h-[1.5rem]"
+          class="flex flex-wrap justify-center gap-1.5"
+          :class="bookmarks.length === 0 && !dragging ? 'min-h-0' : 'min-h-[1.5rem]'"
           @update:model-value="onBookmarksReorder"
+          @start="onItemDragStart"
+          @end="onItemDragEnd"
         >
           <template #item="{ element: todo }">
             <div :key="todo.id" :data-type="todo.type ?? 'todo'">
@@ -375,9 +390,14 @@ async function handleMoveToGeneral() {
           :animation="150"
           ghost-class="opacity-40"
           :disabled="!dragEnabled"
-          class="space-y-2 min-h-[1.5rem]"
-          :class="bookmarks.length > 0 ? 'mt-3' : ''"
+          class="space-y-2"
+          :class="[
+            nonBookmarks.length === 0 && !dragging ? 'min-h-0' : 'min-h-[1.5rem]',
+            bookmarks.length > 0 && (nonBookmarks.length > 0 || dragging) ? 'mt-3' : '',
+          ]"
           @update:model-value="onNonBookmarksReorder"
+          @start="onItemDragStart"
+          @end="onItemDragEnd"
         >
           <template #item="{ element: todo }">
             <div :key="todo.id" :data-type="todo.type ?? 'todo'">
