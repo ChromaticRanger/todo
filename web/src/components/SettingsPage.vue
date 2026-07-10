@@ -1,16 +1,33 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSettingsStore } from '../stores/settingsStore'
+import {
+  notificationsSupported,
+  notificationPermission,
+  requestNotificationPermission,
+} from '../lib/notifications'
 import ToggleSwitch from './ToggleSwitch.vue'
 
 const settingsStore = useSettingsStore()
 
 const saveError = ref('')
+const notifPermission = ref<NotificationPermission>(notificationPermission())
 
-type PrefKey = 'dueTodayModal' | 'dueTodayIncludeOverdue' | 'confirmBeforeDelete' | 'dailyEmailDigest'
+type PrefKey =
+  | 'dueTodayModal'
+  | 'dueTodayIncludeOverdue'
+  | 'confirmBeforeDelete'
+  | 'dueReminderToast'
+  | 'dailyEmailDigest'
 
 async function onToggle(key: PrefKey, value: boolean) {
   saveError.value = ''
+  // Switching the live reminder on is a genuine user gesture — the one moment a
+  // browser will honour a notification-permission request. Ask before saving so
+  // the OS prompt feels tied to the click.
+  if (key === 'dueReminderToast' && value) {
+    notifPermission.value = await requestNotificationPermission()
+  }
   try {
     await settingsStore.setPreference(key, value)
   } catch {
@@ -93,6 +110,37 @@ onMounted(() => {
             @update:model-value="onToggle('dueTodayIncludeOverdue', $event)"
           />
         </div>
+
+        <div class="mt-4 flex items-center justify-between gap-4 border-t border-border/60 pt-4">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-text">Notify me the moment something is due</div>
+            <div class="text-xs text-muted mt-0.5">
+              While the app is open, pop a toast when a todo or event reaches its due time.
+              Grant notification access and you'll also get an alert when the tab is in the
+              background.
+            </div>
+          </div>
+          <ToggleSwitch
+            :model-value="settingsStore.dueReminderToast"
+            label="Notify me when an item is due"
+            @update:model-value="onToggle('dueReminderToast', $event)"
+          />
+        </div>
+
+        <p
+          v-if="settingsStore.dueReminderToast && !notificationsSupported()"
+          class="mt-3 text-xs text-muted"
+        >
+          Your browser doesn't support notifications — you'll still get in-app toasts.
+        </p>
+        <p
+          v-else-if="settingsStore.dueReminderToast && notifPermission === 'denied'"
+          class="mt-3 text-xs text-muted"
+        >
+          Background notifications are blocked for this site. In-app toasts still work; to
+          get alerts when the tab is hidden, allow notifications in your browser's site
+          settings.
+        </p>
 
         <div class="mt-4 flex items-center justify-between gap-4 border-t border-border/60 pt-4">
           <div class="min-w-0">

@@ -125,6 +125,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const dueTodayModalEnabled = ref(true)
   const dueTodayIncludeOverdue = ref(false)
   const confirmBeforeDelete = ref(true)
+  // Live in-app toast (+ native notification) when an item comes due. Opt-in.
+  const dueReminderToast = ref(false)
   const dailyEmailDigest = ref(false)
   // IANA timezone, auto-detected from the browser. Drives digest delivery time.
   const timezone = ref('UTC')
@@ -193,6 +195,7 @@ export const useSettingsStore = defineStore('settings', () => {
     dueTodayModal: boolean
     dueTodayIncludeOverdue: boolean
     confirmBeforeDelete: boolean
+    dueReminderToast: boolean
     dailyEmailDigest: boolean
     timezone: string
   }
@@ -201,6 +204,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (typeof p.dueTodayModal === 'boolean') dueTodayModalEnabled.value = p.dueTodayModal
     if (typeof p.dueTodayIncludeOverdue === 'boolean') dueTodayIncludeOverdue.value = p.dueTodayIncludeOverdue
     if (typeof p.confirmBeforeDelete === 'boolean') confirmBeforeDelete.value = p.confirmBeforeDelete
+    if (typeof p.dueReminderToast === 'boolean') dueReminderToast.value = p.dueReminderToast
     if (typeof p.dailyEmailDigest === 'boolean') dailyEmailDigest.value = p.dailyEmailDigest
     if (typeof p.timezone === 'string' && p.timezone) timezone.value = p.timezone
   }
@@ -240,6 +244,7 @@ export const useSettingsStore = defineStore('settings', () => {
       dueTodayModal: dueTodayModalEnabled,
       dueTodayIncludeOverdue: dueTodayIncludeOverdue,
       confirmBeforeDelete: confirmBeforeDelete,
+      dueReminderToast: dueReminderToast,
       dailyEmailDigest: dailyEmailDigest,
     } as const
     const target = refs[key]
@@ -308,6 +313,7 @@ export const useSettingsStore = defineStore('settings', () => {
     dueTodayModalEnabled,
     dueTodayIncludeOverdue,
     confirmBeforeDelete,
+    dueReminderToast,
     dailyEmailDigest,
     timezone,
     completedWindow,

@@ -28,6 +28,10 @@ export const useTodoStore = defineStore('todos', () => {
   // Bumped whenever an event is created so the Overall Schedule can refetch
   // its calendar feed without depending on view/list state.
   const eventsVersion = ref(0)
+  // Bumped on every item mutation (add/edit/delete/snooze/toggle, todos and
+  // events alike) so watchers can react promptly — e.g. the due-reminder loop
+  // refetches its feed so a just-created item due soon is picked up in time.
+  const changeVersion = ref(0)
   let categoryOrderLoaded = false
   let emptyCategoriesLoaded = false
 
@@ -52,6 +56,7 @@ export const useTodoStore = defineStore('todos', () => {
   const TIME_WINDOWED_VIEWS: ViewType[] = ['today', 'week', 'month', 'overdue']
   function notifyEventChanged() {
     eventsVersion.value++
+    changeVersion.value++
     for (const listCache of todosCache.values()) {
       for (const view of TIME_WINDOWED_VIEWS) listCache.delete(view)
     }
@@ -370,6 +375,7 @@ export const useTodoStore = defineStore('todos', () => {
   // next visit. The current view's cache entry shares a reference with
   // `todos.value`, so in-place mutations below keep it in sync automatically.
   function invalidateOtherViews(list: string) {
+    changeVersion.value++
     const listCache = todosCache.get(list)
     if (listCache) {
       const keep = list === currentList.value ? currentView.value : null
@@ -830,6 +836,7 @@ export const useTodoStore = defineStore('todos', () => {
     completedHasMore,
     completedTotal,
     eventsVersion,
+    changeVersion,
     eventsInView,
     byCategory,
     notifyEventChanged,
