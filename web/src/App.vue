@@ -15,6 +15,7 @@ import { useCategoryPrefsStore } from './stores/categoryPrefsStore'
 import type { ViewType, ItemType, Todo } from './types/todo'
 import { apiEvents, apiFetch } from './lib/api'
 import { eventEnd } from './lib/eventTime'
+import { useDueReminders } from './composables/useDueReminders'
 import AppHeader from './components/AppHeader.vue'
 import MobileNav from './components/MobileNav.vue'
 import ListTabs from './components/ListTabs.vue'
@@ -48,6 +49,10 @@ const listPrefsStore = useListPrefsStore()
 const categoryPrefsStore = useCategoryPrefsStore()
 const searchStore = useSearchStore()
 const discoverStore = useDiscoverStore()
+
+// Live "item is due now" toasts. Self-managing: runs only while signed in and
+// the preference is on. Rendered in the template alongside the other toasts.
+const { toasts: dueToasts, dismiss: dismissDueToast } = useDueReminders()
 
 const highlightItemId = ref<number | null>(null)
 
@@ -636,6 +641,36 @@ function onTourSkip() {
       class="fixed bottom-4 left-4 bg-surface border border-border-strong text-text px-4 py-3 rounded-xl text-sm max-w-sm shadow-xl dark:shadow-none"
     >
       {{ rateLimitMessage }}
+    </div>
+
+    <!-- Due-reminder toasts (fire as items reach their due time) -->
+    <div class="fixed bottom-6 right-6 z-50 flex flex-col gap-3 w-[90vw] max-w-md">
+      <div
+        v-for="toast in dueToasts"
+        :key="toast.id"
+        role="alert"
+        class="flex items-start gap-4 bg-surface border border-border-strong text-text px-6 py-5 rounded-2xl shadow-2xl dark:shadow-none dark:inset-ring dark:inset-ring-white/5"
+      >
+        <span class="mt-0.5 shrink-0 text-accent">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-9" aria-hidden="true">
+            <path d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0v1a3 3 0 1 1-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </span>
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-xl font-semibold">{{ toast.title }}</p>
+          <p class="text-base text-muted mt-0.5">{{ toast.detail }}</p>
+        </div>
+        <button
+          type="button"
+          class="shrink-0 text-muted hover:text-text"
+          aria-label="Dismiss"
+          @click="dismissDueToast(toast.id)"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-6" aria-hidden="true">
+            <path d="M6 18 18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Add form modal -->

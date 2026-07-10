@@ -103,6 +103,9 @@ interface Preferences {
   dueTodayIncludeOverdue: boolean
   // Ask for confirmation before deleting an item.
   confirmBeforeDelete: boolean
+  // Pop an in-app toast (and native notification, if permitted) the moment a
+  // todo/event comes due while the app is open. Opt-in.
+  dueReminderToast: boolean
   // Receive the daily email digest (overdue + due today). Opt-in.
   dailyEmailDigest: boolean
   // IANA timezone (e.g. 'Europe/London'), auto-detected by the browser. Used to
@@ -114,6 +117,7 @@ const BOOLEAN_KEYS = [
   'dueTodayModal',
   'dueTodayIncludeOverdue',
   'confirmBeforeDelete',
+  'dueReminderToast',
   'dailyEmailDigest',
 ] as const
 
@@ -121,6 +125,7 @@ const DEFAULT_PREFERENCES: Preferences = {
   dueTodayModal: true,
   dueTodayIncludeOverdue: false,
   confirmBeforeDelete: true,
+  dueReminderToast: false,
   dailyEmailDigest: false,
   timezone: 'UTC',
 }
