@@ -55,6 +55,9 @@ const discoverStore = useDiscoverStore()
 const { toasts: dueToasts, dismiss: dismissDueToast } = useDueReminders()
 
 const highlightItemId = ref<number | null>(null)
+// When a "reveal in list" is blocked because the item is snoozed, we stash the
+// item here so the error toast can offer a one-click Unsnooze action.
+const snoozedReveal = ref<Todo | null>(null)
 
 // Path-based branch for the browser-extension connect flow. No router today,
 // and this page is opened only by the extension, so reading location once on
@@ -213,6 +216,14 @@ watch(() => authStore.tier, (tier) => {
   }
 })
 
+// If the error toast clears or is replaced by an unrelated message, drop the
+// stashed snooze item so the "Unsnooze" action can't linger on a stale toast.
+watch(() => todoStore.error, (msg) => {
+  if (snoozedReveal.value && (!msg || !msg.includes('is snoozed until'))) {
+    snoozedReveal.value = null
+  }
+})
+
 // Toggle <html data-demo="1"> so the body bg picks up the diagonal-stripe
 // watermark from style.css. Stored as an attribute so unauthenticated tabs
 // and non-demo users keep the unmarked background.
@@ -288,6 +299,7 @@ async function revealTodoInList(item: Todo) {
     const now = Math.floor(Date.now() / 1000)
     if (item.snoozed_until && item.snoozed_until > now) {
       const until = new Date(item.snoozed_until * 1000).toLocaleString()
+      snoozedReveal.value = item
       todoStore.error = `"${item.title}" is snoozed until ${until} — unsnooze it to view it in the list.`
     } else {
       todoStore.error = `"${item.title}" isn't visible in the current view.`
@@ -295,7 +307,24 @@ async function revealTodoInList(item: Todo) {
     return
   }
 
+  snoozedReveal.value = null
   highlightItemId.value = item.id
+}
+
+// Clear the snooze on the stashed item and reveal it in the list now that it's
+// no longer hidden. Wired to the "Unsnooze" action on the error toast.
+async function unsnoozeReveal() {
+  const item = snoozedReveal.value
+  if (!item) return
+  snoozedReveal.value = null
+  todoStore.error = null
+  try {
+    await todoStore.snoozeTodo(item.id, null)
+  } catch {
+    todoStore.error = `Couldn't unsnooze "${item.title}". Please try again.`
+    return
+  }
+  await revealTodoInList(item)
 }
 
 async function onSearchSelect(item: Todo) {
@@ -624,10 +653,18 @@ function onTourSkip() {
       </svg>
       <span class="flex-1">{{ todoStore.error || listStore.error }}</span>
       <button
+        v-if="snoozedReveal"
+        type="button"
+        class="shrink-0 self-center rounded-lg border border-danger px-3 py-1 text-sm font-semibold hover:bg-danger hover:text-white"
+        @click="unsnoozeReveal"
+      >
+        Unsnooze
+      </button>
+      <button
         type="button"
         class="shrink-0 text-danger-fg/70 hover:text-danger-fg"
         :title="'Dismiss'"
-        @click="todoStore.error = null; listStore.error = null"
+        @click="todoStore.error = null; listStore.error = null; snoozedReveal = null"
       >
         <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />

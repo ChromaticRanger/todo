@@ -843,6 +843,7 @@ router.put('/:id', async (req, res) => {
     duration_seconds: number | null
     color: string | null
     all_day: boolean
+    snoozed_until: number | null
   }>
   const { title, description, category, priority, due_date, url } = body
 
@@ -854,6 +855,11 @@ router.put('/:id', async (req, res) => {
   const hasDuration = Object.prototype.hasOwnProperty.call(body, 'duration_seconds')
   const hasColor = Object.prototype.hasOwnProperty.call(body, 'color')
   const hasAllDay = Object.prototype.hasOwnProperty.call(body, 'all_day')
+  const hasSnoozed = Object.prototype.hasOwnProperty.call(body, 'snoozed_until')
+  if (hasSnoozed && body.snoozed_until !== null &&
+      (typeof body.snoozed_until !== 'number' || !Number.isFinite(body.snoozed_until))) {
+    return res.status(400).json({ error: 'snoozed_until must be a number or null' })
+  }
 
   try {
     // Validate event recurrence presets when the row is (or is becoming) an
@@ -907,7 +913,8 @@ router.put('/:id', async (req, res) => {
          recur_until     = CASE WHEN $11::BOOLEAN THEN $12 ELSE recur_until     END,
          duration_seconds = CASE WHEN $15::BOOLEAN THEN $16 ELSE duration_seconds END,
          color           = CASE WHEN $17::BOOLEAN THEN $18 ELSE color           END,
-         all_day         = CASE WHEN $19::BOOLEAN THEN $20 ELSE all_day         END
+         all_day         = CASE WHEN $19::BOOLEAN THEN $20 ELSE all_day         END,
+         snoozed_until   = CASE WHEN $21::BOOLEAN THEN $22 ELSE snoozed_until   END
        WHERE id = $13 AND user_id = $14`,
       [
         title,
@@ -930,6 +937,8 @@ router.put('/:id', async (req, res) => {
         hasColor ? normalizeColor(body.color) : null,
         hasAllDay,
         hasAllDay ? !!body.all_day : false,
+        hasSnoozed,
+        hasSnoozed ? (body.snoozed_until ?? null) : null,
       ]
     )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })

@@ -500,6 +500,11 @@ export const useTodoStore = defineStore('todos', () => {
       throw e
     }
     invalidateOtherViews(list)
+    // If the row wasn't present in the current view, our in-place patch above
+    // couldn't keep that view's cache in sync (invalidateOtherViews keeps the
+    // current view). Drop it so the row is refetched — e.g. unsnoozing an item
+    // that the server filtered out of the 'all' view.
+    if (index < 0) todosCache.get(list)?.delete(view)
     // The snoozed row may belong to another list (All Lists windowed view).
     if (removed && removed.list_name !== list) invalidateList(removed.list_name)
     fetchViewCounts(list)
@@ -524,6 +529,7 @@ export const useTodoStore = defineStore('todos', () => {
       if ('url' in form) item.url = form.url ?? null
       if ('color' in form) item.color = form.color ?? null
       if ('all_day' in form) item.all_day = form.all_day ?? false
+      if ('snoozed_until' in form) item.snoozed_until = form.snoozed_until ?? null
     }
     // A changed priority should re-slot the item like a freshly-added one. In a
     // category with no saved manual order byCategory already re-slots reactively;
@@ -556,6 +562,9 @@ export const useTodoStore = defineStore('todos', () => {
       await fetchTodos(list, view, { silent: true })
     }
     if ('due_date' in form) fetchViewCounts(list)
+    // Unsnoozing makes the row visible in the 'all' view again (it's filtered
+    // server-side while snoozed), so refresh the counts for that transition.
+    if ('snoozed_until' in form) fetchViewCounts(list)
   }
 
   async function deleteTodo(id: number) {

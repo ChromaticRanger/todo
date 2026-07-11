@@ -130,6 +130,24 @@ const recurUntilStr = ref(
 
 const isEdit = computed(() => !!props.initial)
 
+// Snooze: a todo can be "Remind me later"-snoozed, which hides it from the list
+// until its reappear date. The edit form surfaces an on/off toggle for an active
+// snooze so it can be cleared here (there's no other reachable unsnooze once the
+// row is hidden from the list). Turning it off sends snoozed_until: null on save;
+// leaving it on omits the field so the snooze is untouched.
+const initialSnoozeUntil = computed(() =>
+  props.initial?.type === 'todo' ? props.initial.snoozed_until ?? null : null
+)
+const isSnoozed = computed(() =>
+  initialSnoozeUntil.value != null && initialSnoozeUntil.value * 1000 > Date.now()
+)
+const snoozeOn = ref(true)
+const snoozeUntilLabel = computed(() =>
+  initialSnoozeUntil.value != null
+    ? new Date(initialSnoozeUntil.value * 1000).toLocaleString()
+    : ''
+)
+
 const formTitle = computed(() => {
   const action = isEdit.value ? 'Edit' : 'Add'
   if (type.value === 'bookmark') return `${action} Bookmark`
@@ -243,7 +261,7 @@ function submit() {
     }
   }
 
-  emit('submit', {
+  const payload: TodoFormData = {
     title: title.value.trim(),
     description: description.value.trim(),
     category: effectiveCategory.value,
@@ -257,7 +275,13 @@ function submit() {
     duration_seconds: type.value === 'event' ? duration_seconds : null,
     color: type.value === 'event' || type.value === 'todo' ? color.value : null,
     all_day: type.value === 'event' ? allDay.value : false,
-  })
+  }
+
+  // Only carry snoozed_until when clearing an active snooze; omit otherwise so
+  // the save leaves the field alone.
+  if (isSnoozed.value && !snoozeOn.value) payload.snoozed_until = null
+
+  emit('submit', payload)
 }
 
 const titleInput = ref<HTMLInputElement | null>(null)
@@ -521,6 +545,18 @@ const priorityLabels = [
               <p v-if="repeatValue > 0" class="mt-1 text-xs text-accent">
                 Repeats every {{ repeatValue }} {{ repeatUnit }}
               </p>
+            </div>
+
+            <!-- Snooze: shown only for a todo that's currently snoozed. Turning
+                 it off clears the snooze on save so the item returns to the list. -->
+            <div v-if="isSnoozed" class="flex items-center justify-between gap-3">
+              <div class="min-w-0">
+                <label class="field-label mb-0">Snoozed</label>
+                <p class="mt-0.5 text-xs text-muted">
+                  Hidden from the list until {{ snoozeUntilLabel }}. Turn off to unsnooze.
+                </p>
+              </div>
+              <ToggleSwitch v-model="snoozeOn" label="Snoozed" />
             </div>
           </template>
         </div>
