@@ -57,4 +57,7 @@ export interface TodoFormData {
   duration_seconds?: number | null
   color?: string | null
   all_day?: boolean
+  // Only sent when the edit form clears an active snooze (unsnooze). Omitted
+  // otherwise so a normal save leaves the snooze untouched.
+  snoozed_until?: number | null
 }
