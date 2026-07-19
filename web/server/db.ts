@@ -73,7 +73,8 @@ export async function seedUserDefaults(userId: string): Promise<void> {
        VALUES
          ($1, 'Home', 'Take Tour', '', 'Welcome', 2, 0, NULL, 0, 0, 0, 'todo', NULL),
          ($1, 'Home', 'Welcome to Stash Squirrel', $2, 'Welcome', 2, 0, NULL, 0, 0, 0, 'note', NULL),
-         ($1, 'Home', 'You Tube', '', 'Welcome', 2, 0, NULL, 0, 0, 0, 'bookmark', 'https://www.youtube.com')`,
+         ($1, 'Home', 'You Tube', '', 'Welcome', 2, 0, NULL, 0, 0, 0, 'bookmark', 'https://www.youtube.com'),
+         ($1, 'Home', 'Get the Chrome Extension', 'Save any page to Stash Squirrel from your browser toolbar.', 'Welcome', 2, 0, NULL, 0, 0, 0, 'bookmark', 'https://chromewebstore.google.com/detail/stash-squirrel/inhkmokpomefeajkjpedkljnjfpddkhp')`,
       [userId, WELCOME_NOTE_BODY]
     )
     await client.query(

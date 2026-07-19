@@ -619,6 +619,14 @@ const features = [
           <span class="text-muted">· © {{ year }}</span>
         </div>
         <div class="flex items-center gap-5">
+          <a
+            href="https://chromewebstore.google.com/detail/stash-squirrel/inhkmokpomefeajkjpedkljnjfpddkhp"
+            target="_blank"
+            rel="noopener"
+            class="hover:text-text transition-colors"
+          >
+            Chrome extension
+          </a>
           <a href="/privacy.html" class="hover:text-text transition-colors">Privacy</a>
           <a href="/login" class="hover:text-text transition-colors">Sign in</a>
           <a
