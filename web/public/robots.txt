@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+
+# Private and functional routes — not useful in search results
+Disallow: /settings
+Disallow: /account
+Disallow: /admin
+Disallow: /connect-extension
+Disallow: /reset-password
+Disallow: /login
+
+Sitemap: https://stash-squirrel.com/sitemap.xml
