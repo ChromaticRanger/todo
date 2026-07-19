@@ -70,6 +70,36 @@ onMounted(() => {
         {{ saveError }}
       </div>
 
+      <!-- Browser extension -->
+      <div class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 dark:inset-ring dark:inset-ring-white/5">
+        <div class="flex items-start gap-4">
+          <img src="/stash-squirrel.svg" alt="" class="size-10 shrink-0" />
+          <div class="min-w-0">
+            <h2 class="text-base font-semibold mb-1">Browser extension</h2>
+            <p class="text-sm text-muted mb-4">
+              Save the page you're viewing straight to a list — one click from your toolbar,
+              with no copying links or switching tabs. Free, and available for Chrome.
+            </p>
+            <a
+              href="https://chromewebstore.google.com/detail/stash-squirrel/inhkmokpomefeajkjpedkljnjfpddkhp"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-accent-fg transition-colors hover:bg-accent-hover"
+            >
+              Add to Chrome
+              <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </div>
+
       <!-- Daily reminders -->
       <div class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 dark:inset-ring dark:inset-ring-white/5">
         <h2 class="text-base font-semibold mb-1">Daily reminders</h2>
