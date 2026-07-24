@@ -1042,10 +1042,10 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
   <div class="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col">
     <!-- Header — pinned so it stays visible while the calendar scrolls
          (mainly relevant for the week view's tall hour grid). -->
-    <div class="sticky top-0 z-30 bg-bg flex items-center justify-between gap-3 -mx-4 px-4 py-2 -mt-4 mb-3">
-      <div class="flex items-center gap-1">
+    <div class="sticky top-0 z-30 bg-bg flex items-center justify-between gap-1 sm:gap-3 -mx-4 px-4 py-2 -mt-4 mb-3">
+      <div class="flex items-center gap-0.5 sm:gap-1 min-w-0 flex-1">
         <button
-          class="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
+          class="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors shrink-0"
           :title="settingsStore.calendarView === 'week' ? 'Previous week' : 'Previous month'"
           @click="prev"
         >
@@ -1053,9 +1053,12 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
-        <h2 class="text-base font-medium text-text px-2 min-w-40 text-center">{{ monthLabel }}</h2>
+        <!-- min-w-0 + truncate on mobile so a long week label can never widen
+             the header past the viewport; fixed min-width from md up keeps the
+             arrows from shuffling as the label changes. -->
+        <h2 class="text-sm sm:text-base font-medium text-text px-1 sm:px-2 min-w-0 md:min-w-40 text-center truncate">{{ monthLabel }}</h2>
         <button
-          class="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
+          class="p-1.5 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors shrink-0"
           :title="settingsStore.calendarView === 'week' ? 'Next week' : 'Next month'"
           @click="next"
         >
@@ -1064,16 +1067,16 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
           </svg>
         </button>
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-1 sm:gap-2 shrink-0">
         <button
-          class="px-2.5 py-1 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors"
+          class="px-1.5 sm:px-2.5 py-1 rounded-lg text-xs sm:text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors"
           @click="goToday"
         >
           Today
         </button>
-        <div class="inline-flex rounded-lg border border-border overflow-hidden text-sm">
+        <div class="inline-flex rounded-lg border border-border overflow-hidden text-xs sm:text-sm">
           <button
-            class="px-2.5 py-1 transition-colors"
+            class="px-2 sm:px-2.5 py-1 transition-colors"
             :class="settingsStore.calendarView === 'month'
               ? 'bg-accent text-accent-fg'
               : 'text-muted hover:text-text hover:bg-surface-hover'"
@@ -1082,7 +1085,7 @@ watch(grid, () => { if (openDayKey.value) nextTick(onReposition) })
             Month
           </button>
           <button
-            class="px-2.5 py-1 transition-colors border-l border-border"
+            class="px-2 sm:px-2.5 py-1 transition-colors border-l border-border"
             :class="settingsStore.calendarView === 'week'
               ? 'bg-accent text-accent-fg'
               : 'text-muted hover:text-text hover:bg-surface-hover'"
