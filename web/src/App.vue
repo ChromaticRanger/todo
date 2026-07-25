@@ -180,6 +180,30 @@ function toggleDiscover() {
   }
 }
 
+// Header brand click — the usual "logo takes you home" convention. Lands on
+// the leftmost list tab with the All filter, from any mode/list/view.
+async function goHome() {
+  mode.value = 'lists'
+  discoverStore.selectSlug(null)
+  calendarJumpTarget.value = null
+  highlightItemId.value = null
+
+  // Set the view first: switching lists triggers the activeList watcher, which
+  // fetches using whatever currentView holds at that point.
+  if (currentView.value !== 'all') {
+    currentView.value = 'all'
+    todoStore.setView('all')
+  }
+
+  const first = listStore.lists[0]
+  if (first && first !== listStore.activeList) {
+    // The watcher does the refetch — don't duplicate it here.
+    listStore.setActiveList(first)
+    return
+  }
+  await todoStore.fetchTodos(listStore.activeList, 'all')
+}
+
 function handleClonedToList() {
   // Switch back to Lists so the user lands on their new clone.
   mode.value = 'lists'
@@ -528,6 +552,7 @@ function onTourSkip() {
       :calendar-active="mode === 'calendar'"
       :discover-active="mode === 'discover'"
       @add="openAddForm"
+      @home="goHome"
       @toggle-calendar="toggleCalendar"
       @toggle-discover="toggleDiscover"
       @search="searchStore.openSearch()"

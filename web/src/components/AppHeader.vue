@@ -10,6 +10,7 @@ import type { ItemType } from '../types/todo'
 
 const emit = defineEmits<{
   add: [type: ItemType]
+  home: []
   'toggle-calendar': []
   'toggle-discover': []
   search: []
@@ -98,16 +99,23 @@ function openAdd(type: ItemType) {
 <template>
   <div class="flex-shrink-0">
   <header class="bg-surface border-b border-border px-4 py-3 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <img src="/stash-squirrel.svg" alt="Stash Squirrel" class="size-8 md:size-12" />
-      <div class="flex flex-col leading-none landscape-phone:hidden">
-        <h1
-          class="font-display italic text-xl md:text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2"
+    <h1 class="leading-none">
+      <!-- Brand doubles as "home": back to the first list on the All view. -->
+      <button
+        type="button"
+        class="flex items-center gap-2 -m-1 p-1 rounded-lg hover:bg-surface-hover transition-colors"
+        title="Go to your first list"
+        aria-label="Stash Squirrel — go to your first list"
+        @click="emit('home')"
+      >
+        <img src="/stash-squirrel.svg" alt="" class="size-8 md:size-12" />
+        <span
+          class="font-display italic text-xl md:text-3xl font-semibold tracking-tight bg-gradient-to-br from-[#e53b30] via-[#c92c24] to-[#8b2a1f] bg-clip-text text-transparent pr-2 landscape-phone:hidden"
         >
           Stash Squirrel
-        </h1>
-      </div>
-    </div>
+        </span>
+      </button>
+    </h1>
     <div class="flex items-center gap-2">
       <!-- Secondary actions — collapsed into the mobile bottom nav below md -->
       <div class="hidden md:flex items-center gap-2">
