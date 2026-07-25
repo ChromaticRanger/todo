@@ -759,6 +759,19 @@ onMounted(() => {
   if (props.jumpTarget) applyHighlight(props.jumpTarget)
 })
 
+// A jump can also arrive while the calendar is already on screen — global search
+// is reachable from the calendar view, so there's no mount to hook. Re-anchor the
+// visible range (which refetches) and re-ring the target.
+watch(() => props.jumpTarget, (target) => {
+  if (!target) return
+  const d = new Date(target.dueDate * 1000)
+  const anchor = settingsStore.calendarView === 'week'
+    ? startOfWeek(d)
+    : new Date(d.getFullYear(), d.getMonth(), 1)
+  if (anchor.getTime() !== viewAnchor.value.getTime()) viewAnchor.value = anchor
+  applyHighlight(target)
+})
+
 // Toggle the now-tick + auto-scroll whenever the view mode changes at runtime.
 watch(() => settingsStore.calendarView, (mode) => {
   if (mode === 'week') {

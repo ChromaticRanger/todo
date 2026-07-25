@@ -78,7 +78,7 @@ The Free plan includes all core task management, but caps usage at **3 lists** a
 
 | Feature | Account Level | Description |
 |---|---|---|
-| Global search | Pro | Press Cmd/Ctrl+K to search across everything you've saved (titles, descriptions, URLs), with relevance-ranked results that jump to and highlight the matching item. |
+| Global search | Pro | Press Cmd/Ctrl+K to search across everything you've saved — todos, bookmarks, notes and calendar events (titles, descriptions, URLs) — with relevance-ranked results that jump to and highlight the matching item. Todos, bookmarks and notes open in their list; events open the calendar on the right date, with recurring events landing on their next occurrence. |
 | Publish lists to Discover | Pro | Share a list to the community catalogue with a custom name, description, emoji, and category. |
 | Discover view | Pro | Browse community-published lists, filter by category, search by publisher, and preview list contents. |
 | Clone published lists | Pro | Copy a published list into your own workspace, auto-renaming on conflict and rescheduling recurring items to avoid being overdue. |

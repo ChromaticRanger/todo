@@ -1,6 +1,12 @@
 import { Router } from 'express'
 import { query } from '../db.js'
-import { buildTodoSelect, coerceTodo, type TodoRow } from './todos.js'
+import {
+  buildTodoSelect,
+  coerceTodo,
+  fetchOccurrenceOverrides,
+  resolveEventOccurrence,
+  type TodoRow,
+} from './todos.js'
 
 const router = Router()
 
@@ -9,6 +15,35 @@ const MAX_LIMIT = 100
 
 function escapeLike(s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_')
+}
+
+// Events are stored as a single series row anchored on their first occurrence,
+// so a matched recurring event carries a due_date that may be long past. Rewrite
+// each event row onto the occurrence the client should jump to — the next one, or
+// the last if the series has ended — mirroring the shape of an expanded
+// occurrence (`occurrence_start` = the cadence-generated start) so the calendar's
+// highlight key matches the chip it actually renders.
+async function resolveEventRows(userId: string, rows: TodoRow[]): Promise<TodoRow[]> {
+  const seriesIds = rows
+    .filter((r) => r.type === 'event' && (Number(r.repeat_days) > 0 || Number(r.repeat_months) > 0))
+    .map((r) => Number(r.id))
+  if (rows.every((r) => r.type !== 'event')) return rows
+
+  const overrides = await fetchOccurrenceOverrides(userId, seriesIds)
+  const now = Math.floor(Date.now() / 1000)
+
+  return rows.map((row) => {
+    if (row.type !== 'event') return row
+    const occ = resolveEventOccurrence(row, now)
+    if (occ == null) return row
+    const ov = overrides?.get(`${Number(row.id)}:${occ}`)
+    return {
+      ...row,
+      due_date: ov?.due ?? occ,
+      duration_seconds: ov?.dur ?? row.duration_seconds,
+      occurrence_start: occ,
+    }
+  })
 }
 
 // GET /api/search?q=<query>&limit=50
@@ -37,7 +72,6 @@ router.get('/', async (req, res) => {
     const result = await query<TodoRow>(
       buildTodoSelect(
         `WHERE user_id = $1
-           AND type <> 'event'
            AND (title ILIKE $2 OR description ILIKE $2 OR url ILIKE $2)
          ORDER BY
            (CASE WHEN title ILIKE $2 THEN 0
@@ -49,7 +83,7 @@ router.get('/', async (req, res) => {
       ),
       [userId, pattern, limit]
     )
-    const results = result.rows.map(coerceTodo)
+    const results = (await resolveEventRows(userId, result.rows)).map(coerceTodo)
     res.json({
       results,
       total: results.length,
