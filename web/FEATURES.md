@@ -52,6 +52,7 @@ The Free plan includes all core task management, but caps usage at **3 lists** a
 | Reorder lists | Free | Drag list tabs to reorder them. |
 | Categories | Free | Group items into categories within each list; categories are created automatically from items or added manually for planning. |
 | Rename / merge / delete categories | Free | Rename a category (bulk-moving its items), merge one category into another, or delete a category and its items. |
+| Move a category to another list | Free | Move a whole category, and everything in it, to a different list (or a brand-new one). If the target list already uses that name, the arriving category becomes "Name(1)" instead of merging. |
 | Reorder categories | Free | Drag-and-drop to reorder categories within a list. |
 | Item & list caps | Free | The Free plan is capped at 3 lists and 50 items total; a warning banner appears as you approach the limits. **Pro removes both caps.** |
 

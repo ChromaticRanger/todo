@@ -751,6 +751,74 @@ export const useTodoStore = defineStore('todos', () => {
     invalidateList(list)
   }
 
+  /** Move a category and everything in it to another list. The server renames
+   *  the arrival ("Work" → "Work(1)") if the target list already has that name;
+   *  returns the name it landed under, or null if the move failed. */
+  async function moveCategoryToList(
+    fromList: string,
+    toList: string,
+    name: string,
+  ): Promise<string | null> {
+    const res = await apiFetch('/api/categories/move-to-list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fromList, toList, name }),
+    })
+    if (!res.ok) {
+      await surfaceCapError(res)
+      return null
+    }
+    const { name: finalName, visible } = await res.json() as {
+      name: string
+      moved: number
+      visible: number
+    }
+
+    // Nothing that renders means nothing materializes the category in the
+    // target list — it's empty, or holds only completed/snoozed items. Its
+    // registration in app_settings is then the only record that it moved at
+    // all, so carry that across or the category looks like it vanished.
+    const fromEmpty = emptyCategories.value[fromList] ?? []
+    const nextEmpty = { ...emptyCategories.value }
+    let emptyChanged = false
+    if (fromEmpty.includes(name)) {
+      nextEmpty[fromList] = fromEmpty.filter((c) => c !== name)
+      emptyChanged = true
+    }
+    if (visible === 0) {
+      const toEmpty = nextEmpty[toList] ?? []
+      if (!toEmpty.includes(finalName)) {
+        nextEmpty[toList] = [...toEmpty, finalName]
+        emptyChanged = true
+      }
+    }
+    if (emptyChanged) {
+      emptyCategories.value = nextEmpty
+      await persistEmptyCategories()
+    }
+
+    // Drop it from the source list's saved order; in the target it picks up the
+    // default sort position rather than inheriting a slot it never had.
+    const savedOrder = categoryOrder.value[fromList]
+    if (savedOrder?.includes(name)) {
+      await reorderCategories(fromList, savedOrder.filter((c) => c !== name))
+    }
+    await categoryPrefsStore.moveCategoryToList(fromList, toList, name, finalName)
+
+    // In-memory: those items belong to another list now. Matched on list_name
+    // too — an All Lists windowed view holds rows from lists we didn't touch.
+    todos.value = todos.value.filter(
+      (t) => !(t.list_name === fromList && t.category === name && t.type !== 'event')
+    )
+    if (fromList === currentList.value) {
+      categories.value = categories.value.filter((c) => c !== name)
+    }
+    invalidateList(fromList)
+    invalidateList(toList)
+    fetchViewCounts(currentList.value)
+    return finalName
+  }
+
   async function deleteCategory(list: string, name: string) {
     // Remove all todos in this category (server-side bulk delete).
     const res = await apiFetch('/api/categories', {
@@ -865,6 +933,7 @@ export const useTodoStore = defineStore('todos', () => {
     createCategory,
     deleteCategory,
     mergeCategory,
+    moveCategoryToList,
     setView,
     reset,
     invalidateList,

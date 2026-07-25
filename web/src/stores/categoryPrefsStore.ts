@@ -183,6 +183,26 @@ export const useCategoryPrefsStore = defineStore('categoryPrefs', () => {
     await persist(nextMap, previousMap)
   }
 
+  /** Carry a category's prefs to another list, under a possibly-new name (the
+   *  target list may already have had a category by the original name). */
+  async function moveCategoryToList(
+    fromList: string,
+    toList: string,
+    oldName: string,
+    newName: string,
+  ) {
+    const previousMap = JSON.parse(JSON.stringify(prefs.value)) as PrefsMap
+    const entry = previousMap[fromList]?.[oldName]
+    if (!entry) return
+    const nextMap: PrefsMap = { ...previousMap }
+    const fromMap: CategoryMap = { ...nextMap[fromList] }
+    delete fromMap[oldName]
+    if (Object.keys(fromMap).length > 0) nextMap[fromList] = fromMap
+    else delete nextMap[fromList]
+    nextMap[toList] = { ...(nextMap[toList] ?? {}), [newName]: entry }
+    await persist(nextMap, previousMap)
+  }
+
   return {
     prefs,
     loadFromCache,
@@ -194,5 +214,6 @@ export const useCategoryPrefsStore = defineStore('categoryPrefs', () => {
     setItemOrder,
     clearCategory,
     renamePrefCategory,
+    moveCategoryToList,
   }
 })

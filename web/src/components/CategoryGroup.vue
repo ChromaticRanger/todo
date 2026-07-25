@@ -6,6 +6,7 @@ import TodoItem from './TodoItem.vue'
 import TodoForm from './TodoForm.vue'
 import BookmarkTile from './BookmarkTile.vue'
 import DeleteCategoryDialog from './DeleteCategoryDialog.vue'
+import MoveCategoryDialog from './MoveCategoryDialog.vue'
 import type { TodoFormData } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useListStore } from '../stores/listStore'
@@ -45,6 +46,7 @@ const menuPos = ref({ top: 0, right: 0 })
 const editing = ref(false)
 const editName = ref('')
 const confirmDelete = ref(false)
+const showMove = ref(false)
 
 function positionTypeMenu() {
   const el = addBtnRef.value
@@ -201,6 +203,15 @@ async function handleMoveToGeneral() {
   confirmDelete.value = false
   await store.mergeCategory(listStore.activeList, props.category, 'General')
 }
+
+async function handleMoveToList(targetList: string) {
+  showMove.value = false
+  const landed = await store.moveCategoryToList(listStore.activeList, targetList, props.category)
+  if (!landed) return
+  // Lists are derived from their items server-side, so a brand-new target only
+  // shows up in the tab bar once we tell the store about it.
+  if (!listStore.lists.includes(targetList)) listStore.addListLocally(targetList)
+}
 </script>
 
 <template>
@@ -249,6 +260,18 @@ async function handleMoveToGeneral() {
         >
           <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
             <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474ZM3.75 13.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z" />
+          </svg>
+        </button>
+
+        <!-- Move category to another list -->
+        <button
+          v-if="!editing"
+          class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
+          title="Move category to another list"
+          @click="showMove = true"
+        >
+          <svg class="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
           </svg>
         </button>
 
@@ -428,6 +451,15 @@ async function handleMoveToGeneral() {
     :initial-type="addType"
     @submit="handleAdd"
     @cancel="showAddForm = false"
+  />
+
+  <!-- Move category to another list -->
+  <MoveCategoryDialog
+    v-if="showMove"
+    :category="category"
+    :current-list="listStore.activeList"
+    @move="handleMoveToList"
+    @cancel="showMove = false"
   />
 
   <!-- Delete category dialog -->
