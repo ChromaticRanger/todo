@@ -329,6 +329,13 @@ async function unsnoozeReveal() {
 
 async function onSearchSelect(item: Todo) {
   searchStore.closeSearch()
+  // Events live outside any list/category, so there's nothing to reveal in the
+  // list view — send them to the calendar instead. The search endpoint already
+  // resolved recurring series onto the occurrence worth landing on.
+  if (item.type === 'event') {
+    revealInCalendar(item)
+    return
+  }
   await revealTodoInList(item)
 }
 

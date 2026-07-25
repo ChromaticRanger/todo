@@ -221,6 +221,86 @@ export function expandEventOccurrences(
   return out
 }
 
+// Resolve an event row to the single occurrence a "jump to this event" should
+// land on: the next one whose end is still ahead of `from`, or — when the series
+// has already finished — its final occurrence. Non-recurring events resolve to
+// their own start. Returns null for a row with no due_date.
+//
+// Needed because a recurring series is stored as one row anchored on its FIRST
+// occurrence, which may be years in the past; searching for it and landing the
+// calendar there would be useless.
+export function resolveEventOccurrence(ev: TodoRow, from: number): number | null {
+  const base = ev.due_date != null ? Number(ev.due_date) : null
+  if (base == null) return null
+
+  const stepDays = Number(ev.repeat_days)
+  const stepMonths = Number(ev.repeat_months)
+  if (stepDays <= 0 && stepMonths <= 0) return base
+
+  const dur = ev.duration_seconds != null ? Number(ev.duration_seconds) : 0
+  const until = ev.recur_until != null ? Number(ev.recur_until) : Infinity
+
+  let occ = base
+  if (occ + dur <= from) {
+    if (stepDays > 0) {
+      // Closed-form skip first so a long-running daily series doesn't iterate
+      // thousands of times, then step to correct any rounding.
+      const stepSec = stepDays * 86400
+      const skips = Math.floor((from - dur - occ) / stepSec)
+      if (skips > 0) occ += skips * stepSec
+      while (occ + dur <= from) occ += stepSec
+    } else {
+      // Monthly: step one month at a time so this lands on exactly the same
+      // instants expandEventOccurrences emits (setMonth drifts a 31st anchor
+      // through short months, and the resolved start has to match the chip).
+      let safety = 0
+      while (occ + dur <= from && safety++ < MAX_OCCURRENCES_PER_SERIES) {
+        occ = addMonths(occ, stepMonths)
+      }
+    }
+  }
+  if (occ <= until) return occ
+
+  // Series ended before `from` — walk back to the last allowed start.
+  if (stepDays > 0) {
+    const stepSec = stepDays * 86400
+    return base + Math.max(0, Math.floor((until - base) / stepSec)) * stepSec
+  }
+  let last = base
+  let safety = 0
+  for (;;) {
+    const next = addMonths(last, stepMonths)
+    if (next > until || safety++ >= MAX_OCCURRENCES_PER_SERIES) return last
+    last = next
+  }
+}
+
+// Per-occurrence ("this occurrence only") edits for the given series, keyed
+// `<seriesId>:<originalStart>` — the shape expandEventOccurrences expects.
+// Returns undefined when there's nothing to look up.
+export async function fetchOccurrenceOverrides(
+  userId: string,
+  seriesIds: number[]
+): Promise<Map<string, OccurrenceOverride> | undefined> {
+  if (seriesIds.length === 0) return undefined
+  const ov = await query<{
+    series_id: string; occurrence_start: string
+    new_due_date: string | null; new_duration_seconds: string | null
+  }>(
+    `SELECT series_id, occurrence_start, new_due_date, new_duration_seconds
+     FROM event_overrides WHERE user_id = $1 AND series_id = ANY($2::bigint[])`,
+    [userId, seriesIds]
+  )
+  const overrides = new Map<string, OccurrenceOverride>()
+  for (const r of ov.rows) {
+    overrides.set(`${Number(r.series_id)}:${Number(r.occurrence_start)}`, {
+      due: r.new_due_date != null ? Number(r.new_due_date) : null,
+      dur: r.new_duration_seconds != null ? Number(r.new_duration_seconds) : null,
+    })
+  }
+  return overrides
+}
+
 // Loads the user's recurring event series that could produce an occurrence in
 // [from, to] and returns the expanded virtual rows. Cheap: the partial index
 // `todos_event_series_idx` keeps the lookup small.
@@ -245,25 +325,10 @@ export async function fetchExpandedEventSeries(
   )
   // Load per-occurrence overrides for the fetched series so expansion can apply
   // "this occurrence" edits.
-  let overrides: Map<string, OccurrenceOverride> | undefined
-  const seriesIds = result.rows.map((r) => Number(r.id))
-  if (seriesIds.length > 0) {
-    const ov = await query<{
-      series_id: string; occurrence_start: string
-      new_due_date: string | null; new_duration_seconds: string | null
-    }>(
-      `SELECT series_id, occurrence_start, new_due_date, new_duration_seconds
-       FROM event_overrides WHERE user_id = $1 AND series_id = ANY($2::bigint[])`,
-      [userId, seriesIds]
-    )
-    overrides = new Map()
-    for (const r of ov.rows) {
-      overrides.set(`${Number(r.series_id)}:${Number(r.occurrence_start)}`, {
-        due: r.new_due_date != null ? Number(r.new_due_date) : null,
-        dur: r.new_duration_seconds != null ? Number(r.new_duration_seconds) : null,
-      })
-    }
-  }
+  const overrides = await fetchOccurrenceOverrides(
+    userId,
+    result.rows.map((r) => Number(r.id))
+  )
   return expandEventOccurrences(result.rows, from, to, overrides)
 }
 

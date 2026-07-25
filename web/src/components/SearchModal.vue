@@ -3,6 +3,8 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import type { Todo } from '../types/todo'
 import { Status } from '../types/todo'
 import { useSearchStore } from '../stores/searchStore'
+import { formatEventDateTimeRange } from '../lib/eventTime'
+import { describeRecurrence } from '../lib/recurrence'
 
 const emit = defineEmits<{
   select: [todo: Todo]
@@ -45,7 +47,27 @@ function isCompleted(t: Todo): boolean {
 function typeLabel(t: Todo): string {
   if (t.type === 'bookmark') return 'Bookmark'
   if (t.type === 'note') return 'Note'
+  if (t.type === 'event') return 'Event'
   return 'Todo'
+}
+
+// Events sit outside lists and categories, so their meta line shows when they
+// happen instead. For a recurring series the server resolved this to the
+// occurrence the jump will land on (the next one, or the last if it has ended).
+function eventWhen(t: Todo): string {
+  if (t.due_date == null) return 'No date'
+  if (t.all_day) {
+    const day = new Date(t.due_date * 1000).toLocaleDateString(undefined, {
+      weekday: 'short', day: 'numeric', month: 'short',
+    })
+    return `${day} · All day`
+  }
+  return formatEventDateTimeRange(t.due_date, t.duration_seconds)
+}
+
+function recurrenceLabel(t: Todo): string {
+  if (t.type !== 'event') return ''
+  return describeRecurrence(t.repeat_days, t.repeat_months)
 }
 
 function snippet(text: string | null, q: string, max = 120): string {
@@ -149,7 +171,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
           ref="input"
           :value="search.query"
           type="text"
-          placeholder="Search across all lists…"
+          placeholder="Search todos, bookmarks, notes & events…"
           class="flex-1 bg-transparent text-text placeholder:text-muted text-base focus:outline-none"
           autocomplete="off"
           spellcheck="false"
@@ -199,6 +221,9 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <svg v-else-if="item.type === 'note'" class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
+              <svg v-else-if="item.type === 'event'" class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
               <svg v-else class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
@@ -220,9 +245,21 @@ onUnmounted(() => window.removeEventListener('keydown', onKeydown))
               <div class="mt-1 flex items-center gap-2 text-[11px] text-muted">
                 <span class="uppercase tracking-wider">{{ typeLabel(item) }}</span>
                 <span>·</span>
-                <span class="truncate">{{ item.list_name }}</span>
-                <span>·</span>
-                <span class="truncate">{{ item.category || 'General' }}</span>
+                <template v-if="item.type === 'event'">
+                  <span class="truncate">{{ eventWhen(item) }}</span>
+                  <span
+                    v-if="recurrenceLabel(item)"
+                    class="shrink-0 text-accent/80"
+                    :title="`Repeats ${recurrenceLabel(item).toLowerCase()}`"
+                  >
+                    ↻ {{ recurrenceLabel(item) }}
+                  </span>
+                </template>
+                <template v-else>
+                  <span class="truncate">{{ item.list_name }}</span>
+                  <span>·</span>
+                  <span class="truncate">{{ item.category || 'General' }}</span>
+                </template>
                 <span
                   v-if="isCompleted(item)"
                   class="ml-1 px-1.5 py-0.5 rounded-full bg-accent/15 text-accent text-[10px] font-medium"
