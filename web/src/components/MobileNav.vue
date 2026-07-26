@@ -262,6 +262,18 @@ function fromMore(action: () => void) {
           <span class="flex-1 text-left">Show welcome tour</span>
         </button>
 
+        <!-- Upgrade (Free only) -->
+        <a
+          v-if="!isPro() && !authStore.isDemo && !authStore.needsPlanChoice"
+          href="/account#billing"
+          class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-accent hover:bg-accent/10 transition-colors"
+        >
+          <svg class="size-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+          </svg>
+          <span class="flex-1 text-left font-medium">Upgrade to Pro</span>
+        </a>
+
         <!-- Blog -->
         <a
           v-if="!authStore.isDemo"
