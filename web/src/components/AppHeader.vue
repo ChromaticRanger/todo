@@ -78,6 +78,13 @@ const capStatus = computed<{ severity: 'over' | 'at'; message: string } | null>(
       }
 })
 
+// Persistent upgrade affordance for Free users. Hidden for Pro (nothing to
+// buy), for demo visitors (no real account to bill), and while the plan is
+// still unknown — including the pre-ChoosePlan window where tier is null.
+const showUpgrade = computed(
+  () => authStore.tier === 'free' && !authStore.isDemo && !authStore.needsPlanChoice
+)
+
 const displayName = computed(() => {
   const u = authStore.user
   if (!u) return ''
@@ -322,6 +329,20 @@ function openAdd(type: ItemType) {
 
       </div>
 
+      <!-- Upgrade CTA — outside the md-only group so Free users can reach
+           billing from the phone header too. -->
+      <a
+        v-if="showUpgrade"
+        href="/account#billing"
+        class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-accent ring-1 ring-accent/30 hover:bg-accent/10 transition-colors"
+        title="Upgrade to Pro"
+      >
+        <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+        </svg>
+        Upgrade
+      </a>
+
       <!-- Current user / Account link. The Account page is hidden for demo
            visitors (it would expose Sign out, Delete account, billing) — the
            anchor stays as a non-navigating element so the avatar + DEMO pill
@@ -357,8 +378,10 @@ function openAdd(type: ItemType) {
         >
           demo
         </span>
+        <!-- Tier pill. Suppressed when the Upgrade button is showing: it says
+             "free" louder, and two badges crowd the phone header. -->
         <span
-          v-else-if="authStore.tier"
+          v-else-if="authStore.tier && !showUpgrade"
           class="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide leading-none"
           :class="authStore.tier === 'pro'
             ? 'bg-accent/15 text-accent'
@@ -382,7 +405,7 @@ function openAdd(type: ItemType) {
   >
     <span>{{ capStatus.message }}</span>
     <a
-      href="/account"
+      href="/account#billing"
       class="shrink-0 rounded-lg bg-accent px-3 py-1 text-xs font-medium text-accent-fg hover:bg-accent-hover transition-colors"
     >
       Upgrade

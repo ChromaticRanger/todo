@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, nextTick, computed } from 'vue'
 import { apiFetch } from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
 import { authClient } from '../lib/auth-client'
@@ -193,7 +193,16 @@ async function handleSignOut() {
   window.location.href = '/'
 }
 
-onMounted(loadProfile)
+onMounted(async () => {
+  await loadProfile()
+  // The Billing card only exists once the profile resolves, so the browser's
+  // native #billing jump has nothing to scroll to on first paint. Do it here
+  // instead — this is where the header's "Upgrade" link points.
+  if (window.location.hash === '#billing') {
+    await nextTick()
+    document.getElementById('billing')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+})
 </script>
 
 <template>
@@ -284,7 +293,8 @@ onMounted(loadProfile)
 
       <div
         v-if="profile"
-        class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 dark:inset-ring dark:inset-ring-white/5"
+        id="billing"
+        class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 scroll-mt-6 dark:inset-ring dark:inset-ring-white/5"
       >
         <h2 class="text-base font-semibold mb-1">Billing</h2>
 
