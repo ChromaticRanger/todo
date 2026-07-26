@@ -31,13 +31,13 @@ The Free plan includes all core task management, but caps usage at **3 lists** a
 |---|---|---|
 | Create todos | Free | Add tasks with a title and optional description, assigned to a list and category. |
 | Edit & delete todos | Free | Update any field of a task (title, description, category, priority, due date) or remove it. |
-| Priority levels | Free | Mark items as Low, Medium, or High priority. |
-| Due dates & times | Free | Set a specific due date and time-of-day for any item; the exact stored time is always honoured. |
+| Priority levels | Free | Mark todos as Low, Medium, or High priority. |
+| Due dates & times | Free | Set a specific due date and time-of-day for any todo; the exact stored time is always honoured. |
 | Complete / uncomplete | Free | Mark tasks done (with a completion timestamp) and undo completion to restore them. |
 | Recurring todos | Free | Repeat tasks daily, weekly, fortnightly, monthly, yearly, or on a custom interval; the next occurrence spawns automatically on completion. |
-| Snooze / defer | Free | Hide a task (or a whole overdue list) until a chosen future date, with optional rescheduling, and unsnooze to bring it back. |
+| Snooze / defer | Free | Hide a task until a chosen future date, with optional rescheduling, and unsnooze to bring it back. |
 | Move between lists & categories | Free | Move an item to a different list or category, creating new lists/categories on the fly (subject to Free plan caps). |
-| Bookmarks | Free | Save URLs as bookmark items with an automatically fetched favicon thumbnail; supports categories and priorities like todos. |
+| Bookmarks | Free | Save URLs as bookmark items with an automatically fetched favicon thumbnail; supports categories like todos. |
 | Notes (Markdown) | Free | Write notes with full Markdown formatting — headings, bold/italic, lists, code blocks, links, and embedded images — rendered safely with auto-linked URLs. |
 | Events | Pro | Create calendar events with a start time and duration (time blocks), including weekly/monthly/yearly recurring series with an optional end date. |
 

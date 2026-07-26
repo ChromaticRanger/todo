@@ -3,10 +3,36 @@ import { ref, computed, onMounted } from 'vue'
 import { authClient } from '../lib/auth-client'
 import { useAuthStore } from '../stores/authStore'
 import { apiFetch } from '../lib/api'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const authStore = useAuthStore()
 const error = ref('')
 const busy = ref<'free' | 'monthly' | 'yearly' | null>(null)
+const showDemoConfirm = ref(false)
+const startingDemo = ref(false)
+
+// Mirrors LandingPage.startDemo: mint an ephemeral demo user and hard-navigate
+// so the page boots authenticated as it. The demo session cookie replaces this
+// account's session — the account itself is untouched; the user signs back in
+// afterwards and lands here again (still plan-less).
+async function startDemo() {
+  showDemoConfirm.value = false
+  if (startingDemo.value) return
+  startingDemo.value = true
+  error.value = ''
+  try {
+    const res = await fetch('/api/demo/start', {
+      method: 'POST',
+      credentials: 'include',
+    })
+    if (!res.ok) throw new Error(`status ${res.status}`)
+    window.location.assign('/')
+  } catch (e) {
+    console.error('[demo] start failed', e)
+    error.value = 'Demo is temporarily unavailable. Try again in a moment.'
+    startingDemo.value = false
+  }
+}
 const activating = ref(false)
 // True when the user signed up with "Keep my demo work" ticked. The flag
 // rides on the server-stored profile (cleared by /api/account on first read),
@@ -200,7 +226,19 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="mt-8 text-center">
+      <p class="mt-8 text-center text-sm text-muted">
+        Not sure yet?
+        <button
+          type="button"
+          class="font-medium text-accent hover:underline disabled:opacity-50"
+          :disabled="startingDemo || busy !== null"
+          @click="showDemoConfirm = true"
+        >
+          {{ startingDemo ? 'Opening the demo…' : 'Preview Pro in the 30-minute demo' }}
+        </button>
+      </p>
+
+      <div class="mt-4 text-center">
         <button
           type="button"
           class="text-xs text-muted hover:text-text transition-colors"
@@ -210,5 +248,14 @@ onMounted(async () => {
         </button>
       </div>
     </div>
+
+    <ConfirmDialog
+      v-if="showDemoConfirm"
+      title="Preview Pro in the demo?"
+      message="The demo runs as its own temporary account, so you'll be signed out of this one while it runs. Nothing is lost — sign back in afterwards and pick your plan."
+      confirm-label="Open the demo"
+      @confirm="startDemo"
+      @cancel="showDemoConfirm = false"
+    />
   </div>
 </template>

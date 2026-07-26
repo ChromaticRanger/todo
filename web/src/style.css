@@ -329,6 +329,35 @@
   .note-markdown img[src$=".svg"] { @apply max-w-20; }
 }
 
+/* ── Rendered Markdown (help articles) ──────────────────────────────────────── */
+/* Same markdown-it output as notes, but at reading scale — help articles are
+   full pages, not compact card bodies. */
+@layer components {
+  .help-markdown { @apply text-[15px] leading-relaxed text-text; }
+  .help-markdown > :first-child { margin-top: 0; }
+  .help-markdown > :last-child { margin-bottom: 0; }
+  .help-markdown p { @apply my-3; }
+  .help-markdown h1 { @apply text-xl font-semibold text-text mt-6 mb-2; }
+  .help-markdown h2 { @apply text-lg font-semibold text-text mt-6 mb-2; }
+  .help-markdown h3,
+  .help-markdown h4 { @apply text-base font-semibold text-text mt-4 mb-1.5; }
+  .help-markdown ul { @apply list-disc pl-5 my-3; }
+  .help-markdown ol { @apply list-decimal pl-5 my-3; }
+  .help-markdown li { @apply my-1; }
+  .help-markdown li > p { @apply my-0; }
+  .help-markdown strong { @apply font-semibold text-text; }
+  .help-markdown a { @apply text-accent underline underline-offset-2 hover:no-underline; }
+  .help-markdown code { @apply text-[0.9em] bg-surface-hover/60 text-text px-1 py-0.5 rounded; }
+  .help-markdown pre { @apply text-[0.9em] bg-surface-hover/60 text-text p-3 rounded-lg my-3 overflow-x-auto; }
+  .help-markdown pre code { @apply bg-transparent p-0 rounded-none; }
+  .help-markdown blockquote { @apply border-l-2 border-accent/50 pl-3 my-3 text-muted; }
+  .help-markdown hr { @apply my-5 border-border; }
+  .help-markdown img { @apply max-w-full h-auto rounded-xl border border-border shadow-sm my-4; }
+  .help-markdown table { @apply w-full my-3 text-sm border-collapse; }
+  .help-markdown th { @apply text-left font-semibold text-text border-b border-border px-2 py-1.5; }
+  .help-markdown td { @apply border-b border-border/60 px-2 py-1.5 align-top; }
+}
+
 /* ── Modal shell + form controls ─────────────────────────────────────────────── */
 /* Shared building blocks for every dialog/form modal so they all get the same
    themed treatment: blurred backdrop, a soft entrance animation, accent focus

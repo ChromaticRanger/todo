@@ -268,6 +268,20 @@ function openAdd(type: ItemType) {
         </svg>
       </button>
 
+      <!-- Help centre (public page; new tab keeps the app state intact) -->
+      <a
+        href="/help"
+        target="_blank"
+        rel="noopener"
+        class="flex items-center justify-center size-9 rounded-lg text-muted hover:text-text hover:bg-surface-hover transition-colors"
+        title="Help"
+        aria-label="Open help centre"
+      >
+        <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM15.5 12a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zM5.6 5.6l3.9 3.9M18.4 5.6l-3.9 3.9M5.6 18.4l3.9-3.9M18.4 18.4l-3.9-3.9" />
+        </svg>
+      </a>
+
       <!-- Settings link -->
       <a
         v-if="!authStore.isDemo"

@@ -627,6 +627,7 @@ const features = [
           >
             Chrome extension
           </a>
+          <a href="/help" class="hover:text-text transition-colors">Help</a>
           <a href="/privacy.html" class="hover:text-text transition-colors">Privacy</a>
           <a href="/login" class="hover:text-text transition-colors">Sign in</a>
           <a
