@@ -29,7 +29,8 @@
     "digest:send:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/send-daily-digests.ts",
     "db:backfill-user": "tsx server/scripts/backfill-user.ts",
     "ext:dev": "npm --prefix extension run dev",
-    "ext:build": "npm --prefix extension run build"
+    "ext:build": "npm --prefix extension run build",
+    "help:shots": "tsx scripts/help-screenshots.ts"
   },
   "dependencies": {
     "@better-auth/stripe": "^1.6.5",
@@ -59,6 +60,7 @@
     "@vitejs/plugin-vue": "^6.0.5",
     "@vue/tsconfig": "^0.9.0",
     "concurrently": "^9.2.1",
+    "playwright": "^1.62.0",
     "tailwindcss": "^4.2.2",
     "typescript": "~5.9.3",
     "vite": "^8.0.1",

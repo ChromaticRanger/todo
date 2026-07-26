@@ -38,6 +38,7 @@ import DueTodayModal from './components/DueTodayModal.vue'
 import SearchModal from './components/SearchModal.vue'
 import DemoOverlay from './components/DemoOverlay.vue'
 import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
+import HelpPage from './components/HelpPage.vue'
 import DiscoverView from './components/DiscoverView.vue'
 import { useDiscoverStore } from './stores/discoverStore'
 
@@ -83,6 +84,12 @@ const isSettingsFlow = ref(
 // out), so it renders ahead of every auth-gated branch below.
 const isResetFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/reset-password'
+)
+// Static help centre — /help, /help/<section>, /help/<section>/<topic>.
+// Fully public (support + marketing surface), so it renders ahead of every
+// auth-gated branch; HelpPage handles its own sub-navigation via pushState.
+const isHelpFlow = ref(
+  typeof window !== 'undefined' && window.location.pathname.startsWith('/help')
 )
 // Unauthenticated routing: '/' shows the marketing landing page, '/login'
 // shows the sign-in form, anything else (e.g. /connect-extension deep links)
@@ -533,7 +540,8 @@ function onTourSkip() {
 </script>
 
 <template>
-  <ResetPassword v-if="isResetFlow" />
+  <HelpPage v-if="isHelpFlow" />
+  <ResetPassword v-else-if="isResetFlow" />
   <div v-else-if="authStore.loading && !authStore.isAuthenticated" class="min-h-dvh bg-bg" aria-hidden="true" />
   <LandingPage v-else-if="!authStore.isAuthenticated && isLandingFlow" />
   <!-- Demo visitors can reach /login while still authenticated as their
