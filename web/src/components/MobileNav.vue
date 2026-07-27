@@ -262,6 +262,20 @@ function fromMore(action: () => void) {
           <span class="flex-1 text-left">Show welcome tour</span>
         </button>
 
+        <!-- Help centre (public page; new tab keeps the app state intact) -->
+        <a
+          href="/help"
+          target="_blank"
+          rel="noopener"
+          class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-text hover:bg-surface-hover transition-colors"
+          @click="showMoreSheet = false"
+        >
+          <svg class="size-5 text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM15.5 12a3.5 3.5 0 11-7 0 3.5 3.5 0 017 0zM5.6 5.6l3.9 3.9M18.4 5.6l-3.9 3.9M5.6 18.4l3.9-3.9M18.4 18.4l-3.9-3.9" />
+          </svg>
+          <span class="flex-1 text-left">Help</span>
+        </a>
+
         <!-- Upgrade (Free only) -->
         <a
           v-if="!isPro() && !authStore.isDemo && !authStore.needsPlanChoice"
