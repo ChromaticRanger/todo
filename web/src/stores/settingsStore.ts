@@ -128,6 +128,8 @@ export const useSettingsStore = defineStore('settings', () => {
   // Live in-app toast (+ native notification) when an item comes due. Opt-in.
   const dueReminderToast = ref(false)
   const dailyEmailDigest = ref(false)
+  // Include completed items in global search results. Opt-in.
+  const searchIncludeCompleted = ref(false)
   // IANA timezone, auto-detected from the browser. Drives digest delivery time.
   const timezone = ref('UTC')
   // How far back the Completed view fetches. Local-only (no server sync) —
@@ -197,6 +199,7 @@ export const useSettingsStore = defineStore('settings', () => {
     confirmBeforeDelete: boolean
     dueReminderToast: boolean
     dailyEmailDigest: boolean
+    searchIncludeCompleted: boolean
     timezone: string
   }
 
@@ -206,6 +209,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (typeof p.confirmBeforeDelete === 'boolean') confirmBeforeDelete.value = p.confirmBeforeDelete
     if (typeof p.dueReminderToast === 'boolean') dueReminderToast.value = p.dueReminderToast
     if (typeof p.dailyEmailDigest === 'boolean') dailyEmailDigest.value = p.dailyEmailDigest
+    if (typeof p.searchIncludeCompleted === 'boolean') searchIncludeCompleted.value = p.searchIncludeCompleted
     if (typeof p.timezone === 'string' && p.timezone) timezone.value = p.timezone
   }
 
@@ -246,6 +250,7 @@ export const useSettingsStore = defineStore('settings', () => {
       confirmBeforeDelete: confirmBeforeDelete,
       dueReminderToast: dueReminderToast,
       dailyEmailDigest: dailyEmailDigest,
+      searchIncludeCompleted: searchIncludeCompleted,
     } as const
     const target = refs[key]
     const previous = target.value
@@ -315,6 +320,7 @@ export const useSettingsStore = defineStore('settings', () => {
     confirmBeforeDelete,
     dueReminderToast,
     dailyEmailDigest,
+    searchIncludeCompleted,
     timezone,
     completedWindow,
     calendarView,

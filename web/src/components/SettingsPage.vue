@@ -19,6 +19,7 @@ type PrefKey =
   | 'confirmBeforeDelete'
   | 'dueReminderToast'
   | 'dailyEmailDigest'
+  | 'searchIncludeCompleted'
 
 async function onToggle(key: PrefKey, value: boolean) {
   saveError.value = ''
@@ -210,6 +211,21 @@ onMounted(() => {
             :model-value="settingsStore.confirmBeforeDelete"
             label="Confirm before deleting"
             @update:model-value="onToggle('confirmBeforeDelete', $event)"
+          />
+        </div>
+
+        <div class="mt-4 flex items-center justify-between gap-4 border-t border-border/60 pt-4">
+          <div class="min-w-0">
+            <div class="text-sm font-medium text-text">Include completed items in search</div>
+            <div class="text-xs text-muted mt-0.5">
+              Search only looks at things you still have to do. Turn on to also match items
+              you've already ticked off.
+            </div>
+          </div>
+          <ToggleSwitch
+            :model-value="settingsStore.searchIncludeCompleted"
+            label="Include completed items in search"
+            @update:model-value="onToggle('searchIncludeCompleted', $event)"
           />
         </div>
       </div>

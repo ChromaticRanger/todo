@@ -46,7 +46,7 @@ async function resolveEventRows(userId: string, rows: TodoRow[]): Promise<TodoRo
   })
 }
 
-// GET /api/search?q=<query>&limit=50
+// GET /api/search?q=<query>&limit=50&includeCompleted=1
 router.get('/', async (req, res) => {
   if (req.plan !== 'pro') {
     res.status(403).json({ error: 'pro_required' })
@@ -66,6 +66,10 @@ router.get('/', async (req, res) => {
   if (!Number.isFinite(limit) || limit <= 0) limit = DEFAULT_LIMIT
   if (limit > MAX_LIMIT) limit = MAX_LIMIT
 
+  // Completed items are excluded by default — search is overwhelmingly about
+  // finding live work. The client opts back in from the Settings toggle.
+  const includeCompleted = req.query.includeCompleted === '1'
+
   const pattern = `%${escapeLike(q)}%`
 
   try {
@@ -73,6 +77,7 @@ router.get('/', async (req, res) => {
       buildTodoSelect(
         `WHERE user_id = $1
            AND (title ILIKE $2 OR description ILIKE $2 OR url ILIKE $2)
+           ${includeCompleted ? '' : 'AND status = 0'}
          ORDER BY
            (CASE WHEN title ILIKE $2 THEN 0
                  WHEN description ILIKE $2 THEN 1

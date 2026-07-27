@@ -108,6 +108,9 @@ interface Preferences {
   dueReminderToast: boolean
   // Receive the daily email digest (overdue + due today). Opt-in.
   dailyEmailDigest: boolean
+  // Include completed items in global search results. Opt-in — search defaults
+  // to live work only.
+  searchIncludeCompleted: boolean
   // IANA timezone (e.g. 'Europe/London'), auto-detected by the browser. Used to
   // deliver the digest at ~7am the user's local time. Defaults to UTC.
   timezone: string
@@ -119,6 +122,7 @@ const BOOLEAN_KEYS = [
   'confirmBeforeDelete',
   'dueReminderToast',
   'dailyEmailDigest',
+  'searchIncludeCompleted',
 ] as const
 
 const DEFAULT_PREFERENCES: Preferences = {
@@ -127,6 +131,7 @@ const DEFAULT_PREFERENCES: Preferences = {
   confirmBeforeDelete: true,
   dueReminderToast: false,
   dailyEmailDigest: false,
+  searchIncludeCompleted: false,
   timezone: 'UTC',
 }
 
