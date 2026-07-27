@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { Todo } from '../types/todo'
 import { apiFetch } from '../lib/api'
+import { useSettingsStore } from './settingsStore'
 
 const DEBOUNCE_MS = 200
 
@@ -33,8 +34,10 @@ export const useSearchStore = defineStore('search', () => {
     loading.value = true
     error.value = null
     try {
+      // Completed items are excluded server-side unless the user opted in.
+      const includeCompleted = useSettingsStore().searchIncludeCompleted
       const res = await apiFetch(
-        `/api/search?q=${encodeURIComponent(trimmed)}&limit=50`,
+        `/api/search?q=${encodeURIComponent(trimmed)}&limit=50${includeCompleted ? '&includeCompleted=1' : ''}`,
         { signal: ctrl.signal }
       )
       if (ctrl.signal.aborted) return
