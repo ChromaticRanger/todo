@@ -196,11 +196,28 @@ export function subscribe(userId: string, res: Response): void {
   res.on('error', cleanup)
 }
 
-/** Open connections on this instance — surfaced by the health endpoint. */
-export function connectionStats(): { users: number; connections: number } {
+/**
+ * Open connections on this instance, for the admin view.
+ *
+ * Per-instance by nature: with more than one instance running, consecutive
+ * requests land on different ones, which is why the answering instance names
+ * itself. A short prefix is enough to tell two apart and doesn't put a full
+ * internal identifier on the wire.
+ */
+export function connectionStats(): {
+  instance: string
+  listening: boolean
+  users: number
+  connections: number
+} {
   let connections = 0
   for (const set of conns.values()) connections += set.size
-  return { users: conns.size, connections }
+  return {
+    instance: INSTANCE_ID.slice(0, 8),
+    listening: listenerHealthy,
+    users: conns.size,
+    connections,
+  }
 }
 
 // ── Postgres listener ───────────────────────────────────────────────────────
