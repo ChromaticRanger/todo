@@ -10,24 +10,38 @@ if (!process.env.DATABASE_URL) {
   process.exit(1)
 }
 
-// Append uselibpqcompat so sslmode=require keeps its original semantics
-// (encrypted but not cert-verifying), matching how libpq/the C app behaves.
-const connStr = process.env.DATABASE_URL!
-  .replace('sslmode=require', 'sslmode=require&uselibpqcompat=true')
+/**
+ * Normalises a Postgres URL into connect options.
+ *
+ * Exported because the realtime listener needs a STANDALONE client (LISTEN
+ * can't use a pooled connection) and must reach the database exactly the way
+ * the pool does — same SSL decision, same libpq compatibility flag.
+ */
+export function connectionOptions(url: string): {
+  connectionString: string
+  ssl: false | { rejectUnauthorized: boolean }
+} {
+  // Append uselibpqcompat so sslmode=require keeps its original semantics
+  // (encrypted but not cert-verifying), matching how libpq/the C app behaves.
+  const connectionString = url.replace(
+    'sslmode=require',
+    'sslmode=require&uselibpqcompat=true'
+  )
 
-// Local Postgres (Docker) doesn't speak SSL; everything else does. Detect by
-// host: DO injects DATABASE_URL without an explicit `?sslmode=require`, so
-// matching on the query string isn't reliable — match on the hostname.
-let dbHost = ''
-try {
-  dbHost = new URL(process.env.DATABASE_URL!).hostname
-} catch {}
-const isLocalDb = dbHost === 'localhost' || dbHost === '127.0.0.1' || dbHost === '::1'
-const needsSsl = !isLocalDb
+  // Local Postgres (Docker) doesn't speak SSL; everything else does. Detect by
+  // host: DO injects DATABASE_URL without an explicit `?sslmode=require`, so
+  // matching on the query string isn't reliable — match on the hostname.
+  let host = ''
+  try {
+    host = new URL(url).hostname
+  } catch {}
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1'
+
+  return { connectionString, ssl: isLocal ? false : { rejectUnauthorized: false } }
+}
 
 export const pool = new Pool({
-  connectionString: connStr,
-  ssl: needsSsl ? { rejectUnauthorized: false } : false,
+  ...connectionOptions(process.env.DATABASE_URL!),
   max: 3,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,
