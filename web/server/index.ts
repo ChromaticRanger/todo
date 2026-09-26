@@ -27,7 +27,7 @@ import { rateLimit } from './middleware/rateLimit.js'
 import { rateLimit as rateLimiter, ipKeyGenerator } from 'express-rate-limit'
 import { demoNoop } from './middleware/demoNoop.js'
 import { initDb } from './db.js'
-import { startRealtime, isRealtimeHealthy, connectionStats } from './lib/realtime.js'
+import { startRealtime, isRealtimeHealthy } from './lib/realtime.js'
 
 const app = express()
 
@@ -60,10 +60,12 @@ app.all('/api/auth/*splat', toNodeHandler(auth))
 app.use(express.json())
 
 app.get('/api/health', (_req, res) => {
-  // `realtime` is false when the Postgres listener is down: this instance still
-  // serves its own tabs, but events from the other instance aren't arriving.
-  // Silent by nature, so it gets surfaced here rather than only in logs.
-  res.json({ ok: true, realtime: isRealtimeHealthy(), sse: connectionStats() })
+  // Public and unauthenticated, so it carries liveness only — never anything
+  // that describes our usage. `realtime` is false when this instance's Postgres
+  // listener is down, which means events from the other instance aren't
+  // arriving: a silent failure, and the one thing worth alerting on. Connection
+  // COUNTS are commercial information and live behind the admin gate instead.
+  res.json({ ok: true, realtime: isRealtimeHealthy() })
 })
 
 // Demo endpoints (/start, /end) must be reachable without an existing

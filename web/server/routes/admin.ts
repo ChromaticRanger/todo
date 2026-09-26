@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import multer from 'multer'
 import { query } from '../db.js'
 import { requireAdmin } from '../middleware/requireAdmin.js'
+import { connectionStats } from '../lib/realtime.js'
 import { parseFrontmatter, FrontmatterError } from '../lib/frontmatter.js'
 import { upsertBlogPost } from '../lib/blogPosts.js'
 
@@ -21,6 +22,16 @@ interface UserRow {
   todoCount: string
   hasSubscription: boolean
 }
+
+// GET /api/admin/realtime — live SSE state for whichever instance answers.
+//
+// Deliberately not on /api/health: that endpoint is public, and how many people
+// are connected right now is commercial information. Repeat the call to sample
+// the other instance — `instance` says which one replied, and `listening: false`
+// on any of them means cross-instance events are silently not being delivered.
+router.get('/realtime', (_req, res) => {
+  res.json(connectionStats())
+})
 
 // GET /api/admin/stats — top-of-page overview cards
 router.get('/stats', async (_req, res) => {
