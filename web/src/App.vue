@@ -19,6 +19,7 @@ import { apiEvents, apiFetch } from './lib/api'
 import { eventEnd } from './lib/eventTime'
 import { useDueReminders } from './composables/useDueReminders'
 import { useCollabSync } from './composables/useCollabSync'
+import { takePendingInvite } from './lib/pendingInvite'
 import AppHeader from './components/AppHeader.vue'
 import MobileNav from './components/MobileNav.vue'
 import ListTabs from './components/ListTabs.vue'
@@ -44,6 +45,7 @@ import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
 import HelpPage from './components/HelpPage.vue'
 import DiscoverView from './components/DiscoverView.vue'
 import PendingInvites from './components/PendingInvites.vue'
+import InviteLanding from './components/InviteLanding.vue'
 import { useDiscoverStore } from './stores/discoverStore'
 
 const listStore = useListStore()
@@ -93,6 +95,12 @@ const isSettingsFlow = ref(
 // out), so it renders ahead of every auth-gated branch below.
 const isResetFlow = ref(
   typeof window !== 'undefined' && window.location.pathname === '/reset-password'
+)
+// Shared-list invite landing — /invite?token=…. Opened from the invite email by
+// someone who very often has no account yet, so it renders ahead of every
+// auth-gated branch below and resolves the token without a session.
+const isInviteFlow = ref(
+  typeof window !== 'undefined' && window.location.pathname === '/invite'
 )
 // Static help centre — /help, /help/<section>, /help/<section>/<topic>.
 // Fully public (support + marketing surface), so it renders ahead of every
@@ -497,6 +505,14 @@ watch(
       categoryPrefsStore.reset()
     }
     if (currentId) {
+      // Redeem an invite token parked by /invite before we sent them through
+      // sign-in or sign-up. Best-effort and quiet: signing up with the invited
+      // address already attaches the list server-side, so the common outcome
+      // here is "already a member", which is a success, not an error. It runs
+      // before loadData so the list is present in the very first fetch.
+      const invite = isInviteFlow.value ? null : takePendingInvite()
+      if (invite) await collabStore.acceptToken(invite)
+
       await loadData()
       // Invitations waiting on this account. Fetched here rather than in the
       // banner component, which only renders once there's something to show.
@@ -568,6 +584,7 @@ function onTourSkip() {
 <template>
   <HelpPage v-if="isHelpFlow" />
   <ResetPassword v-else-if="isResetFlow" />
+  <InviteLanding v-else-if="isInviteFlow" />
   <div v-else-if="authStore.loading && !authStore.isAuthenticated" class="min-h-dvh bg-bg" aria-hidden="true" />
   <LandingPage v-else-if="!authStore.isAuthenticated && isLandingFlow" />
   <!-- Demo visitors can reach /login while still authenticated as their

@@ -5,6 +5,7 @@ import { LIMITS } from '../lib/limits.js'
 import { invalidateCollabMemo } from '../lib/listAccess.js'
 import { publish, publishToCollab, audienceFor } from '../lib/realtime.js'
 import { sendListInviteEmailFor } from '../lib/email.js'
+import { hashInviteToken, previewInvite } from '../lib/invites.js'
 
 const router = Router()
 
@@ -32,11 +33,7 @@ function isValidEmail(value: string): boolean {
 /** The raw token goes in the email; only its hash is stored. */
 function newToken(): { raw: string; hash: string } {
   const raw = crypto.randomBytes(32).toString('base64url')
-  return { raw, hash: hashToken(raw) }
-}
-
-function hashToken(raw: string): string {
-  return crypto.createHash('sha256').update(raw).digest('hex')
+  return { raw, hash: hashInviteToken(raw) }
 }
 
 function expiryDate(): Date {
@@ -564,7 +561,7 @@ router.post('/invites/accept', async (req, res) => {
   }
   try {
     const { rows } = await query(`${INVITE_SELECT} AND i.token_hash = $1`, [
-      hashToken(token),
+      hashInviteToken(token),
     ])
     if (!rows[0]) {
       res.status(404).json({ error: 'Not found' })
@@ -700,6 +697,35 @@ router.delete('/lists/:name', async (req, res) => {
       void publish({ type: 'membership_changed', collab_id: collabId }, audience)
     }
     res.json({ ok: true, unshared: (rowCount ?? 0) > 0 })
+  } catch (err) {
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+/**
+ * Unauthenticated slice of the invite flow.
+ *
+ * The landing page has to say "Alice invited you to Groceries" BEFORE the
+ * visitor has an account, otherwise the only growth path we have asks people to
+ * sign up for something unnamed. Mounted ahead of authMiddleware in index.ts;
+ * the token is the sole credential, which is why an unknown, revoked, accepted
+ * or non-existent invite all answer the same 404.
+ */
+export const publicInviteRouter = Router()
+
+publicInviteRouter.get('/', async (req, res) => {
+  const token = typeof req.query.token === 'string' ? req.query.token : ''
+  if (!token) {
+    res.status(400).json({ error: 'token_required' })
+    return
+  }
+  try {
+    const result = await previewInvite(token)
+    if ('error' in result) {
+      res.status(result.error === 'invite_expired' ? 410 : 404).json({ error: result.error })
+      return
+    }
+    res.json(result.ok)
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }

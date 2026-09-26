@@ -13,7 +13,7 @@ import planRouter from './routes/plan.js'
 import searchRouter from './routes/search.js'
 import importRouter from './routes/import.js'
 import sharedRouter from './routes/shared.js'
-import collabRouter from './routes/collab.js'
+import collabRouter, { publicInviteRouter } from './routes/collab.js'
 import blogRouter from './routes/blog.js'
 import extensionRouter from './routes/extension.js'
 import accountRouter from './routes/account.js'
@@ -24,11 +24,24 @@ import eventsRouter from './routes/events.js'
 import { authMiddleware } from './middleware/auth.js'
 import { requirePlan } from './middleware/requirePlan.js'
 import { rateLimit } from './middleware/rateLimit.js'
+import { rateLimit as rateLimiter, ipKeyGenerator } from 'express-rate-limit'
 import { demoNoop } from './middleware/demoNoop.js'
 import { initDb } from './db.js'
 import { startRealtime, isRealtimeHealthy, connectionStats } from './lib/realtime.js'
 
 const app = express()
+
+// The invite preview is the only unauthenticated endpoint that reads a secret
+// from the URL, so it gets an IP-keyed limiter of its own. Tokens are 32 random
+// bytes and unguessable; this is about not letting anyone hammer the endpoint.
+const invitePreviewLimit = rateLimiter({
+  windowMs: 60_000,
+  max: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? ''),
+  message: { error: 'rate_limited' },
+})
 const PORT = process.env.PORT || 3001
 const isProd = process.env.NODE_ENV === 'production'
 
@@ -61,6 +74,11 @@ app.use('/api/demo', demoRouter)
 // Scheduled-job trigger (daily digest). Authenticated by a shared secret in the
 // request, not a user session, so it mounts before authMiddleware.
 app.use('/api/cron', cronRouter)
+
+// Invite preview for the /invite landing page. Must be reachable with no
+// session — the whole point is telling someone who invited them and to what
+// before they have an account. The token in the URL is the only credential.
+app.use('/api/collab/invites/preview', invitePreviewLimit, publicInviteRouter)
 
 app.use('/api', authMiddleware)
 
