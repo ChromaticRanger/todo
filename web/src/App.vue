@@ -5,6 +5,7 @@ import { useTodoStore } from './stores/todoStore'
 import { useAuthStore } from './stores/authStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useSearchStore } from './stores/searchStore'
+import { useCollabStore } from './stores/collabStore'
 import {
   useListPrefsStore,
   GRID_COLUMN_OPTIONS,
@@ -13,9 +14,11 @@ import {
 } from './stores/listPrefsStore'
 import { useCategoryPrefsStore } from './stores/categoryPrefsStore'
 import type { ViewType, ItemType, Todo } from './types/todo'
+import { keyOf } from './types/todo'
 import { apiEvents, apiFetch } from './lib/api'
 import { eventEnd } from './lib/eventTime'
 import { useDueReminders } from './composables/useDueReminders'
+import { useCollabSync } from './composables/useCollabSync'
 import AppHeader from './components/AppHeader.vue'
 import MobileNav from './components/MobileNav.vue'
 import ListTabs from './components/ListTabs.vue'
@@ -40,6 +43,7 @@ import DemoOverlay from './components/DemoOverlay.vue'
 import ImportBookmarksDialog from './components/ImportBookmarksDialog.vue'
 import HelpPage from './components/HelpPage.vue'
 import DiscoverView from './components/DiscoverView.vue'
+import PendingInvites from './components/PendingInvites.vue'
 import { useDiscoverStore } from './stores/discoverStore'
 
 const listStore = useListStore()
@@ -49,7 +53,12 @@ const settingsStore = useSettingsStore()
 const listPrefsStore = useListPrefsStore()
 const categoryPrefsStore = useCategoryPrefsStore()
 const searchStore = useSearchStore()
+const collabStore = useCollabStore()
 const discoverStore = useDiscoverStore()
+
+// Keeps lists shared with (or by) this user in step with what other people are
+// doing. Self-managing: polls only while signed in and the tab is visible.
+useCollabSync()
 
 // Live "item is due now" toasts. Self-managing: runs only while signed in and
 // the preference is on. Rendered in the template alongside the other toasts.
@@ -128,6 +137,8 @@ function onMainContextMenu(e: MouseEvent) {
   if (sel && sel.toString().length > 0) return
   if (mode.value !== 'lists') return
   if (!isCategoryView.value) return
+  // Nothing in the menu applies to a list you can only read.
+  if (activeListReadOnly.value) return
   e.preventDefault()
   categoryMenu.value = { x: e.clientX, y: e.clientY }
 }
@@ -143,7 +154,15 @@ function handleRateLimit(e: Event) {
   setTimeout(() => (rateLimitMessage.value = ''), 5000)
 }
 
+// True when the active list is one shared with us that we may only read.
+const activeListReadOnly = computed(() => !listStore.canWrite(listStore.activeList))
+// Categories belong to the list's owner — editors add items but don't
+// restructure someone else's list.
+const activeListNotOurs = computed(() => !listStore.canManage(listStore.activeList))
+
 function openAddForm(type: ItemType) {
+  // Events are never part of a shared list, so they stay available.
+  if (activeListReadOnly.value && type !== 'event') return
   addType.value = type
   showAddForm.value = true
 }
@@ -313,14 +332,17 @@ async function revealTodoInList(item: Todo) {
 
   const targetView: ViewType = item.status === 1 ? 'completed' : 'all'
 
-  if (item.list_name !== listStore.activeList) {
-    listStore.setActiveList(item.list_name)
+  // keyOf(), not list_name: a shared item's list_name is the owner's name for
+  // the list, while the tab is identified by the share key.
+  const itemListKey = keyOf(item)
+  if (itemListKey !== listStore.activeList) {
+    listStore.setActiveList(itemListKey)
   }
   if (targetView !== currentView.value) {
     currentView.value = targetView
     todoStore.setView(targetView)
   }
-  await todoStore.fetchTodos(item.list_name, targetView)
+  await todoStore.fetchTodos(itemListKey, targetView)
 
   // If the item is missing from the current view (snoozed items are filtered
   // out of /api/todos in the 'all' view), surface a hint instead of silently
@@ -469,12 +491,16 @@ watch(
     todoStore.reset()
     searchStore.reset()
     discoverStore.reset()
+    collabStore.reset()
     if (userChanged) {
       listPrefsStore.reset()
       categoryPrefsStore.reset()
     }
     if (currentId) {
       await loadData()
+      // Invitations waiting on this account. Fetched here rather than in the
+      // banner component, which only renders once there's something to show.
+      void collabStore.fetchPending()
       await settingsStore.loadFromServer()
       await listPrefsStore.loadFromServer()
       await categoryPrefsStore.loadFromServer()
@@ -567,6 +593,11 @@ function onTourSkip() {
       @import="showImportDialog = true"
     />
 
+    <!-- Invitations waiting on this account -->
+    <div v-if="collabStore.pending.length" class="px-4 pt-3 space-y-2">
+      <PendingInvites />
+    </div>
+
     <!-- List tabs -->
     <div v-if="mode === 'lists'" class="bg-surface/50 border-b border-border px-4 pt-1">
       <ListTabs @select="onListSelect" />
@@ -577,7 +608,15 @@ function onTourSkip() {
       <ViewSwitcher :current="currentView" :counts="todoStore.viewCounts" @change="onViewChange" />
 
       <div v-if="isCategoryView" class="flex items-center gap-2 shrink-0">
+        <span
+          v-if="activeListReadOnly"
+          class="rounded-lg bg-surface-hover px-2.5 py-1 text-xs text-muted whitespace-nowrap"
+          title="This list belongs to someone else"
+        >
+          Shared with you · read only
+        </span>
         <button
+          v-else-if="!activeListNotOurs"
           title="Create a new category"
           class="px-2.5 py-1 rounded-lg text-sm text-muted hover:text-text hover:bg-surface-hover transition-colors whitespace-nowrap"
           @click="openCategoryDialog"

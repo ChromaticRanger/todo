@@ -34,6 +34,31 @@ function setFirstRadio(el: unknown, i: number) {
 onMounted(() => firstRadio.value?.focus())
 useEscapeKey(() => emit('cancel'))
 
+/**
+ * Lists this item may actually move to.
+ *
+ * An item can only move between lists owned by the SAME account — moving it
+ * across an ownership boundary would hand the row, and the quota it consumes,
+ * to someone else, so the server refuses it. Offering targets that are certain
+ * to be rejected is worse than not offering them.
+ *
+ * So: an item in one of your own lists can go to any of your own lists; an item
+ * in a list shared with you can go to another list shared by that same person,
+ * provided you can write to it.
+ */
+const sharedMeta = computed(() => listStore.metaFor(props.currentList))
+const targetLists = computed(() => {
+  const meta = sharedMeta.value
+  if (!meta) return listStore.lists
+  return listStore.sharedLists
+    .filter((s) => s.owner_id === meta.owner_id && s.role === 'editor')
+    .map((s) => s.key)
+})
+/** True when the only place the item can go is where it already is. */
+const noOtherList = computed(
+  () => targetLists.value.filter((l) => l !== props.currentList).length === 0
+)
+
 const availableCategories = computed(() => {
   // Disallow moving to the same list+category the item is already in.
   if (selected.value === props.currentList) {
@@ -104,7 +129,7 @@ const canSubmit = () => {
         <div class="text-xs uppercase tracking-wider text-muted mb-2">List</div>
         <div class="space-y-1 mb-4">
           <label
-            v-for="(list, i) in listStore.lists"
+            v-for="(list, i) in targetLists"
             :key="list"
             class="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-surface-hover cursor-pointer"
           >
@@ -115,11 +140,21 @@ const canSubmit = () => {
               :value="list"
               class="accent-accent"
             />
-            <span class="text-sm text-text">{{ list }}</span>
+            <span class="text-sm text-text">{{ listStore.displayName(list) }}</span>
             <span v-if="list === currentList" class="text-xs text-muted">(current)</span>
           </label>
 
-          <label class="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-surface-hover cursor-pointer">
+          <p v-if="sharedMeta && noOtherList" class="px-2 py-1.5 text-xs text-muted">
+            {{ sharedMeta.owner_name }} hasn’t shared any other list with you, so
+            this item can only be moved between categories here.
+          </p>
+
+          <!-- Creating a list on the fly would create it under YOUR account,
+               which is the one place the item isn't allowed to go. -->
+          <label
+            v-if="!sharedMeta"
+            class="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-surface-hover cursor-pointer"
+          >
             <input type="radio" v-model="selected" :value="NEW_LIST" class="accent-accent" />
             <span class="text-sm text-muted">New list…</span>
           </label>

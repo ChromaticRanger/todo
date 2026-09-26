@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { Todo } from '../types/todo'
-import { Status } from '../types/todo'
+import { Status, keyOf } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { useListStore } from '../stores/listStore'
@@ -130,16 +130,24 @@ const repeatStr = computed(() => {
 // In an All Lists windowed view, todos from other lists surface alongside the
 // active list's items — label them with their own list so their origin is clear.
 // Null when the item already belongs to the active list (the normal case).
+//
+// The comparison must go through keyOf(): on a shared list the row's
+// `list_name` is the OWNER's name for it, while the active list is the share
+// key, so comparing names directly makes every item look foreign.
+const foreignListKey = computed(() => {
+  const key = keyOf(props.todo)
+  return key && key !== props.currentList ? key : null
+})
+
+/** What to call that list in the UI — shared lists show the owner's name for it. */
 const foreignList = computed(() =>
-  props.todo.list_name && props.todo.list_name !== props.currentList
-    ? props.todo.list_name
-    : null
+  foreignListKey.value ? listStore.displayName(foreignListKey.value) : null
 )
 
 // Jump to the item's own list. Switching the active list triggers App's
 // activeList watcher, which refetches the current view for that list.
 function goToForeignList() {
-  if (foreignList.value) listStore.setActiveList(foreignList.value)
+  if (foreignListKey.value) listStore.setActiveList(foreignListKey.value)
 }
 
 function openBookmark() {
@@ -149,7 +157,35 @@ function openBookmark() {
   }
 }
 
+/**
+ * Items in a list shared with us that we're not allowed to change.
+ *
+ * The guard has to sit in front of the UI, not just the store: the delete flow
+ * plays a 220ms fade-out before it ever calls the store, so a rejection at that
+ * point leaves the row visually gone until the next refresh. Telling the user
+ * up front is both truthful and avoids the phantom delete.
+ */
+const readOnly = computed(() => {
+  // Keyed off the ITEM, not the active tab: once shared items mix into Today
+  // and Week the active list is one of your own, but the item still isn't.
+  if (props.todo.list_key == null) return false
+  if (props.todo.can_write === false) return true
+  return !listStore.canWrite(props.todo.list_key)
+})
+const readOnlyReason = computed(() => {
+  const owner = props.todo.owner_name || 'someone else'
+  return `View only — this list is shared by ${owner}, so you can’t change its items.`
+})
+
+/** Returns true (and explains why) when the action must not proceed. */
+function blockedByReadOnly(): boolean {
+  if (!readOnly.value) return false
+  store.setErrorWithTimeout(readOnlyReason.value)
+  return true
+}
+
 async function toggleComplete() {
+  if (blockedByReadOnly()) return
   if (isCompleted.value) {
     await store.uncompleteTodo(props.todo.id)
   } else {
@@ -169,6 +205,7 @@ async function handleMove(payload: { targetList: string; targetCategory: string 
 
 // Honor the "confirm before deleting" preference: when off, delete in one click.
 function requestDelete() {
+  if (blockedByReadOnly()) return
   if (settingsStore.confirmBeforeDelete) showConfirm.value = true
   else void handleDelete()
 }
@@ -177,7 +214,14 @@ async function handleDelete() {
   showConfirm.value = false
   isDeleting.value = true
   await new Promise(r => setTimeout(r, 220))
-  await store.deleteTodo(props.todo.id)
+  try {
+    await store.deleteTodo(props.todo.id)
+  } finally {
+    // The fade-out runs before the request. If the delete didn't happen, the
+    // row is still there and must become visible again — otherwise it looks
+    // deleted until the next refresh.
+    if (store.todos.some((t) => t.id === props.todo.id)) isDeleting.value = false
+  }
 }
 
 async function handleSnooze(payload: { snoozed_until: number | null; due_date?: number | null }) {
@@ -224,24 +268,27 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     <!-- Actions (visible on hover) -->
     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity flex-shrink-0" @click.stop>
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
         title="Edit"
-        @click="showEdit = true"
+        @click="!blockedByReadOnly() && (showEdit = true)"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
       </button>
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover transition-colors"
         title="Move to list"
-        @click="showMove = true"
+        @click="!blockedByReadOnly() && (showMove = true)"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
       </button>
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
         title="Delete"
         @click="requestDelete()"
@@ -297,24 +344,27 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     <!-- Actions (visible on hover) -->
     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity flex-shrink-0">
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
         title="Edit"
-        @click="showEdit = true"
+        @click="!blockedByReadOnly() && (showEdit = true)"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
       </button>
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover transition-colors"
         title="Move to list"
-        @click="showMove = true"
+        @click="!blockedByReadOnly() && (showMove = true)"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
       </button>
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
         title="Delete"
         @click="requestDelete()"
@@ -351,13 +401,19 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
       </svg>
     </span>
     <!-- Complete toggle -->
+    <!-- Completion state. Kept visible when read-only — a viewer still needs to
+         see what's done — but inert: no hover affordance, no click. -->
     <button
       class="flex-shrink-0 size-5 rounded-full border-2 flex items-center justify-center transition-colors"
-      :class="isCompleted
-        ? 'bg-accent border-accent'
-        : 'border-border-strong hover:border-accent'"
+      :class="[
+        isCompleted ? 'bg-accent border-accent' : 'border-border-strong',
+        readOnly ? 'cursor-default' : (isCompleted ? '' : 'hover:border-accent'),
+      ]"
+      :disabled="readOnly"
       @click="toggleComplete"
-      :title="isCompleted ? 'Mark pending' : 'Mark complete'"
+      :title="readOnly
+        ? (isCompleted ? 'Completed' : 'Not completed')
+        : (isCompleted ? 'Mark pending' : 'Mark complete')"
     >
       <svg v-if="isCompleted" class="size-3 text-accent-fg" fill="currentColor" viewBox="0 0 20 20">
         <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
@@ -395,8 +451,37 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
       </div>
 
       <div class="flex items-center gap-2 mt-0.5 flex-wrap">
+        <!-- Shared-list marker. Shown wherever the item appears, including
+             inside your own Today/Week, so another person's work is never
+             mistaken for your own. Icon + text, not colour alone. -->
+        <span
+          v-if="todo.list_key"
+          class="inline-flex items-center gap-1 text-xs text-accent bg-accent/10 rounded px-1.5 py-0.5"
+          :title="`Shared by ${todo.owner_name ?? 'someone else'}`"
+          :aria-label="`Shared by ${todo.owner_name ?? 'someone else'}`"
+        >
+          <svg class="size-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+          <span class="truncate max-w-28">{{ todo.owner_name ?? 'Shared' }}</span>
+        </span>
+        <!-- Who added this. Only present on shared lists, and only when it
+             wasn't the person looking at it. -->
+        <span
+          v-if="todo.created_by_name"
+          class="inline-flex items-center gap-1 text-xs text-muted"
+          :title="`Added by ${todo.created_by_name}`"
+          :aria-label="`Added by ${todo.created_by_name}`"
+        >
+          <span
+            class="flex size-4 items-center justify-center rounded-full bg-accent/15 text-[9px] font-semibold text-accent"
+            aria-hidden="true"
+          >{{ todo.created_by_name.charAt(0).toUpperCase() }}</span>
+          <span class="truncate max-w-24">{{ todo.created_by_name }}</span>
+        </span>
         <button
-          v-if="foreignList"
+          v-if="foreignListKey"
           type="button"
           class="inline-flex items-center gap-1 text-xs text-muted bg-surface-hover hover:bg-accent/15 hover:text-accent rounded px-1.5 py-0.5 max-w-40 transition-colors cursor-pointer"
           :title="`Go to list: ${foreignList}`"
@@ -433,34 +518,37 @@ async function handleSnooze(payload: { snoozed_until: number | null; due_date?: 
     <!-- Actions (visible on hover) -->
     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity flex-shrink-0">
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
         title="Edit"
-        @click="showEdit = true"
+        @click="!blockedByReadOnly() && (showEdit = true)"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
         </svg>
       </button>
       <button
-        v-if="!isCompleted"
+        v-if="!isCompleted && !readOnly"
         class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover transition-colors"
         title="Remind me later"
-        @click="showSnooze = true"
+        @click="!blockedByReadOnly() && (showSnooze = true)"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 2m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
       </button>
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover transition-colors"
         title="Move to list"
-        @click="showMove = true"
+        @click="!blockedByReadOnly() && (showMove = true)"
       >
         <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
         </svg>
       </button>
       <button
+        v-if="!readOnly"
         class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
         title="Delete"
         @click="requestDelete()"

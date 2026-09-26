@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Todo, TodoFormData, ViewType } from '../types/todo'
+import { keyOf } from '../types/todo'
 import { apiFetch } from '../lib/api'
 import { useCategoryPrefsStore } from './categoryPrefsStore'
 import { useSettingsStore, type CompletedWindow, type ListScope, type WindowedView } from './settingsStore'
@@ -66,6 +67,71 @@ export const useTodoStore = defineStore('todos', () => {
     void fetchViewCounts(currentList.value)
   }
 
+  // ── Remote changes (collaborators editing a shared list) ─────────────────
+  //
+  // How many of THIS client's mutations are in flight. A remote-driven refetch
+  // that lands mid-mutation can resurrect a row the server is about to change:
+  // you tick an item off, the request is still travelling, a collaborator's
+  // change triggers a refetch, the server still reports the item as pending, so
+  // it reappears — and your own response arrives with nothing left to correct
+  // it. Remote refreshes therefore wait for the count to drain.
+  const pendingMutations = ref(0)
+  // Set by drag composables and modals: wholesale replacement of `todos` under
+  // the user's cursor is worse than being a few seconds stale.
+  const suspendRemote = ref(false)
+
+  const remoteQueue = new Set<string>()
+  let remoteTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** Wraps a mutating request so remote refreshes hold off while it's out. */
+  async function mutFetch(url: string, options: RequestInit): Promise<Response> {
+    pendingMutations.value++
+    try {
+      return await apiFetch(url, options)
+    } finally {
+      pendingMutations.value--
+      if (pendingMutations.value === 0) scheduleRemoteFlush(0)
+    }
+  }
+
+  function scheduleRemoteFlush(delay = 250) {
+    if (remoteTimer) clearTimeout(remoteTimer)
+    remoteTimer = setTimeout(flushRemote, delay)
+  }
+
+  function flushRemote() {
+    remoteTimer = null
+    if (remoteQueue.size === 0) return
+    // Still busy — try again once things settle rather than dropping the news.
+    if (pendingMutations.value > 0 || suspendRemote.value) {
+      scheduleRemoteFlush(500)
+      return
+    }
+    const keys = [...remoteQueue]
+    remoteQueue.clear()
+
+    for (const key of keys) invalidateList(key)
+    // Items from a shared list also appear in the cross-list windowed views of
+    // EVERY list (the "All Lists" scope) and on the calendar, so those caches
+    // have to go too — the same reasoning as an event mutation.
+    for (const listCache of todosCache.values()) {
+      for (const view of TIME_WINDOWED_VIEWS) listCache.delete(view)
+    }
+    changeVersion.value++
+    eventsVersion.value++
+    void fetchTodos(currentList.value, currentView.value, { silent: true })
+    void fetchViewCounts(currentList.value)
+  }
+
+  /**
+   * A collaborator changed something in `listKey`. Coalesced: ten rapid edits
+   * from the other end become one refetch.
+   */
+  function applyRemoteChange(listKey: string) {
+    remoteQueue.add(listKey)
+    scheduleRemoteFlush()
+  }
+
   function setErrorWithTimeout(msg: string, ms = 6000) {
     error.value = msg
     setTimeout(() => {
@@ -84,6 +150,14 @@ export const useTodoStore = defineStore('todos', () => {
       setErrorWithTimeout(
         `You're at the Free plan list limit (${body.limit}). Remove a list or upgrade to Pro.`
       )
+    } else if (body?.error === 'cross_owner_move') {
+      setErrorWithTimeout(
+        "Items can only move between lists owned by the same person. Copy it across instead."
+      )
+    } else if (body?.error === 'read_only_share') {
+      setErrorWithTimeout("That list is shared with you as view-only.")
+    } else if (body?.error === 'owner_only') {
+      setErrorWithTimeout("Only the list's owner can change that.")
     } else {
       setErrorWithTimeout(`Error ${res.status}: ${body?.error ?? res.statusText}`)
     }
@@ -205,7 +279,7 @@ export const useTodoStore = defineStore('todos', () => {
     const current = emptyCategories.value[list] ?? []
     const existing = new Set([
       ...current,
-      ...todos.value.filter((t) => t.list_name === list).map((t) => t.category || 'General'),
+      ...todos.value.filter((t) => keyOf(t) === list).map((t) => t.category || 'General'),
     ])
     if (existing.has(trimmed)) {
       setErrorWithTimeout(`Category "${trimmed}" already exists in this list.`)
@@ -232,9 +306,23 @@ export const useTodoStore = defineStore('todos', () => {
     }
   }
 
+  /**
+   * Query fragment addressing a list.
+   *
+   * Own lists go by name; lists shared with us are addressed by share id, since
+   * two users can both have a list called "Home". The `@<id>` form is this
+   * client's key for caches, tabs and preferences — it never goes on the wire
+   * as a list name.
+   */
+  function listParam(list: string): string {
+    return list.startsWith('@')
+      ? `share=${encodeURIComponent(list.slice(1))}`
+      : `list=${encodeURIComponent(list)}`
+  }
+
   function buildUrl(list: string, view: ViewType): string {
     const base = view === 'all' ? '/api/todos' : `/api/todos/${view}`
-    let url = `${base}?list=${encodeURIComponent(list)}`
+    let url = `${base}?${listParam(list)}`
     // Windowed views can opt into a cross-list scope; the server widens the
     // todo filter to every list when all=1 is present.
     if (
@@ -262,7 +350,7 @@ export const useTodoStore = defineStore('todos', () => {
 
   async function fetchViewCounts(list: string) {
     try {
-      const res = await apiFetch(`/api/todos/counts?list=${encodeURIComponent(list)}`)
+      const res = await apiFetch(`/api/todos/counts?${listParam(list)}`)
       if (!res.ok) return
       const data = await res.json() as {
         counts: { today: number; week: number; month: number; overdue: number }
@@ -279,7 +367,7 @@ export const useTodoStore = defineStore('todos', () => {
       return
     }
     try {
-      const res = await apiFetch(`/api/categories?list=${encodeURIComponent(list)}`)
+      const res = await apiFetch(`/api/categories?${listParam(list)}`)
       if (!res.ok) return
       const data = await res.json() as { categories: string[] }
       categoriesCache.set(list, data.categories)
@@ -410,10 +498,15 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function addTodo(list: string, form: TodoFormData) {
-    const res = await apiFetch('/api/todos', {
+    // A shared list goes by share id — its `list_name` on the wire would be the
+    // owner's, and `@12` isn't a real list name anywhere.
+    const target = list.startsWith('@')
+      ? { share_id: list.slice(1) }
+      : { list_name: list }
+    const res = await mutFetch('/api/todos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ list_name: list, ...form }),
+      body: JSON.stringify({ ...target, ...form }),
     })
     if (!res.ok) {
       await surfaceCapError(res)
@@ -433,9 +526,13 @@ export const useTodoStore = defineStore('todos', () => {
     const effectiveDue =
       form.due_date ?? ((form.repeat_days > 0 || form.repeat_months > 0) ? now : null)
     const cat = form.category || 'General'
+    const shareMeta = list.startsWith('@')
+      ? { list_key: list, collab_id: Number(list.slice(1)), can_write: true }
+      : {}
     const newTodo: Todo = {
       id,
       list_name: list,
+      ...shareMeta,
       title: form.title,
       description: form.description,
       category: cat,
@@ -462,7 +559,28 @@ export const useTodoStore = defineStore('todos', () => {
     fetchViewCounts(list)
   }
 
+  /**
+   * Refuses a mutation on an item in a list shared with us as VIEW-ONLY.
+   *
+   * Lives here rather than in each component so there's one place that can't be
+   * forgotten — several UI paths (the delete fade-out especially) mutate the
+   * view before the request goes out, and a late rejection strands them.
+   */
+  function blockedAsShared(id: number): boolean {
+    const item = todos.value.find((t) => t.id === id)
+    // Only view-only shares are blocked. `can_write` comes from the server and
+    // reflects the caller's role on that specific list, so an editor passes
+    // straight through — as does anything in a list of your own, which has no
+    // can_write field at all.
+    if (!item?.list_key || item.can_write !== false) return false
+    setErrorWithTimeout(
+      `View only — ${item.owner_name ?? 'someone else'} shared this list with you as read-only.`
+    )
+    return true
+  }
+
   async function snoozeTodo(id: number, snoozedUntil: number | null, dueDate?: number | null) {
+    if (blockedAsShared(id)) return
     const list = currentList.value
     const view = currentView.value
     const index = todos.value.findIndex((t) => t.id === id)
@@ -487,7 +605,7 @@ export const useTodoStore = defineStore('todos', () => {
     if (dueDate !== undefined) body.due_date = dueDate
 
     try {
-      const res = await apiFetch(`/api/todos/${id}/snooze`, {
+      const res = await mutFetch(`/api/todos/${id}/snooze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -506,12 +624,13 @@ export const useTodoStore = defineStore('todos', () => {
     // that the server filtered out of the 'all' view.
     if (index < 0) todosCache.get(list)?.delete(view)
     // The snoozed row may belong to another list (All Lists windowed view).
-    if (removed && removed.list_name !== list) invalidateList(removed.list_name)
+    if (removed && keyOf(removed) !== list) invalidateList(keyOf(removed))
     fetchViewCounts(list)
   }
 
   async function updateTodo(id: number, form: Partial<TodoFormData>) {
-    const res = await apiFetch(`/api/todos/${id}`, {
+    if (blockedAsShared(id)) return
+    const res = await mutFetch(`/api/todos/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(form),
@@ -549,7 +668,7 @@ export const useTodoStore = defineStore('todos', () => {
     invalidateOtherViews(currentList.value)
     // The edited row may belong to another list (All Lists windowed view); drop
     // that list's cache so its views pick up the change on next visit.
-    if (item && item.list_name !== currentList.value) invalidateList(item.list_name)
+    if (item && keyOf(item) !== currentList.value) invalidateList(keyOf(item))
 
     // Time-windowed views (today/week/month/overdue) filter by due_date,
     // so a changed due_date may push the item in or out of view. Refetch silently.
@@ -568,14 +687,15 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function deleteTodo(id: number) {
-    const res = await apiFetch(`/api/todos/${id}`, { method: 'DELETE' })
+    if (blockedAsShared(id)) return
+    const res = await mutFetch(`/api/todos/${id}`, { method: 'DELETE' })
     if (!res.ok) throw new Error(await res.text())
     const removed = todos.value.find((t) => t.id === id)
     todos.value = todos.value.filter((t) => t.id !== id)
     invalidateList(currentList.value)
     // In an All Lists windowed view the deleted row may belong to another list;
     // drop that list's cache too so it doesn't resurrect on next visit.
-    if (removed && removed.list_name !== currentList.value) invalidateList(removed.list_name)
+    if (removed && keyOf(removed) !== currentList.value) invalidateList(keyOf(removed))
     // Keep the Completed dropdown count in sync when deleting from there.
     // invalidateList wiped the cached entries, so we only need the ref.
     if (currentView.value === 'completed' && removed?.status === 1) {
@@ -585,6 +705,7 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function completeTodo(id: number) {
+    if (blockedAsShared(id)) return
     const list = currentList.value
     const view = currentView.value
     const index = todos.value.findIndex((t) => t.id === id)
@@ -592,13 +713,13 @@ export const useTodoStore = defineStore('todos', () => {
     const isRepeating = !!removed && (removed.repeat_days > 0 || removed.repeat_months > 0)
     // The All Lists windowed views surface todos from other lists, so target the
     // item's own list — the complete route filters on list_name.
-    const itemList = removed?.list_name ?? list
+    const itemList = removed ? keyOf(removed) : list
 
     // Optimistic: remove from current view (all non-'completed' views filter status=0).
     if (index >= 0 && view !== 'completed') todos.value.splice(index, 1)
 
     try {
-      const res = await apiFetch(`/api/todos/${id}/complete?list=${encodeURIComponent(itemList)}`, {
+      const res = await mutFetch(`/api/todos/${id}/complete?list=${encodeURIComponent(itemList)}`, {
         method: 'POST',
       })
       if (!res.ok) throw new Error(await res.text())
@@ -617,19 +738,20 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function uncompleteTodo(id: number) {
+    if (blockedAsShared(id)) return
     const list = currentList.value
     const view = currentView.value
     const index = todos.value.findIndex((t) => t.id === id)
     const removed = index >= 0 ? todos.value[index] : null
     // Target the item's own list — uncomplete filters on list_name and the row
     // may belong to another list when surfaced in an All Lists windowed view.
-    const itemList = removed?.list_name ?? list
+    const itemList = removed ? keyOf(removed) : list
 
     // Optimistic: only the 'completed' view filters status=1, so remove there.
     if (index >= 0 && view === 'completed') todos.value.splice(index, 1)
 
     try {
-      const res = await apiFetch(`/api/todos/${id}/uncomplete?list=${encodeURIComponent(itemList)}`, {
+      const res = await mutFetch(`/api/todos/${id}/uncomplete?list=${encodeURIComponent(itemList)}`, {
         method: 'POST',
       })
       if (!res.ok) throw new Error(await res.text())
@@ -650,7 +772,12 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function moveTodo(id: number, targetList: string, targetCategory?: string) {
-    const body: { target_list: string; target_category?: string } = { target_list: targetList }
+    const body: {
+      target_list: string
+      target_share_id?: string
+      target_category?: string
+    } = { target_list: targetList }
+    if (targetList.startsWith('@')) body.target_share_id = targetList.slice(1)
     if (targetCategory && targetCategory.trim()) body.target_category = targetCategory.trim()
 
     // Optimistic in-memory update first so drag-and-drop reflects instantly.
@@ -680,7 +807,7 @@ export const useTodoStore = defineStore('todos', () => {
       }
     }
 
-    const res = await apiFetch(`/api/todos/${id}/move`, {
+    const res = await mutFetch(`/api/todos/${id}/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -700,7 +827,7 @@ export const useTodoStore = defineStore('todos', () => {
   async function fetchCategoriesFor(list: string): Promise<string[]> {
     if (categoriesCache.has(list)) return categoriesCache.get(list)!
     try {
-      const res = await apiFetch(`/api/categories?list=${encodeURIComponent(list)}`)
+      const res = await apiFetch(`/api/categories?${listParam(list)}`)
       if (!res.ok) return []
       const data = await res.json() as { categories: string[] }
       categoriesCache.set(list, data.categories)
@@ -712,7 +839,7 @@ export const useTodoStore = defineStore('todos', () => {
 
   async function mergeCategory(list: string, fromName: string, toName: string) {
     if (fromName === toName) return
-    const res = await apiFetch('/api/categories/move-items', {
+    const res = await mutFetch('/api/categories/move-items', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ list, fromName, toName }),
@@ -759,7 +886,7 @@ export const useTodoStore = defineStore('todos', () => {
     toList: string,
     name: string,
   ): Promise<string | null> {
-    const res = await apiFetch('/api/categories/move-to-list', {
+    const res = await mutFetch('/api/categories/move-to-list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fromList, toList, name }),
@@ -808,7 +935,7 @@ export const useTodoStore = defineStore('todos', () => {
     // In-memory: those items belong to another list now. Matched on list_name
     // too — an All Lists windowed view holds rows from lists we didn't touch.
     todos.value = todos.value.filter(
-      (t) => !(t.list_name === fromList && t.category === name && t.type !== 'event')
+      (t) => !(keyOf(t) === fromList && t.category === name && t.type !== 'event')
     )
     if (fromList === currentList.value) {
       categories.value = categories.value.filter((c) => c !== name)
@@ -821,7 +948,7 @@ export const useTodoStore = defineStore('todos', () => {
 
   async function deleteCategory(list: string, name: string) {
     // Remove all todos in this category (server-side bulk delete).
-    const res = await apiFetch('/api/categories', {
+    const res = await mutFetch('/api/categories', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ list, name }),
@@ -856,7 +983,7 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   async function renameCategory(list: string, oldName: string, newName: string) {
-    const res = await apiFetch('/api/categories', {
+    const res = await mutFetch('/api/categories', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ list, oldName, newName }),
@@ -903,6 +1030,8 @@ export const useTodoStore = defineStore('todos', () => {
   }
 
   return {
+    setErrorWithTimeout,
+    applyRemoteChange, suspendRemote, pendingMutations,
     todos,
     categories,
     loading,
