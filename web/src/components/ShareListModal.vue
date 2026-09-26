@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useAuthStore } from '../stores/authStore'
 import { useCollabStore } from '../stores/collabStore'
 import type { ShareRole } from '../stores/listStore'
 import ConfirmDialog from './ConfirmDialog.vue'
@@ -8,6 +9,7 @@ const props = defineProps<{ listName: string }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 
 const collab = useCollabStore()
+const authStore = useAuthStore()
 
 const email = ref('')
 const role = ref<ShareRole>('editor')
@@ -19,6 +21,14 @@ const detail = computed(() => collab.detail)
 const hasPeople = computed(
   () => detail.value.members.length > 0 || detail.value.invites.length > 0
 )
+
+// Sharing needs Pro, but a downgrade deliberately does NOT evict the people
+// already on the list — taking away a third party's access as a side effect of
+// someone else's billing reads as data loss. So existing collaborators carry on
+// and only new invites are blocked, which needs saying out loud or the disabled
+// form looks broken. The server enforces this independently (403 pro_required).
+const canInvite = computed(() => authStore.tier === 'pro')
+const hasLiveShare = computed(() => detail.value.members.length > 0)
 
 onMounted(() => {
   void collab.fetchDetail(props.listName)
@@ -112,7 +122,24 @@ function initial(m: { name: string | null; email: string }): string {
           later. Items they add belong to your list and count towards your plan.
         </p>
 
-        <form class="space-y-3" @submit.prevent="sendInvite">
+        <div
+          v-if="!canInvite"
+          class="rounded-xl bg-warning-bg/40 ring-1 ring-warning-fg/40 px-4 py-3 text-sm text-text"
+        >
+          <p class="font-medium">Inviting needs Pro</p>
+          <p class="mt-1 text-muted text-balance">
+            {{
+              hasLiveShare
+                ? 'The people already on this list keep their access — nothing changes for them. You just can\'t send new invitations until you upgrade.'
+                : 'Upgrade to share a list with someone. You can still remove people and stop sharing at any time.'
+            }}
+          </p>
+          <a href="/account" class="mt-2 inline-block text-sm font-medium text-accent hover:underline">
+            See plans
+          </a>
+        </div>
+
+        <form v-else class="space-y-3" @submit.prevent="sendInvite">
           <label class="block">
             <span class="field-label">Invite by email</span>
             <input
