@@ -41,6 +41,37 @@ export interface Todo {
   // Present only on expanded recurring-event occurrences: the original
   // cadence-generated start, used as the key when editing a single occurrence.
   occurrence_start?: number | null
+
+  // ── Shared lists ──────────────────────────────────────────────────────────
+  // Present only on rows belonging to a list someone shared with you. All
+  // optional so own-list responses are unchanged.
+  //
+  // NB `list_name` above stays the OWNER's list name; `list_key` is what this
+  // client keys caches, tabs and preferences by. Use `keyOf(todo)` rather than
+  // comparing `list_name` to the active list.
+  /** `@<collabId>` — the client-side identity of the shared list. */
+  list_key?: string
+  collab_id?: number
+  /** Display name of whoever owns the list this item lives in. */
+  owner_name?: string | null
+  /** Display name of whoever added the item, when it wasn't the owner. */
+  created_by_name?: string | null
+  /** False when you're a viewer on the shared list. */
+  can_write?: boolean
+}
+
+/**
+ * The list identity a todo belongs to from THIS user's point of view: the share
+ * key for a shared item, otherwise the plain list name. Every comparison
+ * against the active list must go through this.
+ */
+export function keyOf(todo: Pick<Todo, 'list_name' | 'list_key'>): string {
+  return todo.list_key ?? todo.list_name
+}
+
+/** True when the item lives in a list shared with this user. */
+export function isSharedTodo(todo: Pick<Todo, 'list_key'>): boolean {
+  return todo.list_key != null
 }
 
 export interface TodoFormData {

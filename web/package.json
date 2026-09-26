@@ -28,6 +28,7 @@
     "digest:send": "tsx server/scripts/send-daily-digests.ts",
     "digest:send:prod": "ALLOW_REMOTE_DB=1 tsx --env-file=.env.production server/scripts/send-daily-digests.ts",
     "db:backfill-user": "tsx server/scripts/backfill-user.ts",
+    "test:collab": "tsx server/tests/run.ts",
     "ext:dev": "npm --prefix extension run dev",
     "ext:build": "npm --prefix extension run build",
     "help:shots": "tsx scripts/help-screenshots.ts"

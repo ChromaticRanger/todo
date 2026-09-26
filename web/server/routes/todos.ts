@@ -1,6 +1,10 @@
 import { Router } from 'express'
 import { query } from '../db.js'
-import { LIMITS, countUserLists, countUserItems, userHasList } from '../lib/limits.js'
+import { LIMITS, countUserLists, countUserItems, userHasList, getUserPlan } from '../lib/limits.js'
+import {
+  resolveListAccess, shareFields, displayNameFor, isReservedListName,
+  fetchSharedScope, sharedScopeParams, resolveItemAccess, touchCollabContent,
+} from '../lib/listAccess.js'
 
 const router = Router()
 
@@ -332,28 +336,70 @@ export async function fetchExpandedEventSeries(
   return expandEventOccurrences(result.rows, from, to, overrides)
 }
 
-export function buildTodoSelect(extra = ''): string {
+export function buildTodoSelect(extra = '', extraCols = ''): string {
   return `SELECT id, list_name, title, description, category, priority, status,
     EXTRACT(EPOCH FROM created_at)::BIGINT AS created_at,
     EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at,
     due_date, repeat_days, repeat_months, spawned_next, type, url, snoozed_until,
-    recur_until, duration_seconds, color, all_day
+    recur_until, duration_seconds, color, all_day${extraCols ? ', ' + extraCols : ''}
   FROM todos ${extra}`
+}
+
+/**
+ * Attaches "who added this" to rows of a SHARED list (in either direction — the
+ * owner wants to see what a collaborator added just as much as the reverse).
+ *
+ * `created_by_name` is set only when the creator isn't the caller, so the UI
+ * never has to compare names to decide whether to show a marker — which
+ * matters, because two collaborators can perfectly well share a display name.
+ * The raw creator id is stripped: it's an internal identifier, not something
+ * the client needs.
+ */
+async function attachAttribution<T extends { created_by_user_id?: string | null }>(
+  rows: T[],
+  callerId: string
+): Promise<Array<Omit<T, 'created_by_user_id'> & { created_by_name?: string | null }>> {
+  const ids = new Set(
+    rows.map((r) => r.created_by_user_id).filter((id): id is string => !!id && id !== callerId)
+  )
+  const names = new Map<string, string>()
+  for (const id of ids) names.set(id, await displayNameFor(id))
+  return rows.map((row) => {
+    const { created_by_user_id, ...rest } = row
+    const name = created_by_user_id && created_by_user_id !== callerId
+      ? names.get(created_by_user_id) ?? null
+      : null
+    return { ...rest, ...(name ? { created_by_name: name } : {}) }
+  })
 }
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 // GET /api/todos?list=X&status=0|1|-1&category=X
+// GET /api/todos?share=<collabId>&…  — the same view of a list shared with you
 router.get('/', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   const statusParam = req.query.status as string | undefined
   const category = req.query.category as string | undefined
 
   try {
-    await spawnRepeatingTodos(userId, list)
+    // Resolves to the caller's own scope unless `share` names a list they're a
+    // member of, in which case the queries below target the OWNER's rows.
+    const acc = await resolveListAccess(userId, {
+      list: (req.query.list as string) || 'todos',
+      share: req.query.share as string | undefined,
+    })
+    if (!acc) {
+      // Unknown share id, or one the caller isn't a member of. 404 rather than
+      // 403 so share ids can't be probed.
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    const list = acc.listName
 
-    const params: unknown[] = [userId, list]
+    await spawnRepeatingTodos(acc.ownerId, list)
+
+    const params: unknown[] = [acc.ownerId, list]
     const conditions: string[] = ['user_id = $1', 'list_name = $2']
 
     if (statusParam !== undefined && statusParam !== '-1') {
@@ -379,11 +425,28 @@ router.get('/', async (req, res) => {
     )
 
     const where = `WHERE ${conditions.join(' AND ')}`
-    const result = await query<TodoRow>(
-      buildTodoSelect(`${where} ORDER BY priority DESC, id ASC`),
+    // created_by_user_id is only worth fetching for a list that's actually
+    // shared — on a private list every item is yours by definition.
+    const isShared = acc.collabId != null
+    const result = await query<TodoRow & { created_by_user_id?: string | null }>(
+      buildTodoSelect(
+        `${where} ORDER BY priority DESC, id ASC`,
+        isShared ? 'created_by_user_id' : ''
+      ),
       params
     )
-    res.json({ todos: result.rows.map(coerceTodo) })
+    // Every row here belongs to the same list, so the share decoration is
+    // uniform and costs one name lookup (memoized) rather than one per row.
+    const extra = shareFields(
+      acc,
+      acc.role === 'owner' ? null : await displayNameFor(acc.ownerId)
+    )
+    const rows = result.rows.map((r) => ({
+      ...coerceTodo(r),
+      created_by_user_id: isShared ? r.created_by_user_id ?? null : undefined,
+      ...extra,
+    }))
+    res.json({ todos: isShared ? await attachAttribution(rows, userId) : rows })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -402,29 +465,35 @@ async function fetchWindowedScope(
   list: string,
   from: number,
   to: number,
-  allLists: boolean
+  allLists: boolean,
+  // Whose todos to read. Differs from `userId` only when viewing a list shared
+  // with us — the event half is always the caller's own, since events never
+  // belong to a list and so are never shared.
+  todoOwnerId: string = userId
 ) {
-  // Placeholders shift because the all-lists query drops the `list` param: the
-  // window bounds are $2/$3 when there's no list filter, $3/$4 otherwise.
+  // The user_id predicate moved inside each branch so the two halves can be
+  // scoped to different accounts. Placeholders shift because the all-lists
+  // query drops the `list` param.
   const [scope, params] = allLists
     ? [
-        `(type = 'todo' AND due_date >= $2 AND due_date < $3)
-         OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
+        `(user_id = $1 AND type = 'todo' AND due_date >= $2 AND due_date < $3)
+         OR (user_id = $1 AND type = 'event' AND repeat_days = 0 AND repeat_months = 0
              AND due_date < $3
              AND (due_date + COALESCE(duration_seconds, 0)) > $2)`,
         [userId, from, to],
       ]
     : [
-        `(list_name = $2 AND type = 'todo' AND due_date >= $3 AND due_date < $4)
-         OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0
-             AND due_date < $4
-             AND (due_date + COALESCE(duration_seconds, 0)) > $3)`,
-        [userId, list, from, to],
+        `(user_id = $2 AND list_name = $3 AND type = 'todo'
+          AND due_date >= $4 AND due_date < $5)
+         OR (user_id = $1 AND type = 'event' AND repeat_days = 0 AND repeat_months = 0
+             AND due_date < $5
+             AND (due_date + COALESCE(duration_seconds, 0)) > $4)`,
+        [userId, todoOwnerId, list, from, to],
       ]
   const [main, series] = await Promise.all([
     query<TodoRow>(
       buildTodoSelect(
-        `WHERE user_id = $1 AND status = 0
+        `WHERE status = 0
          AND due_date IS NOT NULL
          AND (${scope})
          ORDER BY due_date ASC`
@@ -438,6 +507,95 @@ async function fetchWindowedScope(
   return merged
 }
 
+// Resolves the list/share params for the windowed routes and, for a shared
+// list, produces the decoration each of the OWNER's todo rows needs. Events in
+// the same response are the caller's own and stay undecorated.
+async function windowedScope(req: {
+  query: Record<string, unknown>
+}, userId: string) {
+  const acc = await resolveListAccess(userId, {
+    list: (req.query.list as string) || 'todos',
+    share: req.query.share as string | undefined,
+  })
+  if (!acc) return null
+  const extra =
+    acc.role === 'owner' ? {} : shareFields(acc, await displayNameFor(acc.ownerId))
+  // Only the owner's list rows are shared; the caller's own events are not.
+  const decorate = (row: ReturnType<typeof coerceTodo>) =>
+    acc.role === 'owner' || row.type === 'event' ? row : { ...row, ...extra }
+  return { acc, decorate }
+}
+
+/**
+ * Dated, pending TODOS from lists shared with this user, for the cross-list
+ * aggregates (the calendar feed and the All Lists windowed scope).
+ *
+ * Deliberately a second query merged in JS rather than a UNION with the main
+ * one: the main query's `user_id = $1` prefix is what keeps it on the
+ * (user_id, ...) indexes, and widening it to span owners would fight them.
+ * Returns [] for the overwhelming majority of users, in which case callers
+ * fall straight through to their original single-query path at no cost.
+ *
+ * Todos only — events never belong to a list, so they're never shared.
+ */
+async function fetchSharedDated(
+  userId: string,
+  from: number,
+  to: number,
+  /** Also include anything due before this epoch (the Overdue/`today/all` feeds). */
+  overdueBefore?: number
+): Promise<Array<ReturnType<typeof coerceTodo> & Record<string, unknown>>> {
+  const scope = await fetchSharedScope(userId)
+  if (scope.length === 0) return []
+  const [owners, names] = sharedScopeParams(scope)
+
+  // Owner+list pairs travel as two parallel arrays so this stays a single
+  // round trip however many lists the caller has access to. user_id is
+  // selected (the shared projection omits it) so each row can be attributed
+  // back to its owner; it's stripped again before the response.
+  const params: unknown[] = [owners, names, from, to]
+  let window = 'due_date >= $3 AND due_date < $4'
+  if (overdueBefore != null) {
+    params.push(overdueBefore)
+    window = `(due_date >= $3 AND due_date < $4) OR due_date < $${params.length}`
+  }
+
+  const { rows } = await query<TodoRow & { user_id: string }>(
+    `SELECT id, user_id, list_name, title, description, category, priority, status,
+       EXTRACT(EPOCH FROM created_at)::BIGINT AS created_at,
+       EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at,
+       due_date, repeat_days, repeat_months, spawned_next, type, url, snoozed_until,
+       recur_until, duration_seconds, color, all_day
+     FROM todos
+     WHERE (user_id, list_name) IN (
+       SELECT * FROM unnest($1::text[], $2::text[])
+     )
+     AND status = 0 AND type = 'todo' AND due_date IS NOT NULL
+     AND (${window})
+     ORDER BY due_date ASC`,
+    params
+  )
+  if (rows.length === 0) return []
+
+  const byPair = new Map(scope.map((r) => [`${r.ownerId}\u0000${r.listName}`, r]))
+  const ownerNames = new Map<string, string>()
+  for (const ownerId of new Set(scope.map((r) => r.ownerId))) {
+    ownerNames.set(ownerId, await displayNameFor(ownerId))
+  }
+
+  return rows.map((row) => {
+    const ref = byPair.get(`${row.user_id}\u0000${row.list_name}`)
+    const { user_id: _ownerId, ...rest } = row
+    return {
+      ...coerceTodo(rest as TodoRow),
+      list_key: ref ? `@${ref.collabId}` : undefined,
+      collab_id: ref?.collabId,
+      owner_name: ref ? ownerNames.get(ref.ownerId) ?? null : null,
+      can_write: ref ? ref.role === 'editor' : false,
+    }
+  })
+}
+
 // Shared parse for the `?all=1` scope flag on the windowed routes.
 function wantsAllLists(req: { query: Record<string, unknown> }): boolean {
   return req.query.all === '1' || req.query.all === 'true'
@@ -447,13 +605,25 @@ function wantsAllLists(req: { query: Record<string, unknown> }): boolean {
 // With all=1 the scope spans every list (todos from all lists, not just `list`).
 router.get('/today', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   const allLists = wantsAllLists(req)
   try {
-    await spawnRepeatingTodos(userId, allLists ? undefined : list)
+    const scoped = await windowedScope(req, userId)
+    if (!scoped) return res.status(404).json({ error: 'Not found' })
+    const { acc, decorate } = scoped
+    const list = acc.listName
+    await spawnRepeatingTodos(acc.ownerId, allLists ? undefined : list)
     const now = Math.floor(Date.now() / 1000)
     const dayStart = Math.floor(now / 86400) * 86400
-    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 86400, allLists) })
+    const rows = await fetchWindowedScope(
+      userId, list, dayStart, dayStart + 86400, allLists, acc.ownerId
+    )
+    // "All Lists" means every list visible to you, shared ones included.
+    const shared = allLists
+      ? await fetchSharedDated(userId, dayStart, dayStart + 86400)
+      : []
+    const merged = [...rows.map(decorate), ...shared]
+    merged.sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
+    res.json({ todos: merged })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -498,7 +668,12 @@ router.get('/today/all', async (req, res) => {
       ),
       fetchExpandedEventSeries(userId, dayStart, to),
     ])
-    const merged = [...main.rows, ...series].map(coerceTodo)
+    // Cross-list feed, so shared lists belong here too — including their
+    // overdue items when the caller asked for them.
+    const shared = await fetchSharedDated(
+      userId, dayStart, to, includeOverdue ? dayStart : undefined
+    )
+    const merged = [...main.rows.map(coerceTodo), ...series.map(coerceTodo), ...shared]
     merged.sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
     res.json({ todos: merged })
   } catch (err) {
@@ -509,13 +684,25 @@ router.get('/today/all', async (req, res) => {
 // GET /api/todos/week?list=X&all=1
 router.get('/week', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   const allLists = wantsAllLists(req)
   try {
-    await spawnRepeatingTodos(userId, allLists ? undefined : list)
+    const scoped = await windowedScope(req, userId)
+    if (!scoped) return res.status(404).json({ error: 'Not found' })
+    const { acc, decorate } = scoped
+    const list = acc.listName
+    await spawnRepeatingTodos(acc.ownerId, allLists ? undefined : list)
     const now = Math.floor(Date.now() / 1000)
     const dayStart = Math.floor(now / 86400) * 86400
-    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 7 * 86400, allLists) })
+    const rows = await fetchWindowedScope(
+      userId, list, dayStart, dayStart + 7 * 86400, allLists, acc.ownerId
+    )
+    // "All Lists" means every list visible to you, shared ones included.
+    const shared = allLists
+      ? await fetchSharedDated(userId, dayStart, dayStart + 7 * 86400)
+      : []
+    const merged = [...rows.map(decorate), ...shared]
+    merged.sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
+    res.json({ todos: merged })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -524,13 +711,25 @@ router.get('/week', async (req, res) => {
 // GET /api/todos/month?list=X&all=1
 router.get('/month', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   const allLists = wantsAllLists(req)
   try {
-    await spawnRepeatingTodos(userId, allLists ? undefined : list)
+    const scoped = await windowedScope(req, userId)
+    if (!scoped) return res.status(404).json({ error: 'Not found' })
+    const { acc, decorate } = scoped
+    const list = acc.listName
+    await spawnRepeatingTodos(acc.ownerId, allLists ? undefined : list)
     const now = Math.floor(Date.now() / 1000)
     const dayStart = Math.floor(now / 86400) * 86400
-    res.json({ todos: await fetchWindowedScope(userId, list, dayStart, dayStart + 30 * 86400, allLists) })
+    const rows = await fetchWindowedScope(
+      userId, list, dayStart, dayStart + 30 * 86400, allLists, acc.ownerId
+    )
+    // "All Lists" means every list visible to you, shared ones included.
+    const shared = allLists
+      ? await fetchSharedDated(userId, dayStart, dayStart + 30 * 86400)
+      : []
+    const merged = [...rows.map(decorate), ...shared]
+    merged.sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
+    res.json({ todos: merged })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -573,7 +772,10 @@ router.get('/calendar', async (req, res) => {
       ),
       fetchExpandedEventSeries(userId, from, to),
     ])
-    const merged = [...main.rows, ...series].map(coerceTodo)
+    // Dated todos from lists shared with this user land on their calendar too —
+    // that's the whole point of sharing a list with dates in it.
+    const shared = await fetchSharedDated(userId, from, to)
+    const merged = [...main.rows.map(coerceTodo), ...series.map(coerceTodo), ...shared]
     merged.sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
     res.json({ todos: merged })
   } catch (err) {
@@ -586,9 +788,22 @@ router.get('/calendar', async (req, res) => {
 // views have anything in them. Single query so we don't fan out four requests.
 router.get('/counts', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   try {
-    await spawnRepeatingTodos(userId, list)
+    const acc = await resolveListAccess(userId, {
+      list: (req.query.list as string) || 'todos',
+      share: req.query.share as string | undefined,
+    })
+    if (!acc) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
+    const list = acc.listName
+    // The todo half of the count is owner-scoped; the event half is always
+    // yours, since events never belong to a list and so are never shared.
+    // For your own lists these are the same id and the query is unchanged.
+    const todoOwnerId = acc.ownerId
+
+    await spawnRepeatingTodos(todoOwnerId, list)
     // Base counts: todos in the active list + non-recurring events. Recurring
     // event occurrences are tallied in JS below so a single birthday series
     // contributes to today/week/month at most once each. Events never count
@@ -622,11 +837,12 @@ router.get('/counts', async (req, res) => {
            ) AS month,
            COUNT(*) FILTER (WHERE due_date < b.now_epoch AND type = 'todo') AS overdue
          FROM todos, bounds b
-         WHERE user_id = $1 AND status = 0
-           AND ((list_name = $2 AND type = 'todo')
-                OR (type = 'event' AND repeat_days = 0 AND repeat_months = 0))
+         WHERE status = 0
+           AND ((user_id = $2 AND list_name = $3 AND type = 'todo')
+                OR (user_id = $1 AND type = 'event'
+                    AND repeat_days = 0 AND repeat_months = 0))
            AND due_date IS NOT NULL`,
-        [userId, list]
+        [userId, todoOwnerId, list]
       ),
       (async () => {
         const now = Math.floor(Date.now() / 1000)
@@ -667,13 +883,18 @@ router.get('/counts', async (req, res) => {
 // With all=1 the scope spans every list, not just `list`.
 router.get('/overdue', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   const allLists = wantsAllLists(req)
   try {
-    await spawnRepeatingTodos(userId, allLists ? undefined : list)
+    const scoped = await windowedScope(req, userId)
+    if (!scoped) return res.status(404).json({ error: 'Not found' })
+    const { acc, decorate } = scoped
+    const list = acc.listName
+    await spawnRepeatingTodos(acc.ownerId, allLists ? undefined : list)
+    // Overdue is todos-only, so unlike the windowed views the whole query is
+    // owner-scoped when looking at a shared list.
     const [listFilter, params] = allLists
       ? ['', [userId]]
-      : ['AND list_name = $2', [userId, list]]
+      : ['AND list_name = $2', [acc.ownerId, list]]
     const result = await query<TodoRow>(
       buildTodoSelect(
         `WHERE user_id = $1 AND status = 0
@@ -684,7 +905,13 @@ router.get('/overdue', async (req, res) => {
       ),
       params as unknown[]
     )
-    res.json({ todos: result.rows.map(coerceTodo) })
+    const now = Math.floor(Date.now() / 1000)
+    // Overdue is entirely in the past, so it's expressed purely as the
+    // "before now" half of the shared window.
+    const shared = allLists ? await fetchSharedDated(userId, now, now, now) : []
+    const merged = [...result.rows.map((r) => decorate(coerceTodo(r))), ...shared]
+    merged.sort((a, b) => (a.due_date ?? 0) - (b.due_date ?? 0))
+    res.json({ todos: merged })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -711,7 +938,12 @@ const COMPLETED_LIMIT_DEFAULT = 500
 const COMPLETED_LIMIT_MAX = 2000
 router.get('/completed', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
+  const acc = await resolveListAccess(userId, {
+    list: (req.query.list as string) || 'todos',
+    share: req.query.share as string | undefined,
+  })
+  if (!acc) return res.status(404).json({ error: 'Not found' })
+  const list = acc.listName
 
   let since = 0
   if (req.query.since != null) {
@@ -739,19 +971,23 @@ router.get('/completed', async (req, res) => {
            ORDER BY completed_at DESC
            LIMIT $4`
         ),
-        [userId, list, since, limit + 1]
+        [acc.ownerId, list, since, limit + 1]
       ),
       query<{ total: string }>(
         `SELECT COUNT(*)::TEXT AS total FROM todos
          WHERE user_id = $1 AND list_name = $2 AND status = 1 AND type = 'todo'
            AND (EXTRACT(EPOCH FROM completed_at)::BIGINT >= $3 OR $3 = 0)`,
-        [userId, list, since]
+        [acc.ownerId, list, since]
       ),
     ])
     const hasMore = rowsRes.rows.length > limit
     const rows = hasMore ? rowsRes.rows.slice(0, limit) : rowsRes.rows
     const total = Number(countRes.rows[0]?.total ?? 0)
-    res.json({ todos: rows.map(coerceTodo), hasMore, total })
+    const extra = shareFields(
+      acc,
+      acc.role === 'owner' ? null : await displayNameFor(acc.ownerId)
+    )
+    res.json({ todos: rows.map((r) => ({ ...coerceTodo(r), ...extra })), hasMore, total })
   } catch (err) {
     res.status(500).json({ error: String(err) })
   }
@@ -761,9 +997,12 @@ router.get('/completed', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const userId = req.userId!
   try {
+    // Read-only, so no canWrite check — a viewer may open a shared item.
+    const acc = await resolveItemAccess(userId, req.params.id)
+    if (!acc) return res.status(404).json({ error: 'Not found' })
     const result = await query<TodoRow>(
       buildTodoSelect('WHERE id = $1 AND user_id = $2'),
-      [req.params.id, userId]
+      [req.params.id, acc.ownerId]
     )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
     res.json({ todo: coerceTodo(result.rows[0]) })
@@ -820,6 +1059,13 @@ router.post('/', async (req, res) => {
   }>
 
   if (!title) return res.status(400).json({ error: 'Title is required' })
+  // `@<id>` is the client's key for a shared list, never a real list name. If
+  // one reaches here it means a caller tried to write to a shared list by key
+  // instead of resolving it — creating a junk local list called "@12" rather
+  // than failing would be far worse than a 400.
+  if (isReservedListName(String(list_name))) {
+    return res.status(400).json({ error: 'invalid_list_name' })
+  }
   if (type === 'bookmark' && !url) return res.status(400).json({ error: 'URL is required for bookmarks' })
   if (type === 'event') {
     if (req.plan !== 'pro') return res.status(403).json({ error: 'pro_required' })
@@ -845,7 +1091,21 @@ router.post('/', async (req, res) => {
 
   // Events live outside any user list — pin them to a sentinel name and
   // skip list/category metadata so they can't accidentally surface in lists.
-  const effectiveList = type === 'event' ? '__events__' : list_name
+  // Resolve the destination first: `share_id` addresses a list shared with us,
+  // in which case the row is inserted under the OWNER's user_id (invariant I1)
+  // and the owner's plan governs the caps.
+  const acc = await resolveListAccess(userId, {
+    list: list_name,
+    share: (req.body as { share_id?: string | number }).share_id,
+  })
+  if (!acc) return res.status(404).json({ error: 'Not found' })
+  if (!acc.canWrite) return res.status(403).json({ error: 'read_only_share' })
+  // Events are never part of a shared list, so only the owner may create one.
+  if (type === 'event' && acc.role !== 'owner') {
+    return res.status(403).json({ error: 'read_only_share' })
+  }
+  const targetOwnerId = acc.ownerId
+  const effectiveList = type === 'event' ? '__events__' : acc.listName
   const effectiveCategory = type === 'event' ? 'General' : category
   // Todos pass their repeat values straight through; events use them only when
   // the submitted pair is one of the accepted presets (validated above).
@@ -865,13 +1125,18 @@ router.post('/', async (req, res) => {
   const effectiveAllDay = type === 'event' ? !!all_day : false
 
   try {
-    if (req.plan === 'free') {
-      if (!(await userHasList(userId, effectiveList))) {
-        if ((await countUserLists(userId)) >= LIMITS.maxLists) {
+    // Items in a shared list are stored under the owner, so it's the OWNER's
+    // plan and the OWNER's totals that decide whether one more is allowed —
+    // req.plan is the caller's and would be the wrong subject here.
+    const ownerPlan =
+      targetOwnerId === userId ? req.plan : await getUserPlan(targetOwnerId)
+    if (ownerPlan === 'free') {
+      if (!(await userHasList(targetOwnerId, effectiveList))) {
+        if ((await countUserLists(targetOwnerId)) >= LIMITS.maxLists) {
           return res.status(403).json({ error: 'free_tier_list_limit', limit: LIMITS.maxLists })
         }
       }
-      if ((await countUserItems(userId)) >= LIMITS.maxItems) {
+      if ((await countUserItems(targetOwnerId)) >= LIMITS.maxItems) {
         return res.status(403).json({ error: 'free_tier_item_limit', limit: LIMITS.maxItems })
       }
     }
@@ -882,10 +1147,12 @@ router.post('/', async (req, res) => {
     const result = await query<{ id: number }>(
       `INSERT INTO todos
          (user_id, list_name, title, description, category, priority, status,
-          due_date, repeat_days, repeat_months, spawned_next, type, url, recur_until, duration_seconds, color, all_day)
-       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0,$10,$11,$12,$13,$14,$15) RETURNING id`,
-      [userId, effectiveList, title, description, effectiveCategory, priority, effectiveDue, effectiveRepeatDays, effectiveRepeatMonths, type, effectiveUrl, effectiveRecurUntil, effectiveDuration, effectiveColor, effectiveAllDay]
+          due_date, repeat_days, repeat_months, spawned_next, type, url, recur_until, duration_seconds, color, all_day,
+          created_by_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,0,$7,$8,$9,0,$10,$11,$12,$13,$14,$15,$16) RETURNING id`,
+      [targetOwnerId, effectiveList, title, description, effectiveCategory, priority, effectiveDue, effectiveRepeatDays, effectiveRepeatMonths, type, effectiveUrl, effectiveRecurUntil, effectiveDuration, effectiveColor, effectiveAllDay, userId]
     )
+    await touchCollabContent(acc.collabId, userId)
     res.status(201).json({ id: Number(result.rows[0].id) })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -927,13 +1194,16 @@ router.put('/:id', async (req, res) => {
   }
 
   try {
+    const acc = await resolveItemAccess(userId, req.params.id)
+    if (!acc) return res.status(404).json({ error: 'Not found' })
+    if (!acc.canWrite) return res.status(403).json({ error: 'read_only_share' })
     // Validate event recurrence presets when the row is (or is becoming) an
     // event. We look at the current row to know its type.
     if (hasRepeatDays || hasRepeatMonths || hasRecurUntil || hasDuration) {
       const cur = await query<TodoRow>(
         `SELECT type, repeat_days, repeat_months, due_date FROM todos
          WHERE id = $1 AND user_id = $2`,
-        [req.params.id, userId]
+        [req.params.id, acc.ownerId]
       )
       if (cur.rowCount === 0) return res.status(404).json({ error: 'Not found' })
       const row = cur.rows[0]
@@ -995,7 +1265,7 @@ router.put('/:id', async (req, res) => {
         hasRecurUntil,
         hasRecurUntil ? (body.recur_until ?? null) : null,
         req.params.id,
-        userId,
+        acc.ownerId,
         hasDuration,
         nextDuration,
         hasColor,
@@ -1016,6 +1286,7 @@ router.put('/:id', async (req, res) => {
          AND t.type = 'event' AND (t.repeat_days > 0 OR t.repeat_months > 0)`,
       [req.params.id, userId]
     )
+    await touchCollabContent(acc.collabId, userId)
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -1026,16 +1297,21 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   const userId = req.userId!
   try {
+  const acc = await resolveItemAccess(userId, req.params.id)
+  if (!acc) return res.status(404).json({ error: 'Not found' })
+  if (!acc.canWrite) return res.status(403).json({ error: 'read_only_share' })
     const result = await query(
       'DELETE FROM todos WHERE id = $1 AND user_id = $2',
-      [req.params.id, userId]
+      [req.params.id, acc.ownerId]
     )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
-    // Clear any per-occurrence overrides for a deleted recurring series.
+    // Clear any per-occurrence overrides for a deleted recurring series. Events
+    // are never shared, so these are always the caller's own.
     await query(
       'DELETE FROM event_overrides WHERE series_id = $1 AND user_id = $2',
       [req.params.id, userId]
     )
+    await touchCollabContent(acc.collabId, userId)
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -1140,14 +1416,20 @@ router.put('/:id/series-shift', async (req, res) => {
 // POST /api/todos/:id/complete
 router.post('/:id/complete', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   try {
+    const acc = await resolveItemAccess(userId, req.params.id)
+    if (!acc) return res.status(404).json({ error: 'Not found' })
+    if (!acc.canWrite) return res.status(403).json({ error: 'read_only_share' })
+    // The list comes from the resolved item, not from ?list= — that param was
+    // the client telling us what it thought the list was, which is exactly the
+    // thing that breaks once a list can be addressed by share key.
     await query(
       `UPDATE todos SET status = 1, completed_at = NOW()
        WHERE id = $1 AND list_name = $2 AND user_id = $3`,
-      [req.params.id, list, userId]
+      [req.params.id, acc.listName, acc.ownerId]
     )
-    await spawnRepeatingTodos(userId, list)
+    await spawnRepeatingTodos(acc.ownerId, acc.listName)
+    await touchCollabContent(acc.collabId, userId)
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -1157,13 +1439,16 @@ router.post('/:id/complete', async (req, res) => {
 // POST /api/todos/:id/uncomplete
 router.post('/:id/uncomplete', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   try {
+    const acc = await resolveItemAccess(userId, req.params.id)
+    if (!acc) return res.status(404).json({ error: 'Not found' })
+    if (!acc.canWrite) return res.status(403).json({ error: 'read_only_share' })
     await query(
       `UPDATE todos SET status = 0, completed_at = NULL
        WHERE id = $1 AND list_name = $2 AND user_id = $3`,
-      [req.params.id, list, userId]
+      [req.params.id, acc.listName, acc.ownerId]
     )
+    await touchCollabContent(acc.collabId, userId)
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -1179,8 +1464,26 @@ router.post('/:id/move', async (req, res) => {
   }
   if (!target_list) return res.status(400).json({ error: 'target_list is required' })
   try {
-    if (req.plan === 'free' && !(await userHasList(userId, target_list))) {
-      if ((await countUserLists(userId)) >= LIMITS.maxLists) {
+  const acc = await resolveItemAccess(userId, req.params.id)
+  if (!acc) return res.status(404).json({ error: 'Not found' })
+  if (!acc.canWrite) return res.status(403).json({ error: 'read_only_share' })
+    // Where is it going? `target_list` may be a share key from the client.
+    const target = await resolveListAccess(userId, {
+      list: target_list,
+      share: (req.body as { target_share_id?: string | number }).target_share_id,
+    })
+    if (!target) return res.status(404).json({ error: 'Not found' })
+    if (!target.canWrite) return res.status(403).json({ error: 'read_only_share' })
+    // Moving between owners would silently transfer the row — and its quota —
+    // from one account to another. Copying across a share is a separate feature.
+    if (target.ownerId !== acc.ownerId) {
+      return res.status(403).json({ error: 'cross_owner_move' })
+    }
+
+    const ownerPlan =
+      acc.ownerId === userId ? req.plan : await getUserPlan(acc.ownerId)
+    if (ownerPlan === 'free' && !(await userHasList(acc.ownerId, target.listName))) {
+      if ((await countUserLists(acc.ownerId)) >= LIMITS.maxLists) {
         return res.status(403).json({ error: 'free_tier_list_limit', limit: LIMITS.maxLists })
       }
     }
@@ -1189,13 +1492,15 @@ router.post('/:id/move', async (req, res) => {
     const result = cat
       ? await query(
           'UPDATE todos SET list_name = $1, category = $2 WHERE id = $3 AND user_id = $4',
-          [target_list, cat, req.params.id, userId]
+          [target.listName, cat, req.params.id, acc.ownerId]
         )
       : await query(
           'UPDATE todos SET list_name = $1 WHERE id = $2 AND user_id = $3',
-          [target_list, req.params.id, userId]
+          [target.listName, req.params.id, acc.ownerId]
         )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
+    await touchCollabContent(acc.collabId, userId)
+    await touchCollabContent(target.collabId, userId)
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })
@@ -1213,19 +1518,23 @@ router.post('/:id/snooze', async (req, res) => {
     return res.status(400).json({ error: 'snoozed_until must be a number or null' })
   }
   try {
+  const acc = await resolveItemAccess(userId, req.params.id)
+  if (!acc) return res.status(404).json({ error: 'Not found' })
+  if (!acc.canWrite) return res.status(403).json({ error: 'read_only_share' })
     const hasDue = Object.prototype.hasOwnProperty.call(req.body, 'due_date')
     const result = hasDue
       ? await query(
           `UPDATE todos SET snoozed_until = $1, due_date = $2
            WHERE id = $3 AND user_id = $4`,
-          [snoozed_until, due_date ?? null, req.params.id, userId]
+          [snoozed_until, due_date ?? null, req.params.id, acc.ownerId]
         )
       : await query(
           `UPDATE todos SET snoozed_until = $1
            WHERE id = $2 AND user_id = $3`,
-          [snoozed_until, req.params.id, userId]
+          [snoozed_until, req.params.id, acc.ownerId]
         )
     if (result.rowCount === 0) return res.status(404).json({ error: 'Not found' })
+    await touchCollabContent(acc.collabId, userId)
     res.json({ ok: true })
   } catch (err) {
     res.status(500).json({ error: String(err) })

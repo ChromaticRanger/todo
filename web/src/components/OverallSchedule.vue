@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { Todo, TodoFormData } from '../types/todo'
 import { apiFetch } from '../lib/api'
 import { useTodoStore } from '../stores/todoStore'
+import { keyOf } from '../types/todo'
 import { useListStore } from '../stores/listStore'
 import { useSettingsStore } from '../stores/settingsStore'
 import { priorityBorderClass } from '../lib/priorityClass'
@@ -410,6 +411,10 @@ const MAX_DURATION = 14 * 86400 // matches the server-side cap
 
 function onItemPointerDown(ev: PointerEvent, todo: Todo, mode: DragMode) {
   if (ev.button !== 0) return
+  // Dragging reschedules the item, so it's off-limits on a read-only share.
+  // Silent here rather than a toast: a pointerdown isn't a deliberate enough
+  // gesture to justify an error message, and openEdit explains on click.
+  if (readOnlyTodo(todo)) return
   const st: DragState = {
     todo, mode, grabOffsetMin: 0, ghost: null, allDayGhost: null, targetDayKey: null,
     label: '', pointer: { x: ev.clientX, y: ev.clientY }, result: null,
@@ -599,9 +604,9 @@ async function persistDrag(todo: Todo, due_date: number, duration_seconds: numbe
     if (isEvent) {
       todoStore.notifyEventChanged()
     } else {
-      todoStore.invalidateList(todo.list_name)
-      if (todo.list_name === todoStore.currentList) {
-        await todoStore.fetchTodos(todo.list_name, todoStore.currentView, { silent: true })
+      todoStore.invalidateList(keyOf(todo))
+      if (keyOf(todo) === todoStore.currentList) {
+        await todoStore.fetchTodos(keyOf(todo), todoStore.currentView, { silent: true })
       }
     }
   } catch (e) {
@@ -860,16 +865,36 @@ function onReposition() {
   updateOverflowRect(cell)
 }
 
+/**
+ * Items on the calendar can come from a list shared with us, which we may not
+ * be allowed to change — the calendar is cross-list, so read-only is a property
+ * of the ITEM here, not of the active tab.
+ */
+function readOnlyTodo(todo: Todo): boolean {
+  if (todo.list_key == null) return false
+  if (todo.can_write === false) return true
+  return !listStore.canWrite(todo.list_key)
+}
+
+function readOnlyTodoReason(todo: Todo): string {
+  const owner = todo.owner_name || 'someone else'
+  return `View only — this list is shared by ${owner}, so you can’t change its items.`
+}
+
 async function openEdit(todo: Todo) {
+  if (readOnlyTodo(todo)) {
+    todoStore.setErrorWithTimeout(readOnlyTodoReason(todo))
+    return
+  }
   closeOverflow()
   editing.value = todo
-  editingCategories.value = await todoStore.fetchCategoriesFor(todo.list_name)
+  editingCategories.value = await todoStore.fetchCategoriesFor(keyOf(todo))
 }
 
 async function handleEditSubmit(form: TodoFormData) {
   if (!editing.value) return
   const id = editing.value.id
-  const list = editing.value.list_name
+  const list = keyOf(editing.value)
   const isEvent = editing.value.type === 'event'
   editing.value = null
   try {

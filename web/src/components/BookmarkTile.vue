@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import type { Todo } from '../types/todo'
 import { useTodoStore } from '../stores/todoStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { useListStore } from '../stores/listStore'
 import BookmarkFavicon from './BookmarkFavicon.vue'
 import TodoForm from './TodoForm.vue'
 import MoveDialog from './MoveDialog.vue'
@@ -63,8 +64,30 @@ async function handleMove(payload: { targetList: string; targetCategory: string 
   showMove.value = false
 }
 
+// Bookmarks in a list shared with us that we're not allowed to change. Mirrors
+// TodoItem: the guard must sit in front of the fade-out, which runs before the
+// store is ever called.
+const listStore = useListStore()
+const readOnly = computed(() => {
+  // Keyed off the ITEM, not the active tab: once shared items mix into Today
+  // and Week the active list is one of your own, but the item still isn't.
+  if (props.todo.list_key == null) return false
+  if (props.todo.can_write === false) return true
+  return !listStore.canWrite(props.todo.list_key)
+})
+const readOnlyReason = computed(() => {
+  const owner = props.todo.owner_name || 'someone else'
+  return `View only — this list is shared by ${owner}, so you can’t change its items.`
+})
+function blockedByReadOnly(): boolean {
+  if (!readOnly.value) return false
+  store.setErrorWithTimeout(readOnlyReason.value)
+  return true
+}
+
 // Honor the "confirm before deleting" preference: when off, delete in one click.
 function requestDelete() {
+  if (blockedByReadOnly()) return
   if (settingsStore.confirmBeforeDelete) showConfirm.value = true
   else void handleDelete()
 }
@@ -73,7 +96,11 @@ async function handleDelete() {
   showConfirm.value = false
   isDeleting.value = true
   await new Promise(r => setTimeout(r, 220))
-  await store.deleteTodo(props.todo.id)
+  try {
+    await store.deleteTodo(props.todo.id)
+  } finally {
+    if (store.todos.some((t) => t.id === props.todo.id)) isDeleting.value = false
+  }
 }
 </script>
 
@@ -108,6 +135,7 @@ async function handleDelete() {
       class="absolute top-0 right-0 z-10 flex items-center gap-0.5 p-0.5 rounded-md bg-surface/95 border border-border-strong/40 shadow-sm opacity-0 group-hover:opacity-100 touch:opacity-100 transition-opacity touch:flex-col"
     >
       <button
+        v-if="!readOnly"
         class="p-0.5 rounded text-muted hover:text-text hover:bg-surface-hover transition-colors"
         title="Edit"
         @click.stop.prevent="showEdit = true"
@@ -117,6 +145,7 @@ async function handleDelete() {
         </svg>
       </button>
       <button
+        v-if="!readOnly"
         class="p-0.5 rounded text-muted hover:text-accent hover:bg-surface-hover transition-colors"
         title="Move to list"
         @click.stop.prevent="showMove = true"
@@ -126,6 +155,7 @@ async function handleDelete() {
         </svg>
       </button>
       <button
+        v-if="!readOnly"
         class="p-0.5 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors"
         title="Delete"
         @click.stop.prevent="requestDelete()"

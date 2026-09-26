@@ -48,6 +48,38 @@ const editName = ref('')
 const confirmDelete = ref(false)
 const showMove = ref(false)
 
+/**
+ * Categories belong to the list, so a shared list you can't write to means the
+ * whole category toolbar is off-limits. Same approach as TodoItem: say why on
+ * hover, and say why again if they click, rather than opening a confirm dialog
+ * for something that can't happen.
+ *
+ * The layout toggle is deliberately NOT gated — it's a per-person view
+ * preference stored in the viewer's own settings, not a change to the list.
+ */
+const readOnly = computed(() => !listStore.canWrite(listStore.activeList))
+// Renaming, moving and deleting a category reshape someone else's list, so
+// they stay with the owner even for editors.
+const cannotManage = computed(() => !listStore.canManage(listStore.activeList))
+const readOnlyReason = computed(() => {
+  const owner = listStore.metaFor(listStore.activeList)?.owner_name || 'someone else'
+  return listStore.roleOf(listStore.activeList) === 'viewer'
+    ? `View only — this list is shared by ${owner}, so you can’t change its items.`
+    : `Only ${owner} can change the categories of this list.`
+})
+function blockedByReadOnly(): boolean {
+  if (!readOnly.value) return false
+  store.setErrorWithTimeout(readOnlyReason.value)
+  return true
+}
+
+/** Guard for the restructuring actions, which editors don't get either. */
+function blockedAsNotOwner(): boolean {
+  if (!cannotManage.value) return false
+  store.setErrorWithTimeout(readOnlyReason.value)
+  return true
+}
+
 function positionTypeMenu() {
   const el = addBtnRef.value
   if (!el) return
@@ -93,7 +125,12 @@ const nonBookmarks = computed(() => props.todos.filter(t => t.type !== 'bookmark
 
 // Per-item drag is only meaningful in the All view. Time-filtered views sort by
 // due_date for an urgency-based read; the Completed flat view doesn't render cards.
-const dragEnabled = computed(() => store.currentView === 'all')
+// Also off for a shared list you can't write to: dragging between categories
+// is a real mutation, and it's the same gesture as reordering within one, so
+// both go. This hides the drag handles too (see the class binding below).
+const dragEnabled = computed(
+  () => store.currentView === 'all' && listStore.canWrite(listStore.activeList)
+)
 
 function persistOrder(ids: number[]) {
   void categoryPrefsStore.setItemOrder(listStore.activeList, props.category, ids)
@@ -184,6 +221,7 @@ function startEdit() {
 }
 
 async function confirmRename() {
+  if (blockedAsNotOwner()) return
   const trimmed = editName.value.trim()
   editing.value = false
   if (!trimmed || trimmed === props.category) return
@@ -195,16 +233,19 @@ function cancelEdit() {
 }
 
 async function handleDelete() {
+  if (blockedAsNotOwner()) return
   confirmDelete.value = false
   await store.deleteCategory(listStore.activeList, props.category)
 }
 
 async function handleMoveToGeneral() {
+  if (blockedAsNotOwner()) return
   confirmDelete.value = false
   await store.mergeCategory(listStore.activeList, props.category, 'General')
 }
 
 async function handleMoveToList(targetList: string) {
+  if (blockedAsNotOwner()) return
   showMove.value = false
   const landed = await store.moveCategoryToList(listStore.activeList, targetList, props.category)
   if (!landed) return
@@ -253,10 +294,10 @@ async function handleMoveToList(targetList: string) {
         </button>
         <!-- Edit / rename icon -->
         <button
-          v-if="!editing"
+          v-if="!editing && !cannotManage"
           class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
           title="Rename category"
-          @click="startEdit"
+          @click="!blockedAsNotOwner() && startEdit()"
         >
           <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
             <path d="M13.488 2.513a1.75 1.75 0 0 0-2.475 0L6.75 6.774a2.75 2.75 0 0 0-.596.892l-.848 2.047a.75.75 0 0 0 .98.98l2.047-.848a2.75 2.75 0 0 0 .892-.596l4.261-4.262a1.75 1.75 0 0 0 0-2.474ZM3.75 13.25a.75.75 0 0 0 0 1.5h8.5a.75.75 0 0 0 0-1.5h-8.5Z" />
@@ -265,10 +306,10 @@ async function handleMoveToList(targetList: string) {
 
         <!-- Move category to another list -->
         <button
-          v-if="!editing"
+          v-if="!editing && !cannotManage"
           class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
           title="Move category to another list"
-          @click="showMove = true"
+          @click="!blockedAsNotOwner() && (showMove = true)"
         >
           <svg class="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
@@ -277,10 +318,10 @@ async function handleMoveToList(targetList: string) {
 
         <!-- Delete category icon -->
         <button
-          v-if="!editing"
+          v-if="!editing && !cannotManage"
           class="p-1 rounded text-muted hover:text-danger hover:bg-danger-bg"
           title="Delete category"
-          @click="confirmDelete = true"
+          @click="!blockedAsNotOwner() && (confirmDelete = true)"
         >
           <svg class="size-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -290,10 +331,11 @@ async function handleMoveToList(targetList: string) {
         <!-- Add item button with type dropdown -->
         <div class="relative">
           <button
+            v-if="!readOnly"
             ref="addBtnRef"
             class="p-1 rounded text-muted hover:text-accent hover:bg-surface-hover"
             title="Add item"
-            @click="toggleTypeMenu"
+            @click="!blockedByReadOnly() && toggleTypeMenu()"
           >
             <svg class="size-4 shrink-0" viewBox="0 0 16 16" fill="currentColor">
               <path d="M8.75 3.75a.75.75 0 0 0-1.5 0v3.5h-3.5a.75.75 0 0 0 0 1.5h3.5v3.5a.75.75 0 0 0 1.5 0v-3.5h3.5a.75.75 0 0 0 0-1.5h-3.5v-3.5Z" />

@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db.js'
 import { LIMITS, countUserLists, userHasList } from '../lib/limits.js'
+import { resolveListAccess } from '../lib/listAccess.js'
 
 const router = Router()
 
@@ -16,16 +17,28 @@ function nextFreeName(base: string, taken: Set<string>): string {
 // GET /api/categories?list=X — distinct categories for incomplete todos in
 // that list, unioned with any user-created empty categories for the list
 // (kept in app_settings.empty_categories so they survive a refresh).
+//
+// GET /api/categories?share=<collabId> does the same for a list shared with
+// you. The categories in use come from the owner's rows, but the "empty
+// category" additions are read from YOUR settings, keyed by the share key —
+// they're a per-person view preference, not shared state.
 router.get('/', async (req, res) => {
   const userId = req.userId!
-  const list = (req.query.list as string) || 'todos'
   try {
+    const acc = await resolveListAccess(userId, {
+      list: (req.query.list as string) || 'todos',
+      share: req.query.share as string | undefined,
+    })
+    if (!acc) {
+      res.status(404).json({ error: 'Not found' })
+      return
+    }
     const [catsResult, emptyResult] = await Promise.all([
       query<{ category: string }>(
         `SELECT DISTINCT category FROM todos
          WHERE user_id = $1 AND list_name = $2 AND status = 0
            AND type <> 'event'`,
-        [userId, list]
+        [acc.ownerId, acc.listName]
       ),
       query<{ value: Record<string, string[]> }>(
         `SELECT value FROM app_settings
@@ -35,7 +48,7 @@ router.get('/', async (req, res) => {
     ])
     const real = catsResult.rows.map((r) => r.category)
     const realSet = new Set(real)
-    const emptyForList = emptyResult.rows[0]?.value?.[list] ?? []
+    const emptyForList = emptyResult.rows[0]?.value?.[acc.key] ?? []
     const stillEmpty = emptyForList.filter((c) => !realSet.has(c))
     const all = [...real, ...stillEmpty].sort((a, b) => a.localeCompare(b))
     res.json({ categories: all })
@@ -54,6 +67,20 @@ router.post('/move-items', async (req, res) => {
   }
   if (fromName === toName.trim()) {
     res.json({ ok: true })
+    return
+  }
+  // Category management stays with the list's owner in v1. Editors add items
+  // (which can name a new category implicitly) but don't reshape the list.
+  const acc = await resolveListAccess(userId, {
+    list: list,
+    share: (req.body as { share_id?: string | number }).share_id,
+  })
+  if (!acc) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (acc.role !== 'owner') {
+    res.status(403).json({ error: 'owner_only' })
     return
   }
   try {
@@ -88,6 +115,20 @@ router.post('/move-to-list', async (req, res) => {
   const target = toList.trim()
   if (target === fromList) {
     res.status(400).json({ error: 'same_list' })
+    return
+  }
+  // Category management stays with the list's owner in v1. Editors add items
+  // (which can name a new category implicitly) but don't reshape the list.
+  const acc = await resolveListAccess(userId, {
+    list: fromList,
+    share: (req.body as { share_id?: string | number }).share_id,
+  })
+  if (!acc) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (acc.role !== 'owner') {
+    res.status(403).json({ error: 'owner_only' })
     return
   }
   try {
@@ -154,6 +195,20 @@ router.delete('/', async (req, res) => {
     res.status(400).json({ error: 'list and name are required' })
     return
   }
+  // Category management stays with the list's owner in v1. Editors add items
+  // (which can name a new category implicitly) but don't reshape the list.
+  const acc = await resolveListAccess(userId, {
+    list: list,
+    share: (req.body as { share_id?: string | number }).share_id,
+  })
+  if (!acc) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (acc.role !== 'owner') {
+    res.status(403).json({ error: 'owner_only' })
+    return
+  }
   try {
     await query(
       `DELETE FROM todos
@@ -172,6 +227,20 @@ router.patch('/', async (req, res) => {
   const { list, oldName, newName } = req.body as { list?: string; oldName?: string; newName?: string }
   if (!list || !oldName || !newName?.trim()) {
     res.status(400).json({ error: 'list, oldName, and newName are required' })
+    return
+  }
+  // Category management stays with the list's owner in v1. Editors add items
+  // (which can name a new category implicitly) but don't reshape the list.
+  const acc = await resolveListAccess(userId, {
+    list: list,
+    share: (req.body as { share_id?: string | number }).share_id,
+  })
+  if (!acc) {
+    res.status(404).json({ error: 'Not found' })
+    return
+  }
+  if (acc.role !== 'owner') {
+    res.status(403).json({ error: 'owner_only' })
     return
   }
   try {

@@ -214,7 +214,22 @@ function eventRowKey(t: Todo): string {
   return `${t.id}-${t.due_date ?? 0}`
 }
 
+// Same read-only story as the item cards: the Completed view on a shared list
+// shows the owner's items, so its delete button must explain itself rather than
+// open a confirm dialog for something that can't happen.
+const readOnly = computed(() => !listStore.canWrite(listStore.activeList))
+const readOnlyReason = computed(() => {
+  const owner = listStore.metaFor(listStore.activeList)?.owner_name || 'someone else'
+  return `View only — this list is shared by ${owner}, so you can’t change its items.`
+})
+function blockedByReadOnly(): boolean {
+  if (!readOnly.value) return false
+  store.setErrorWithTimeout(readOnlyReason.value)
+  return true
+}
+
 async function handleDelete() {
+  if (blockedByReadOnly()) return
   if (confirmDeleteId.value === null) return
   await store.deleteTodo(confirmDeleteId.value)
   confirmDeleteId.value = null
@@ -492,10 +507,10 @@ async function handleEventEditDelete() {
             </p>
           </div>
           <button
-            v-if="store.currentView === 'completed'"
+            v-if="store.currentView === 'completed' && !readOnly"
             class="p-1 rounded text-muted hover:text-danger hover:bg-surface-hover transition-colors opacity-0 group-hover:opacity-100 touch:opacity-100 shrink-0"
             title="Delete"
-            @click.stop="confirmDeleteId = todo.id"
+            @click.stop="!blockedByReadOnly() && (confirmDeleteId = todo.id)"
           >
             <svg class="size-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

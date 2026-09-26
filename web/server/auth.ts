@@ -4,6 +4,7 @@ import { bearer } from 'better-auth/plugins'
 import Stripe from 'stripe'
 import { stripe as stripePlugin } from '@better-auth/stripe'
 import { pool, query, seedUserDefaults } from './db.js'
+import { claimPendingInvites } from './lib/invites.js'
 import {
   sendVerificationEmailFor,
   sendPasswordResetEmailFor,
@@ -222,6 +223,18 @@ export const auth = betterAuth({
           } catch (err) {
             // Don't fail signup if seeding fails — user can still use the app.
             console.error('[auth] seedUserDefaults failed for', user.id, err)
+          }
+          // Someone invited to a shared list before they had an account lands
+          // here: attaching the invite now is what makes the list simply be
+          // there when they arrive, instead of the email being a dead end.
+          // Same rule as seeding — never fail a signup over it.
+          try {
+            const claimed = await claimPendingInvites(user.id, user.email)
+            if (claimed > 0) {
+              console.log('[auth] attached', claimed, 'shared list(s) to', user.id)
+            }
+          } catch (err) {
+            console.error('[auth] claimPendingInvites failed for', user.id, err)
           }
           // The welcome email is sent at plan-selection time (free → /api/plan/
           // select-free, pro → onSubscriptionComplete) so it can reflect the
