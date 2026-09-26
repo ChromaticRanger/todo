@@ -240,6 +240,65 @@ export async function sendWelcomeEmailFor(
   })
 }
 
+/**
+ * Invitation to collaborate on a list.
+ *
+ * Unlike every other template here, this one interpolates a THIRD PARTY's free
+ * text — the inviter's display name and their list's name — into mail sent to
+ * someone else. `renderEmail` does not escape its inputs, so both are escaped
+ * explicitly. (`escapeHtml` is declared further down; function declarations
+ * hoist, so calling it here is fine.)
+ *
+ * The link is built from APP_URL, not BETTER_AUTH_URL: it's our own route, not
+ * a Better Auth one, so `rewriteAuthLink` doesn't apply.
+ */
+export async function sendListInviteEmailFor(
+  to: string,
+  opts: {
+    listName: string
+    inviterName: string
+    role: 'viewer' | 'editor'
+    token: string
+    /** No account yet — send them down the signup path instead of straight in. */
+    isNewUser: boolean
+  }
+): Promise<boolean> {
+  const appUrl = APP_URL || 'https://stash-squirrel.com'
+  const url = `${appUrl}/invite?token=${encodeURIComponent(opts.token)}`
+  const list = escapeHtml(opts.listName)
+  const inviter = escapeHtml(opts.inviterName)
+  const canEdit = opts.role === 'editor'
+
+  const { text, html } = renderEmail({
+    heading: `${inviter} shared a list with you`,
+    body: `${inviter} has invited you to ${canEdit ? 'collaborate on' : 'follow'} their list “${list}” on Stash Squirrel.`,
+    bullets: canEdit
+      ? [
+          'See everything on the list, updated as it changes',
+          'Add your own items, and tick things off',
+          'Dated items show up in your Today and Week views',
+        ]
+      : [
+          'See everything on the list, updated as it changes',
+          'Dated items show up in your Today and Week views',
+          'Read-only — you won’t be able to change anything',
+        ],
+    bodyExtra: opts.isNewUser
+      ? 'You’ll need a Stash Squirrel account to open it — creating one is free and takes a moment.'
+      : undefined,
+    cta: opts.isNewUser ? 'Create your account' : 'Open the list',
+    url,
+    footer: `This invite was meant for ${escapeHtml(to)}. If you weren’t expecting it, you can safely ignore this email.`,
+  })
+
+  return sendEmail({
+    to,
+    subject: `${opts.inviterName} shared “${opts.listName}” with you`,
+    text,
+    html,
+  })
+}
+
 // ── Daily digest ─────────────────────────────────────────────────────────────
 
 export interface DigestItem {

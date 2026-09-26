@@ -13,17 +13,20 @@ import planRouter from './routes/plan.js'
 import searchRouter from './routes/search.js'
 import importRouter from './routes/import.js'
 import sharedRouter from './routes/shared.js'
+import collabRouter from './routes/collab.js'
 import blogRouter from './routes/blog.js'
 import extensionRouter from './routes/extension.js'
 import accountRouter from './routes/account.js'
 import adminRouter from './routes/admin.js'
 import demoRouter from './routes/demo.js'
 import cronRouter from './routes/cron.js'
+import eventsRouter from './routes/events.js'
 import { authMiddleware } from './middleware/auth.js'
 import { requirePlan } from './middleware/requirePlan.js'
 import { rateLimit } from './middleware/rateLimit.js'
 import { demoNoop } from './middleware/demoNoop.js'
 import { initDb } from './db.js'
+import { startRealtime, isRealtimeHealthy, connectionStats } from './lib/realtime.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
@@ -44,7 +47,10 @@ app.all('/api/auth/*splat', toNodeHandler(auth))
 app.use(express.json())
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true })
+  // `realtime` is false when the Postgres listener is down: this instance still
+  // serves its own tabs, but events from the other instance aren't arriving.
+  // Silent by nature, so it gets surfaced here rather than only in logs.
+  res.json({ ok: true, realtime: isRealtimeHealthy(), sse: connectionStats() })
 })
 
 // Demo endpoints (/start, /end) must be reachable without an existing
@@ -82,6 +88,11 @@ app.use('/api/admin', adminRouter)
 // requirePlan. Writes/uploads live under /api/admin/blog (admin-gated).
 app.use('/api/blog', blogRouter)
 
+// The realtime stream mounts ahead of BOTH gates below. Ahead of requirePlan
+// because a tier-less user shouldn't get a 402 on a stream, and ahead of
+// rateLimit because EventSource reconnects on any failure — see events.ts.
+app.use('/api/events', eventsRouter)
+
 // Everything below requires the user to have chosen a plan.
 app.use('/api', requirePlan)
 app.use('/api', rateLimit)
@@ -93,6 +104,7 @@ app.use('/api/settings', settingsRouter)
 app.use('/api/search', searchRouter)
 app.use('/api/import', importRouter)
 app.use('/api/shared', sharedRouter)
+app.use('/api/collab', collabRouter)
 
 // In production, serve the Vite build and let Vue Router handle the rest
 if (isProd) {
@@ -118,6 +130,7 @@ if (isProd) {
 
 initDb()
   .then(() => {
+    startRealtime()
     app.listen(PORT, () => {
       console.log(`Server listening on http://localhost:${PORT}`)
     })

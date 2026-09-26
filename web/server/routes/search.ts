@@ -7,6 +7,7 @@ import {
   resolveEventOccurrence,
   type TodoRow,
 } from './todos.js'
+import { fetchSharedScope, sharedScopeParams, displayNameFor } from '../lib/listAccess.js'
 
 const router = Router()
 
@@ -88,11 +89,72 @@ router.get('/', async (req, res) => {
       ),
       [userId, pattern, limit]
     )
-    const results = (await resolveEventRows(userId, result.rows)).map(coerceTodo)
+    const own = (await resolveEventRows(userId, result.rows)).map(coerceTodo)
+
+    // Lists shared with this user are searched separately and merged, rather
+    // than widening the query above to span owners — the `user_id = $1` prefix
+    // is what keeps that one on its index. No-op for anyone with no shares.
+    const scope = await fetchSharedScope(userId)
+    let shared: Array<ReturnType<typeof coerceTodo> & Record<string, unknown>> = []
+    if (scope.length > 0) {
+      const [owners, names] = sharedScopeParams(scope)
+      const sharedRes = await query<TodoRow & { user_id: string }>(
+        `SELECT id, user_id, list_name, title, description, category, priority, status,
+           EXTRACT(EPOCH FROM created_at)::BIGINT AS created_at,
+           EXTRACT(EPOCH FROM completed_at)::BIGINT AS completed_at,
+           due_date, repeat_days, repeat_months, spawned_next, type, url, snoozed_until,
+           recur_until, duration_seconds, color, all_day
+         FROM todos
+         WHERE (user_id, list_name) IN (
+           SELECT * FROM unnest($1::text[], $2::text[])
+         )
+         AND type <> 'event'
+         AND (title ILIKE $3 OR description ILIKE $3 OR url ILIKE $3)
+         ${includeCompleted ? '' : 'AND status = 0'}
+         ORDER BY
+           (CASE WHEN title ILIKE $3 THEN 0
+                 WHEN description ILIKE $3 THEN 1
+                 ELSE 2 END),
+           status ASC,
+           created_at DESC
+         LIMIT $4`,
+        [owners, names, pattern, limit]
+      )
+      const byPair = new Map(scope.map((r) => [`${r.ownerId}\u0000${r.listName}`, r]))
+      const ownerNames = new Map<string, string>()
+      for (const ownerId of new Set(scope.map((r) => r.ownerId))) {
+        ownerNames.set(ownerId, await displayNameFor(ownerId))
+      }
+      shared = sharedRes.rows.map((row) => {
+        const ref = byPair.get(`${row.user_id}\u0000${row.list_name}`)
+        const { user_id: _o, ...rest } = row
+        return {
+          ...coerceTodo(rest as TodoRow),
+          list_key: ref ? `@${ref.collabId}` : undefined,
+          collab_id: ref?.collabId,
+          owner_name: ref ? ownerNames.get(ref.ownerId) ?? null : null,
+          can_write: ref ? ref.role === 'editor' : false,
+        }
+      })
+    }
+
+    // Re-rank the combined set on the same terms the SQL used, then clip —
+    // otherwise a shared match could never displace a weaker own-list one.
+    const rank = (t: { title: string; description: string; status: number }) =>
+      t.title.toLowerCase().includes(q.toLowerCase()) ? 0
+        : (t.description ?? '').toLowerCase().includes(q.toLowerCase()) ? 1 : 2
+    const merged = [...own, ...shared].sort((a, b) => {
+      const r = rank(a) - rank(b)
+      if (r !== 0) return r
+      if (a.status !== b.status) return a.status - b.status
+      return (b.created_at ?? 0) - (a.created_at ?? 0)
+    })
+    const results = merged.slice(0, limit)
+
     res.json({
       results,
       total: results.length,
-      truncated: results.length === limit,
+      truncated: merged.length > limit,
     })
   } catch (err) {
     res.status(500).json({ error: String(err) })
