@@ -9,7 +9,10 @@
  * The seeded template (`demo-user`) is preserved.
  *
  * Usage: `npm run cleanup:demo` (local) or `npm run cleanup:demo:prod`.
- * Run periodically — once a day is plenty for the expected volume.
+ *
+ * The deployed app also runs this on its own daily schedule (see
+ * lib/scheduler.ts); this CLI stays for one-off and local runs. The actual
+ * deletion lives in lib/demoCleanup.ts so the two can't drift apart.
  */
 import dotenv from 'dotenv'
 if (process.env.ALLOW_REMOTE_DB !== '1') {
@@ -44,27 +47,12 @@ function guardTargetDb() {
 
 async function main() {
   guardTargetDb()
+  const { cleanupDemoUsers } = await import('../lib/demoCleanup.js')
   const { pool } = await import('../db.js')
-  const client = await pool.connect()
   try {
-    // CASCADE on the user FK cleans up session, account, todos, app_settings,
-    // and shared_lists rows for the deleted ephemeral users. Demos that are
-    // parked by a pending_demo_carryover row are excluded — they're waiting
-    // for a signed-up visitor to pick their plan.
-    const result = await client.query<{ id: string }>(
-      `DELETE FROM "user"
-        WHERE id LIKE 'demo-%'
-          AND id <> 'demo-user'
-          AND "createdAt" < NOW() - INTERVAL '24 hours'
-          AND id NOT IN (
-            SELECT value->>'demoUserId' FROM app_settings
-             WHERE key = 'pending_demo_carryover'
-          )
-        RETURNING id`
-    )
-    console.log(`✓ Deleted ${result.rowCount ?? 0} ephemeral demo user(s)`)
+    const { deleted } = await cleanupDemoUsers()
+    console.log(`\u2713 Deleted ${deleted} ephemeral demo user(s)`)
   } finally {
-    client.release()
     await pool.end()
   }
 }

@@ -28,6 +28,7 @@ import { rateLimit as rateLimiter, ipKeyGenerator } from 'express-rate-limit'
 import { demoNoop } from './middleware/demoNoop.js'
 import { initDb } from './db.js'
 import { startRealtime, isRealtimeHealthy } from './lib/realtime.js'
+import { startScheduler } from './lib/scheduler.js'
 
 const app = express()
 
@@ -151,6 +152,7 @@ if (isProd) {
 initDb()
   .then(() => {
     startRealtime()
+    startScheduler()
     app.listen(PORT, () => {
       console.log(`Server listening on http://localhost:${PORT}`)
     })
