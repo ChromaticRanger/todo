@@ -266,8 +266,15 @@ function formatDate(iso: string): string {
                 <span v-if="list.icon" class="text-2xl shrink-0" aria-hidden="true">{{ list.icon }}</span>
                 <h2 class="text-lg font-semibold text-text truncate">{{ list.name }}</h2>
               </div>
+              <!-- Only its publisher ever receives a hidden list, so this
+                   badge is never seen by anyone else. -->
               <span
-                v-if="list.owner_is_system"
+                v-if="list.is_hidden"
+                class="shrink-0 rounded-full bg-warning-bg text-warning-fg text-[10px] font-semibold px-2 py-0.5 tracking-wide"
+                title="Hidden by the Stash Squirrel team — only you can see this"
+              >Hidden</span>
+              <span
+                v-else-if="list.owner_is_system"
                 class="shrink-0 rounded-full bg-accent/15 text-accent text-[10px] font-semibold px-2 py-0.5 tracking-wide"
                 title="Curated by Stash Squirrel"
               >Official</span>
@@ -383,7 +390,11 @@ function formatDate(iso: string): string {
                 <span v-if="discover.detail.list.icon" class="text-3xl" aria-hidden="true">{{ discover.detail.list.icon }}</span>
                 <h1 class="text-2xl font-semibold text-text">{{ discover.detail.list.name }}</h1>
                 <span
-                  v-if="discover.detail.list.owner_is_system"
+                  v-if="discover.detail.list.is_hidden"
+                  class="rounded-full bg-warning-bg text-warning-fg text-[10px] font-semibold px-2 py-0.5 tracking-wide"
+                >Hidden</span>
+                <span
+                  v-else-if="discover.detail.list.owner_is_system"
                   class="rounded-full bg-accent/15 text-accent text-[10px] font-semibold px-2 py-0.5 tracking-wide"
                 >Official</span>
                 <span
@@ -447,6 +458,16 @@ function formatDate(iso: string): string {
               </button>
             </div>
           </header>
+
+          <p
+            v-if="discover.detail.list.is_hidden"
+            class="rounded-xl border border-warning-fg/40 bg-warning-bg/50 text-text px-4 py-3 text-sm mb-4"
+          >
+            This list has been hidden by the Stash Squirrel team, so it no longer
+            appears in Discover for anyone else. You can still see it here, and
+            your own copy of the list is untouched. Get in touch if you think
+            this was a mistake.
+          </p>
 
           <p
             v-if="cloneError"

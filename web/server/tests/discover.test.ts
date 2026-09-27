@@ -69,7 +69,30 @@ export default async function run(): Promise<void> {
     const pubs = await (await fetch(`${base}/publications`)).json()
     const pubSlugs = (pubs.publications as { slug: string }[]).map((p) => p.slug)
     check('the owner still sees a hidden list as published', pubSlugs.includes(`${tag}-hidden`))
+
+    // ...and the publisher keeps seeing it in Discover itself, badged, so they
+    // aren't left hunting a catalogue for a list they were told was published.
+    const ownerBrowse = await (await fetch(`${base}/lists`)).json()
+    const ownerRow = (ownerBrowse.lists as { slug: string; is_hidden: boolean }[])
+      .find((l) => l.slug === `${tag}-hidden`)
+    check('the publisher still sees their hidden list in the catalogue', !!ownerRow)
+    check('…flagged as hidden so the UI can badge it', ownerRow?.is_hidden === true,
+      JSON.stringify(ownerRow))
+
+    const ownerDetail = await fetch(`${base}/lists/${tag}-hidden`)
+    check('the publisher can still open its detail view', ownerDetail.status === 200,
+      `got ${ownerDetail.status}`)
+
+    // The owner reaches the detail view, so its Clone button has to work rather
+    // than 404 — it is their own content either way.
+    const ownerClone = await fetch(`${base}/lists/${tag}-hidden/clone`, { method: 'POST' })
+    check('the publisher can still clone their own hidden list', ownerClone.status === 200,
+      `got ${ownerClone.status}`)
     asUser = reader
+
+    const readerRow = (await (await fetch(`${base}/lists`)).json()).lists as { is_hidden: boolean }[]
+    check('nobody else sees an is_hidden list at all',
+      readerRow.every((l) => l.is_hidden === false))
 
     // ── Likes ───────────────────────────────────────────────────────────────
     heading('likes')

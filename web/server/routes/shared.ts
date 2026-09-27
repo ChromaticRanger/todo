@@ -20,6 +20,7 @@ interface SharedListRow {
   updated_at: Date | string
   owner_name: string | null
   item_count: string | number
+  is_hidden: boolean
   like_count: string | number
   liked_by_me: boolean
 }
@@ -94,6 +95,7 @@ function shapeListMeta(row: SharedListRow) {
     owner_name: row.owner_name ?? 'Unknown',
     owner_is_system: row.owner_user_id === STASH_SQUIRREL_USER_ID,
     item_count: Number(row.item_count),
+    is_hidden: !!row.is_hidden,
     like_count: Number(row.like_count ?? 0),
     liked_by_me: !!row.liked_by_me,
     published_at: typeof row.published_at === 'string' ? row.published_at : row.published_at.toISOString(),
@@ -106,12 +108,22 @@ router.get('/lists', async (req, res) => {
   if (!ensurePro(req, res)) return
   try {
     const params: unknown[] = []
-    // is_hidden is the moderator's switch; is_published is the publisher's.
-    const where: string[] = ['sl.is_published = TRUE', 'sl.is_hidden = FALSE']
 
-    // $1 is always the caller, for the liked_by_me probe.
+    // $1 is always the caller: it drives the liked_by_me probe and the
+    // owner-sees-own-hidden-list rule below.
     params.push(req.userId)
     const meParam = `$${params.length}`
+
+    // is_hidden is the moderator's switch; is_published is the publisher's.
+    //
+    // A hidden list stays visible to the person who published it, badged, so
+    // they aren't left hunting a catalogue for a list they were told was
+    // published. Hiding it from them too would just generate support tickets
+    // saying publishing is broken.
+    const where: string[] = [
+      'sl.is_published = TRUE',
+      `(sl.is_hidden = FALSE OR sl.owner_user_id = ${meParam})`,
+    ]
 
     const rawCategory = (req.query.category as string | undefined)?.trim()
     if (rawCategory && isListCategory(rawCategory)) {
@@ -137,7 +149,7 @@ router.get('/lists', async (req, res) => {
     const result = await query<SharedListRow>(
       `SELECT sl.id, sl.slug, sl.name, sl.description, sl.icon, sl.category,
               sl.owner_user_id, sl.original_list_name, sl.sort_order,
-              sl.published_at, sl.updated_at,
+              sl.is_hidden, sl.published_at, sl.updated_at,
               u.name AS owner_name,
               (SELECT COUNT(*) FROM shared_items si WHERE si.shared_list_id = sl.id) AS item_count,
               lc.n AS like_count,
@@ -168,7 +180,7 @@ router.get('/lists/:slug', async (req, res) => {
     const meta = await query<SharedListRow>(
       `SELECT sl.id, sl.slug, sl.name, sl.description, sl.icon, sl.category,
               sl.owner_user_id, sl.original_list_name, sl.sort_order,
-              sl.published_at, sl.updated_at,
+              sl.is_hidden, sl.published_at, sl.updated_at,
               u.name AS owner_name,
               (SELECT COUNT(*) FROM shared_items si WHERE si.shared_list_id = sl.id) AS item_count,
               lc.n AS like_count,
@@ -181,7 +193,8 @@ router.get('/lists/:slug', async (req, res) => {
          LEFT JOIN LATERAL (
            SELECT COUNT(*) AS n FROM shared_list_likes l WHERE l.shared_list_id = sl.id
          ) lc ON TRUE
-         WHERE sl.slug = $1 AND sl.is_published = TRUE AND sl.is_hidden = FALSE`,
+         WHERE sl.slug = $1 AND sl.is_published = TRUE
+           AND (sl.is_hidden = FALSE OR sl.owner_user_id = $2)`,
       [req.params.slug, req.userId]
     )
     if (meta.rowCount === 0) {
@@ -236,8 +249,9 @@ router.post('/lists/:slug/clone', async (req, res) => {
 
     const meta = await client.query<{ id: number; name: string; original_list_name: string }>(
       `SELECT id, name, original_list_name FROM shared_lists
-        WHERE slug = $1 AND is_published = TRUE AND is_hidden = FALSE`,
-      [req.params.slug]
+        WHERE slug = $1 AND is_published = TRUE
+          AND (is_hidden = FALSE OR owner_user_id = $2)`,
+      [req.params.slug, userId]
     )
     if (meta.rowCount === 0) {
       await client.query('ROLLBACK')

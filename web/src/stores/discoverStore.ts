@@ -14,6 +14,8 @@ export interface SharedListMeta {
   owner_name: string
   owner_is_system: boolean
   item_count: number
+  /** Only ever true for the list's own publisher — hidden lists reach nobody else. */
+  is_hidden: boolean
   like_count: number
   liked_by_me: boolean
   published_at: string
