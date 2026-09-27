@@ -343,12 +343,12 @@ const features = [
       <div class="mx-auto max-w-6xl px-6 py-20">
         <div class="text-center max-w-2xl mx-auto mb-10">
           <p class="text-xs font-semibold uppercase tracking-wider text-accent">
-            A look inside
+            See it
           </p>
           <h2
             class="mt-3 font-display italic text-4xl font-semibold tracking-tight text-balance"
           >
-            This is what it actually looks like.
+            Have a look around.
           </h2>
         </div>
         <FeatureShowcase />
