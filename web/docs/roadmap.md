@@ -1,10 +1,12 @@
 # Stash Squirrel — roadmap
 
-Outstanding work captured 2026-05-17. Phases are suggested ordering, not hard commitments. Re-order freely as priorities shift.
+Outstanding work first captured 2026-05-17; revised 2026-09-27. Phases are suggested ordering, not hard commitments. Re-order freely as priorities shift.
+
+**One genuine blocker remains: Discover moderation (items 15 and 16).** Everything else below is either shipped or optional polish.
 
 ## In flight
 
-- **Browser extension registration** (Chrome Web Store). UK Postbox address obtained and `web/public/privacy.html` updated with it. Remaining: deploy → submit. Listing copy ready in `chrome-web-store-listing.md`.
+- **Retiring the GitHub Actions digest cron.** The app now schedules the digest itself (`server/lib/scheduler.ts`); the `retire-digest-cron` branch removes the `schedule:` block from the workflow, leaving it manual-only. Held back until a digest is observed sending from the in-process timer, then merge and drop `DIGEST_SEND_WINDOW_HOURS` back to 5 on DigitalOcean.
 
 ## Phase 1 — Pre-launch must-do
 
@@ -18,15 +20,16 @@ Cannot responsibly open the doors to real users without these.
 
 Needed to actually acquire and convert users.
 
-4. ~~**Marketing landing page**~~ — **Done.** `LandingPage.vue` at `/` for unauthenticated visitors with hero, problem/solution, use cases, Discover, features, live demo, and pricing sections. Login moved to `/login`. Deep-link redirects after auth preserved.
-5. ~~**Pricing page update**~~ — **Done.** Both `ChoosePlan.vue` (in-app upgrade screen) and the landing page's pricing cards now list every shipped Pro feature: time-block events with recurrence, Month/Week calendar, Discover (browse + clone + publish), global search, bookmark import, higher rate limit. Free caps reconciled with prod (3 lists / 50 items).
-6. **FAQ / Help section** — reduces support load (which lands in your inbox), helps SEO, builds trust. Can start as a single page with 10–15 questions and grow over time.
+4. ~~**Marketing landing page**~~ — **Done.** `LandingPage.vue` at `/` for unauthenticated visitors with hero, problem/solution, use cases, Discover, features, live demo, and pricing sections. Login moved to `/login`. Deep-link redirects after auth preserved. Refreshed 2026-09-27 with a shared-lists section and a `FeatureShowcase.vue` carousel of real screenshots (derived by `npm run showcase:images`).
+5. ~~**Pricing page update**~~ — **Done.** Both `ChoosePlan.vue` (in-app upgrade screen) and the landing page's pricing cards now list every shipped Pro feature: time-block events with recurrence, Month/Week calendar, Discover (browse + clone + publish), global search, bookmark import, higher rate limit, and list sharing. Free caps reconciled with prod (3 lists / 50 items / 1 shared list). **Keep both copies in step — they are near-identical markup in two files.**
+6. ~~**FAQ / Help section**~~ — **Done.** A static help centre at `/help`, 35 articles across 10 sections in `src/content/help/`, loaded at build time and rendered from Markdown. Screenshots regenerate with `npm run help:shots`.
+17. ~~**Shared lists (collaboration)**~~ — **Done.** Invite by email, viewer/editor roles, live sync over SSE, shared items marked wherever they surface. Sharing is Pro; accepting is free and capped at 1 shared list. Schema in migration `056_list_collaboration.sql`; the share carries the identity, not the list. Covered in `FEATURES.md` and on the landing page.
 
 ## Phase 3 — Onboarding & retention polish
 
 After first users arrive.
 
-7. **Welcome Tour updates** — include the features that have shipped since the tour was written. Onboarding completion correlates strongly with retention.
+7. **Welcome Tour updates** — `src/lib/tourSteps.ts` still has the original 11 steps and makes **no mention of shared lists at all**, which is now the product's headline Pro feature. Also worth revisiting: the Bookmarks step predates using a list as a launcher, and nothing points at the browser extension. Onboarding completion correlates strongly with retention.
 8. ~~**Admin Console**~~ — **Done.** Admin Dashboard shipped with user list, signup counts, and Pro/comp breakdown. Revisit later if MRR or richer analytics are needed.
 13. ~~**More signposting todos in the demo Home/Welcome category**~~ — **Done (landed in the welcome note instead).** The demo's `Home / Welcome` note (now Markdown — see #14) carries a "What to try" bullet list covering right-click event creation, Month/Week toggle, Discover clone, global search, and category drag-reorder. Reads better as a single welcoming note than as multiple checkbox todos. Publish-to-Discover wasn't included because demo users are blocked from publishing.
 
@@ -47,8 +50,8 @@ After first users arrive.
 
 ## Phase 5 — Growth
 
-10. **Blog section** — slow-burn SEO + a place to post product updates. Doesn't need to be elaborate — a markdown-rendered route at `/blog` with file-based posts in the repo is enough. Stripe/Linear/Plausible all run their blogs this way.
-11. **Discovery content** — more Topic and Todo lists like the Household Chores one. Quick wins for engagement.
+10. ~~**Blog section**~~ — **Done.** `/blog`, 12 posts as Markdown in `server/content/blog/`, seeded with `npm run db:seed-blog`. `BlogView.vue` renders images as captioned figures.
+11. **Discovery content** — *largely done, ongoing.* 37 curated lists now ship across all 12 categories (`server/migrations/*_seed_*.sql`). Adding more stays a cheap engagement win; no longer a launch dependency.
 
 ## Phase 6 — Existing-feature polish
 
@@ -62,27 +65,19 @@ After first users arrive.
 
 ## Suggested order, condensed
 
-The shortest path to "real customers using a defensible product":
+What is actually left, shortest path first:
 
-1. Finish extension registration (in flight — deploy + submit)
-2. ~~Database backups~~ — covered by DO defaults; no action needed
-3. ~~Account deletion / GDPR~~ — done & tested
-4. ~~Welcome email~~ — done & verified
-5. ~~Marketing landing page~~ — shipped
-6. ~~Pricing page update~~ — shipped
-7. FAQ
-7a. Discover moderation — admin hide/delete (item 15) + user report button (item 16). The doors shouldn't open without at least the ability to take a submission down.
-8. — *Launch publicly* —
-9. Welcome Tour update — demo signposting (item 13) already covered via the welcome note; tour itself still needs updating for shipped features
-10. ~~Basic admin visibility~~ — Admin Dashboard shipped
-11. ~~Encryption~~ — already covered by DO (transit + at-rest); no app-level work unless a customer specifically asks
-12. ~~Markdown notes~~ — shipped (item 14)
-13. Blog
-14. More Discovery content
-15. New item types (only the ones users ask for)
+1. **Discover moderation** — admin hide/delete (item 15) + user report button (item 16). The one genuine blocker: the doors shouldn't open without the ability to take a submission down.
+2. — *Launch publicly* —
+3. **Welcome Tour update** (item 7) — it has never mentioned shared lists.
+4. More Discovery content (item 11) — ongoing, cheap.
+5. New item types (item 12) — only the ones users actually ask for.
+
+Everything before that is shipped: database backups (DO defaults), account deletion, welcome email, landing page, pricing, help centre, admin dashboard, encryption posture, Markdown notes, blog, browser extension, shared lists.
 
 ## Things worth discussing before starting any of them
 
-- **Marketing page**: this is design-heavy work. Worth thinking about messaging and target audience before writing code — who is Stash Squirrel *for*?
-- **Admin console**: how much is enough? A 50-line read-only stats page covers 90% of the value of a full admin app.
+- **Discover moderation**: how much is enough? A hide flag plus a report queue covers ~90% of real moderation at this scale. Resist building a full review workflow before there is anything to review.
 - **New item types**: cheap to *say* yes to all, expensive to maintain. Pick favourites.
+- **Anything scheduled**: the app schedules its own jobs now (`server/lib/scheduler.ts`), hourly digest and daily demo cleanup. Don't add a GitHub Actions `schedule:` for periodic work — it delivered 23% of its runs and the failures were silent. Both jobs are idempotent, which is what lets them run safely on every instance.
+- **Screenshots go stale**: `public/help-images/` and `public/showcase/` are generated from a live demo session (`npm run help:shots`, then `npm run showcase:images`). A UI change dates them and nothing will tell you.
