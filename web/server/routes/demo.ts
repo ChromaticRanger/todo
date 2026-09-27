@@ -86,10 +86,12 @@ router.post('/start', startLimit, async (req, res) => {
       `INSERT INTO todos
          (user_id, list_name, title, description, category, priority, status,
           due_date, repeat_days, repeat_months, spawned_next, type, url,
-          recur_until, duration_seconds, completed_at, snoozed_until)
+          recur_until, duration_seconds, completed_at, snoozed_until,
+          color, all_day)
        SELECT $1, list_name, title, description, category, priority, status,
               due_date, repeat_days, repeat_months, spawned_next, type, url,
-              recur_until, duration_seconds, completed_at, snoozed_until
+              recur_until, duration_seconds, completed_at, snoozed_until,
+              color, all_day
          FROM todos
         WHERE user_id = $2`,
       [newUserId, TEMPLATE_USER_ID]

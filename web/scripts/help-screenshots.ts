@@ -175,10 +175,35 @@ async function main() {
   await capture(page, 'move-dialog', () => shotItemDialog(page, 'move-dialog', 'Move to list'))
 
   await capture(page, 'kanban', async () => {
+    // Shoot kanban against Side project, not the Travel list the other shots
+    // use: Travel has only two categories, so its board and its grid render
+    // identically and the screenshot fails to show what kanban even is.
+    // Side project is seeded specifically for this — four evenly sized
+    // columns of mixed item types (see seed-demo.ts).
+    await page.locator('[data-tour="list-tabs"] .list-tab-handle', { hasText: 'Side project' }).click()
+    await settle(page, 600)
     await page.locator('[title="Kanban view"]').click()
     await settle(page)
     await page.screenshot({ path: out('kanban') })
     await page.locator('[title="Grid view"]').click()
+    await page.locator('[data-tour="list-tabs"] .list-tab-handle', { hasText: 'Travel' }).click()
+    await settle(page, 600)
+  })
+
+  // Marketing: the "Bookmarks" carousel slide. Grid (tiled) layout, not
+  // kanban — the point of the shot is a wall of favicons. The demo seeds
+  // list_prefs so Bookmarks already opens in grid; the explicit click keeps
+  // the capture correct even if that pref is ever dropped.
+  await capture(page, 'bookmarks', async () => {
+    await page.locator('[data-tour="list-tabs"] .list-tab-handle', { hasText: 'Bookmarks' }).click()
+    await settle(page, 600)
+    await page.locator('[title="Grid view"]').click()
+    // Favicons are fetched per bookmark; give them time or the grid
+    // photographs as a column of blank placeholder squares.
+    await settle(page, 2500)
+    await page.screenshot({ path: out('bookmarks') })
+    await page.locator('[data-tour="list-tabs"] .list-tab-handle', { hasText: 'Travel' }).click()
+    await settle(page, 600)
   })
 
   await capture(page, 'import-dialog', async () => {

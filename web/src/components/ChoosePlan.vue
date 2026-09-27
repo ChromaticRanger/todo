@@ -146,10 +146,12 @@ onMounted(async () => {
             <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
               <li>• Up to 3 lists</li>
               <li>• Up to 50 items across all lists</li>
-              <li>• Todos, bookmarks &amp; notes</li>
+              <li>• Todos, bookmarks &amp; Markdown notes</li>
               <li>• Categories with drag-to-reorder</li>
               <li>• Grid &amp; kanban layouts</li>
               <li>• Today / Week / Month / Overdue views</li>
+              <li>• Recurring todos, snooze &amp; completed history</li>
+              <li>• Join 1 list that someone shares with you</li>
               <li>• Browser extension for bookmarking the current tab</li>
               <li>• Light &amp; dark themes</li>
             </ul>
@@ -176,10 +178,11 @@ onMounted(async () => {
             <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text">
               <li>• Everything in Free</li>
               <li>• Unlimited lists &amp; items</li>
+              <li>• Share lists with anyone — live sync, edit or view-only per person</li>
               <li>• Events as time blocks — start/end times, multi-day, recurring</li>
               <li>• Overall Schedule calendar — Month &amp; Week views, right-click to add</li>
               <li>• Global search across lists (Ctrl/⌘K)</li>
-              <li>• Discover — browse, clone &amp; publish community lists</li>
+              <li>• Discover — 30+ curated starter lists, plus clone &amp; publish</li>
               <li>• Bookmark import from your browser</li>
               <li>• Higher API rate limit for power users</li>
               <li>• Cancel anytime</li>
