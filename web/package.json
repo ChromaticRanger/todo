@@ -31,7 +31,8 @@
     "test:collab": "tsx server/tests/run.ts",
     "ext:dev": "npm --prefix extension run dev",
     "ext:build": "npm --prefix extension run build",
-    "help:shots": "tsx scripts/help-screenshots.ts"
+    "help:shots": "tsx scripts/help-screenshots.ts",
+    "showcase:images": "bash scripts/showcase-images.sh"
   },
   "dependencies": {
     "@better-auth/stripe": "^1.6.5",

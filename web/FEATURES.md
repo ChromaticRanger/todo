@@ -6,7 +6,7 @@ A complete reference of the application's features, the account level each one r
 
 ## Free plan at a glance
 
-The Free plan includes all core task management, but caps usage at **3 lists** and **50 items** total, and excludes the calendar, search, Discover, events, and bookmark import (all Pro).
+The Free plan includes all core task management, but caps usage at **3 lists** and **50 items** total, and excludes the calendar, search, Discover, events, bookmark import, and sharing a list with someone (all Pro). Being invited to someone else's shared list is free, capped at **1 shared list**.
 
 ---
 
@@ -81,8 +81,25 @@ The Free plan includes all core task management, but caps usage at **3 lists** a
 |---|---|---|
 | Global search | Pro | Press Cmd/Ctrl+K to search across everything you've saved — todos, bookmarks, notes and calendar events (titles, descriptions, URLs) — with relevance-ranked results that jump to and highlight the matching item. Todos, bookmarks and notes open in their list; events open the calendar on the right date, with recurring events landing on their next occurrence. |
 | Publish lists to Discover | Pro | Share a list to the community catalogue with a custom name, description, emoji, and category. |
-| Discover view | Pro | Browse community-published lists, filter by category, search by publisher, and preview list contents. |
+| Discover view | Pro | Browse published lists, filter by category, search by publisher, and preview list contents. Ships with 37 curated starter lists spanning all 12 categories. |
 | Clone published lists | Pro | Copy a published list into your own workspace, auto-renaming on conflict and rescheduling recurring items to avoid being overdue. |
+
+---
+
+## Sharing & Collaboration
+
+Live, two-way access to a list between accounts. Not to be confused with Discover, which publishes a read-only snapshot for strangers to clone.
+
+| Feature | Account Level | Description |
+|---|---|---|
+| Share a list | Pro | Invite someone to a list you own by email address. They see every item in it, plus anything added later. Sharing is the monetised action; an owner who downgrades keeps existing shares working and simply can't send new invitations. |
+| Per-person roles | Pro | Each invitee is either an **editor** ("Add and edit items") or a **viewer** ("View only"). The owner can change a member's role, or remove them, at any time. |
+| Invite someone without an account | Free | An invitation to an unregistered email still works — the recipient is sent a link that walks them through creating an account and lands them on the shared list. Invitations are token-based (only a SHA-256 hash is stored), expiring, and can be resent or revoked. |
+| Accept an invitation | Free | Anyone can accept, including Free accounts. **Free accounts may be a member of 1 shared list; Pro is unlimited.** |
+| Live sync | Free | Changes made by any member appear for everyone else without a refresh, streamed over a server-sent-events connection with a polling catch-up on reconnect. |
+| Shared items marked everywhere | Free | Items belonging to a shared list are badged wherever they surface, including in the personal Today/Week views they mix into. |
+| Leave or stop sharing | Free | A member can leave a shared list; an owner can remove any member or tear down the share entirely. In every case the list and its items survive — only the access is removed. |
+| Owner-scoped quota | Free | Items a collaborator adds are stored under the owner's account and count towards the **owner's** Free-plan caps, not the collaborator's. |
 
 ---
 

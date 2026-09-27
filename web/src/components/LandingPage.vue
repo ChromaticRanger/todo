@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
+import FeatureShowcase from './FeatureShowcase.vue'
 
 const year = new Date().getFullYear()
 const scrolled = ref(false)
@@ -109,6 +110,10 @@ const features = [
     body: 'Switch any list between a tidy grid and a drag-and-drop board. Same data, different lens.',
   },
   {
+    title: 'Shared lists',
+    body: 'Invite someone by email and work the same list together, live. Each person gets edit or view-only access.',
+  },
+  {
     title: 'Calendar across everything',
     body: 'Every dated item, every list, on one overall schedule. Plan a week without opening a separate app.',
   },
@@ -161,6 +166,12 @@ const features = [
             class="hidden sm:inline text-sm text-muted hover:text-text transition-colors"
           >
             Demo
+          </a>
+          <a
+            href="#sharing"
+            class="hidden md:inline text-sm text-muted hover:text-text transition-colors"
+          >
+            Sharing
           </a>
           <a
             href="#features"
@@ -312,6 +323,38 @@ const features = [
       </div>
     </section>
 
+    <!-- Feature showcase — real screenshots, tabbed. Sits straight after the
+         problem/solution pitch: the visitor has just been told what the product
+         is for, and this is the first chance to show them it exists.
+
+         It deliberately opts out of the page's surface/plain section banding,
+         taking an accent wash instead. That keeps it reading as the centrepiece
+         rather than as one more beat in the alternation, and means no other
+         section had to be reshuffled to make room. -->
+    <section
+      id="screenshots"
+      class="relative overflow-hidden border-t border-border scroll-mt-20"
+    >
+      <div
+        aria-hidden="true"
+        class="pointer-events-none absolute inset-0 -z-10"
+        style="background: radial-gradient(70% 60% at 50% 0%, color-mix(in oklab, var(--color-accent) 10%, transparent), transparent 75%);"
+      />
+      <div class="mx-auto max-w-6xl px-6 py-20">
+        <div class="text-center max-w-2xl mx-auto mb-10">
+          <p class="text-xs font-semibold uppercase tracking-wider text-accent">
+            See it
+          </p>
+          <h2
+            class="mt-3 font-display italic text-4xl font-semibold tracking-tight text-balance"
+          >
+            Have a look around.
+          </h2>
+        </div>
+        <FeatureShowcase />
+      </div>
+    </section>
+
     <!-- Use cases -->
     <section id="use-cases" class="border-t border-border">
       <div class="mx-auto max-w-6xl px-6 py-20">
@@ -402,15 +445,87 @@ const features = [
               something worth sharing.
             </p>
             <p class="mt-4 text-muted text-lg leading-relaxed">
-              No more starting from a blank canvas.
+              More than 30 curated starter lists ship with it, across a dozen
+              categories — so you’re never starting from a blank canvas.
             </p>
           </div>
         </div>
       </div>
     </section>
 
+    <!-- Sharing -->
+    <section id="sharing" class="border-t border-border">
+      <div class="mx-auto max-w-6xl px-6 py-20">
+        <div class="grid gap-12 lg:grid-cols-2 lg:items-center">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wider text-accent">
+              Shared lists
+            </p>
+            <h2
+              class="mt-3 font-display italic text-4xl font-semibold tracking-tight text-balance"
+            >
+              Hand someone the list, not a screenshot.
+            </h2>
+            <p class="mt-5 text-muted text-lg leading-relaxed">
+              Invite anyone by email. They see everything in the list and
+              everything added to it later, updating live as you both work — no
+              refreshing, no re-sending. Choose per person whether they can add
+              and edit items or only look.
+            </p>
+            <p class="mt-4 text-muted text-lg leading-relaxed">
+              They don’t need an account first — the invitation walks them
+              through it. Shared items stay marked wherever they turn up, so
+              you can always tell the group’s work from your own.
+            </p>
+            <p class="mt-5 text-sm text-muted">
+              Sharing a list is part of Pro. Accepting an invitation is free.
+            </p>
+          </div>
+
+          <!-- Mock shared list -->
+          <div class="rounded-2xl bg-bg ring-1 ring-border-strong shadow-xl overflow-hidden dark:inset-ring dark:inset-ring-white/5">
+            <div class="flex items-center gap-3 px-4 py-3 border-b border-border bg-surface/60">
+              <span class="text-xs text-muted font-medium">Kitchen renovation</span>
+              <span
+                class="rounded-md bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold text-accent ring-1 ring-accent/30"
+              >
+                Shared
+              </span>
+              <div class="ml-auto flex -space-x-1.5">
+                <span
+                  v-for="p in ['M', 'J', 'R']"
+                  :key="p"
+                  class="grid size-6 place-items-center rounded-full bg-surface ring-2 ring-bg text-[10px] font-semibold text-muted"
+                >
+                  {{ p }}
+                </span>
+              </div>
+            </div>
+            <ul class="divide-y divide-border">
+              <li
+                v-for="(row, i) in [
+                  { who: 'You', role: 'Owner', text: 'Get three quotes for the worktop' },
+                  { who: 'Jo', role: 'Can edit', text: 'howdens.com/kitchens/handleless' },
+                  { who: 'Rae', role: 'View only', text: 'Fitter arrives — Mon 8am' },
+                ]"
+                :key="i"
+                class="flex items-center gap-3 px-4 py-3 text-sm"
+              >
+                <span class="shrink-0 w-14 text-xs font-medium text-text">{{ row.who }}</span>
+                <span class="text-text/90 truncate flex-1">{{ row.text }}</span>
+                <span class="shrink-0 text-[10px] text-muted">{{ row.role }}</span>
+              </li>
+            </ul>
+            <div class="px-4 py-2.5 border-t border-border bg-surface/40 text-[11px] text-muted">
+              Everyone sees every change the moment it happens.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- Features -->
-    <section id="features" class="border-t border-border">
+    <section id="features" class="border-t border-border bg-surface/40">
       <div class="mx-auto max-w-6xl px-6 py-20">
         <div class="text-center max-w-2xl mx-auto">
           <p class="text-xs font-semibold uppercase tracking-wider text-accent">
@@ -423,7 +538,7 @@ const features = [
           </h2>
         </div>
 
-        <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           <div
             v-for="f in features"
             :key="f.title"
@@ -537,10 +652,12 @@ const features = [
             <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text flex-1">
               <li>• Up to 3 lists</li>
               <li>• Up to 50 items across all lists</li>
-              <li>• Todos, bookmarks &amp; notes</li>
+              <li>• Todos, bookmarks &amp; Markdown notes</li>
               <li>• Categories with drag-to-reorder</li>
               <li>• Grid &amp; kanban layouts</li>
               <li>• Today / Week / Month / Overdue views</li>
+              <li>• Recurring todos, snooze &amp; completed history</li>
+              <li>• Join 1 list that someone shares with you</li>
               <li>• Browser extension for bookmarking the current tab</li>
               <li>• Light &amp; dark themes</li>
             </ul>
@@ -563,10 +680,11 @@ const features = [
             <ul role="list" class="mt-6 flex flex-col gap-2 text-sm text-text flex-1">
               <li>• Everything in Free</li>
               <li>• Unlimited lists &amp; items</li>
+              <li>• Share lists with anyone — live sync, edit or view-only per person</li>
               <li>• Events as time blocks — start/end times, multi-day, recurring</li>
               <li>• Overall Schedule calendar — Month &amp; Week views, right-click to add</li>
               <li>• Global search across lists (Ctrl/⌘K)</li>
-              <li>• Discover — browse, clone &amp; publish community lists</li>
+              <li>• Discover — 30+ curated starter lists, plus clone &amp; publish</li>
               <li>• Bookmark import from your browser</li>
               <li>• Higher API rate limit for power users</li>
               <li>• Cancel anytime</li>
