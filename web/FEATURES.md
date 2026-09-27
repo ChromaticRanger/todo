@@ -81,8 +81,10 @@ The Free plan includes all core task management, but caps usage at **3 lists** a
 |---|---|---|
 | Global search | Pro | Press Cmd/Ctrl+K to search across everything you've saved — todos, bookmarks, notes and calendar events (titles, descriptions, URLs) — with relevance-ranked results that jump to and highlight the matching item. Todos, bookmarks and notes open in their list; events open the calendar on the right date, with recurring events landing on their next occurrence. |
 | Publish lists to Discover | Pro | Share a list to the community catalogue with a custom name, description, emoji, and category. |
-| Discover view | Pro | Browse published lists, filter by category, search by publisher, and preview list contents. Ships with 37 curated starter lists spanning all 12 categories. |
+| Discover view | Pro | Browse published lists, filter by category, search by publisher, sort by newest or most liked, and preview list contents. Ships with 37 curated starter lists spanning all 12 categories. |
 | Clone published lists | Pro | Copy a published list into your own workspace, auto-renaming on conflict and rescheduling recurring items to avoid being overdue. |
+| Like a list | Pro | A heart and count on every list. Under the "Most liked" sort the count drives the ordering, and curated lists compete on it like any other. You can't like your own list, and demo visitors can't like at all — a like is a ranking signal, so it has to come from an account that will still exist tomorrow. |
+| Report a list | Pro | Flag a community list for moderator attention with a preset reason (spam, offensive, broken links, other) and optional detail. One report per person per list. Not offered on curated lists or your own, and not available to demo visitors. |
 
 ---
 
@@ -132,4 +134,5 @@ Live, two-way access to a list between accounts. Not to be confused with Discove
 |---|---|---|
 | Responsive / mobile layout | Free | Layouts adapt from a single column on mobile up to multi-column on desktop, with touch-friendly controls. |
 | Toast notifications | Free | In-app messages surface errors, rate-limit notices, and Free-plan cap warnings. |
-| Admin dashboard | Admin | Restricted admin area with user statistics, search, tier filtering, and per-user details (access limited to designated admin emails). |
+| Admin dashboard | Admin | Restricted admin area with user statistics, search, tier filtering, and per-user details (access limited to the emails in `ADMIN_EMAILS`). |
+| Discover moderation | Admin | Hide, restore or remove any published list, and work an open-report queue. **Hiding** takes a list out of the catalogue, out of search-by-slug and out of cloning for everyone else, and survives the publisher republishing it. Its publisher still sees it, badged "Hidden", with an explanation — so they don't file a bug saying publishing is broken. **Removing** deletes the public snapshot only; their own copy of the list is untouched, and it does *not* prevent republishing, which makes hiding the stronger takedown. Curated lists can be hidden but never removed: they come from seed migrations and a delete is unrecoverable. |
