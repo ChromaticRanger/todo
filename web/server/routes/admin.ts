@@ -408,4 +408,222 @@ router.delete('/blog/:id', async (req, res) => {
   }
 })
 
+// ---- Discover moderation ----
+
+const SYSTEM_USER_ID = 'system-stash-squirrel'
+
+interface DiscoverRow {
+  id: number
+  slug: string
+  name: string
+  category: string
+  owner_user_id: string
+  owner_name: string | null
+  owner_email: string | null
+  is_hidden: boolean
+  published_at: Date | string
+  itemCount: string
+  likeCount: string
+  openReports: string
+}
+
+// GET /api/admin/discover — published lists, newest first.
+//   ?scope=reported  only lists with an unresolved report
+//   ?scope=all       include the curated system lists
+//   ?q=              match name or slug
+router.get('/discover', async (req, res) => {
+  const q = String(req.query.q ?? '').trim()
+  const scope = String(req.query.scope ?? '').trim()
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200)
+  const offset = Math.max(Number(req.query.offset) || 0, 0)
+
+  const where: string[] = []
+  const params: unknown[] = []
+  if (q) {
+    params.push(`%${q.toLowerCase()}%`)
+    where.push(`(LOWER(sl.name) LIKE $${params.length} OR LOWER(sl.slug) LIKE $${params.length})`)
+  }
+  // The 37 curated lists would bury community submissions, which are the ones
+  // that actually need moderating — so they're out unless asked for.
+  if (scope !== 'all') {
+    params.push(SYSTEM_USER_ID)
+    where.push(`sl.owner_user_id <> $${params.length}`)
+  }
+  if (scope === 'reported') {
+    where.push(
+      `EXISTS (SELECT 1 FROM shared_list_reports r
+                WHERE r.shared_list_id = sl.id AND r.resolved_at IS NULL)`
+    )
+  }
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+  params.push(limit)
+  params.push(offset)
+  const limitParam = `$${params.length - 1}`
+  const offsetParam = `$${params.length}`
+
+  try {
+    const listsPromise = query<DiscoverRow>(
+      `SELECT
+          sl.id, sl.slug, sl.name, sl.category, sl.owner_user_id,
+          sl.is_hidden, sl.published_at,
+          u.name  AS owner_name,
+          u.email AS owner_email,
+          (SELECT COUNT(*) FROM shared_items si
+            WHERE si.shared_list_id = sl.id)::TEXT AS "itemCount",
+          (SELECT COUNT(*) FROM shared_list_likes l
+            WHERE l.shared_list_id = sl.id)::TEXT AS "likeCount",
+          (SELECT COUNT(*) FROM shared_list_reports r
+            WHERE r.shared_list_id = sl.id AND r.resolved_at IS NULL)::TEXT AS "openReports"
+         FROM shared_lists sl
+         LEFT JOIN "user" u ON u.id = sl.owner_user_id
+         ${whereSql}
+         ORDER BY sl.published_at DESC
+         LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      params
+    )
+    const countPromise = query<{ count: string }>(
+      `SELECT COUNT(*)::TEXT AS count FROM shared_lists sl ${whereSql}`,
+      params.slice(0, params.length - 2)
+    )
+    const [listsRes, countRes] = await Promise.all([listsPromise, countPromise])
+    res.json({
+      lists: listsRes.rows.map((l) => ({
+        ...l,
+        owner_is_system: l.owner_user_id === SYSTEM_USER_ID,
+        itemCount: Number(l.itemCount),
+        likeCount: Number(l.likeCount),
+        openReports: Number(l.openReports),
+      })),
+      total: Number(countRes.rows[0].count),
+      limit,
+      offset,
+    })
+  } catch (err) {
+    console.error('[admin] discover list failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// GET /api/admin/discover/reports — the open queue, newest first.
+router.get('/discover/reports', async (req, res) => {
+  const includeResolved = req.query.resolved === '1'
+  try {
+    const { rows } = await query(
+      `SELECT r.id, r.shared_list_id, r.reason, r.detail, r.created_at,
+              r.resolved_at, r.resolved_by,
+              sl.slug, sl.name AS list_name, sl.is_hidden,
+              u.name AS reporter_name, u.email AS reporter_email
+         FROM shared_list_reports r
+         JOIN shared_lists sl ON sl.id = r.shared_list_id
+         LEFT JOIN "user" u ON u.id = r.reporter_user_id
+        ${includeResolved ? '' : 'WHERE r.resolved_at IS NULL'}
+        ORDER BY r.created_at DESC
+        LIMIT 200`
+    )
+    res.json({ reports: rows })
+  } catch (err) {
+    console.error('[admin] discover reports failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PATCH /api/admin/discover/:id — hide or restore a published list.
+router.patch('/discover/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  const isHidden = req.body?.is_hidden
+  if (!Number.isInteger(id) || typeof isHidden !== 'boolean') {
+    res.status(400).json({ error: 'is_hidden (boolean) is required' })
+    return
+  }
+  try {
+    const { rows } = await query<{ id: number; slug: string; is_hidden: boolean }>(
+      `UPDATE shared_lists SET is_hidden = $1, updated_at = NOW()
+        WHERE id = $2
+        RETURNING id, slug, is_hidden`,
+      [isHidden, id]
+    )
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'not_found' })
+      return
+    }
+    console.info(
+      `[admin] ${req.adminEmail} ${isHidden ? 'hid' : 'restored'} discover list ${rows[0].slug}`
+    )
+    res.json({ list: rows[0] })
+  } catch (err) {
+    console.error('[admin] discover hide toggle failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// DELETE /api/admin/discover/:id — unpublish someone else's list. The owner's
+// own list is untouched; only the public snapshot goes (items, likes and
+// reports cascade).
+router.delete('/discover/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  if (!Number.isInteger(id)) {
+    res.status(400).json({ error: 'invalid id' })
+    return
+  }
+  try {
+    const { rows } = await query<{ owner_user_id: string; slug: string }>(
+      `SELECT owner_user_id, slug FROM shared_lists WHERE id = $1`,
+      [id]
+    )
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'not_found' })
+      return
+    }
+    // The curated lists come from seed migrations already recorded in
+    // schema_migrations, and each seeds with ON CONFLICT (slug) DO NOTHING —
+    // delete one and it can never be restored, even by re-running migrations.
+    // Hiding is reversible; this isn't.
+    if (rows[0].owner_user_id === SYSTEM_USER_ID) {
+      res.status(400).json({
+        error: 'cannot_delete_curated',
+        message: 'Curated lists can only be hidden — deleting one is unrecoverable.',
+      })
+      return
+    }
+    await query(`DELETE FROM shared_lists WHERE id = $1`, [id])
+    console.info(`[admin] ${req.adminEmail} deleted discover list ${rows[0].slug}`)
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[admin] discover delete failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
+// PATCH /api/admin/discover/reports/:id — resolve or reopen a report.
+router.patch('/discover/reports/:id', async (req, res) => {
+  const id = Number(req.params.id)
+  const resolved = req.body?.resolved
+  if (!Number.isInteger(id) || typeof resolved !== 'boolean') {
+    res.status(400).json({ error: 'resolved (boolean) is required' })
+    return
+  }
+  try {
+    const { rows } = await query(
+      `UPDATE shared_list_reports
+          SET resolved_at = ${resolved ? 'NOW()' : 'NULL'},
+              resolved_by = ${resolved ? '$2' : 'NULL'}
+        WHERE id = $1
+        RETURNING id, resolved_at, resolved_by`,
+      resolved ? [id, req.adminEmail] : [id]
+    )
+    if (rows.length === 0) {
+      res.status(404).json({ error: 'not_found' })
+      return
+    }
+    console.info(
+      `[admin] ${req.adminEmail} ${resolved ? 'resolved' : 'reopened'} discover report #${id}`
+    )
+    res.json({ report: rows[0] })
+  } catch (err) {
+    console.error('[admin] discover report resolve failed:', err)
+    res.status(500).json({ error: String(err) })
+  }
+})
+
 export default router

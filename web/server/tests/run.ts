@@ -4,6 +4,7 @@ import mountOrder from './mountOrder.test.js'
 import invites from './invites.test.js'
 import realtime from './realtime.test.js'
 import eventsRoute from './eventsRoute.test.js'
+import discover from './discover.test.js'
 
 /**
  * Runs the shared-lists suites against the LOCAL database.
@@ -24,6 +25,7 @@ const SUITES: [string, () => Promise<void>][] = [
   ['invites', invites],
   ['realtime', realtime],
   ['events route', eventsRoute],
+  ['discover moderation & likes', discover],
 ]
 
 const host = new URL(process.env.DATABASE_URL ?? 'postgres://localhost').hostname

@@ -20,6 +20,32 @@ interface SharedListRow {
   updated_at: Date | string
   owner_name: string | null
   item_count: string | number
+  is_hidden: boolean
+  like_count: string | number
+  liked_by_me: boolean
+}
+
+/** Reasons a reader can pick in the report dialog. Mirrored in the client. */
+const REPORT_REASONS = ['spam', 'offensive', 'broken', 'other'] as const
+type ReportReason = (typeof REPORT_REASONS)[number]
+
+function isReportReason(v: unknown): v is ReportReason {
+  return typeof v === 'string' && (REPORT_REASONS as readonly string[]).includes(v)
+}
+
+/** Free-text on a report is optional and advisory — cap it rather than reject. */
+const MAX_REPORT_DETAIL = 1000
+
+/**
+ * Users who may browse Discover but must not act on it.
+ *
+ * Demo visitors have tier='pro', so ensurePro lets them through. Their likes
+ * would be swept with them after 24h (lib/demoCleanup.ts) while skewing the
+ * ranking in the meantime, and their reports would be noise. Same shape as
+ * isReservedUser() in routes/collab.ts.
+ */
+function isReservedUser(id: string): boolean {
+  return id.startsWith('demo-') || id === STASH_SQUIRREL_USER_ID
 }
 
 interface SharedItemRow {
@@ -69,6 +95,9 @@ function shapeListMeta(row: SharedListRow) {
     owner_name: row.owner_name ?? 'Unknown',
     owner_is_system: row.owner_user_id === STASH_SQUIRREL_USER_ID,
     item_count: Number(row.item_count),
+    is_hidden: !!row.is_hidden,
+    like_count: Number(row.like_count ?? 0),
+    liked_by_me: !!row.liked_by_me,
     published_at: typeof row.published_at === 'string' ? row.published_at : row.published_at.toISOString(),
     updated_at: typeof row.updated_at === 'string' ? row.updated_at : row.updated_at.toISOString(),
   }
@@ -79,7 +108,22 @@ router.get('/lists', async (req, res) => {
   if (!ensurePro(req, res)) return
   try {
     const params: unknown[] = []
-    const where: string[] = ['sl.is_published = TRUE']
+
+    // $1 is always the caller: it drives the liked_by_me probe and the
+    // owner-sees-own-hidden-list rule below.
+    params.push(req.userId)
+    const meParam = `$${params.length}`
+
+    // is_hidden is the moderator's switch; is_published is the publisher's.
+    //
+    // A hidden list stays visible to the person who published it, badged, so
+    // they aren't left hunting a catalogue for a list they were told was
+    // published. Hiding it from them too would just generate support tickets
+    // saying publishing is broken.
+    const where: string[] = [
+      'sl.is_published = TRUE',
+      `(sl.is_hidden = FALSE OR sl.owner_user_id = ${meParam})`,
+    ]
 
     const rawCategory = (req.query.category as string | undefined)?.trim()
     if (rawCategory && isListCategory(rawCategory)) {
@@ -93,16 +137,33 @@ router.get('/lists', async (req, res) => {
       where.push(`u.name ILIKE $${params.length}`)
     }
 
+    // ORDER BY must use the numeric count, never a ::TEXT alias — COUNT(*) is
+    // bigint and a text sort would put "9" above "10" while looking plausible.
+    // Under `likes`, sort_order drops out entirely so the curated lists
+    // (sort_order 1000) compete on merit rather than pinning to the top.
+    const orderBy =
+      req.query.sort === 'likes'
+        ? 'lc.n DESC, sl.published_at DESC'
+        : 'sl.sort_order DESC, sl.published_at DESC'
+
     const result = await query<SharedListRow>(
       `SELECT sl.id, sl.slug, sl.name, sl.description, sl.icon, sl.category,
               sl.owner_user_id, sl.original_list_name, sl.sort_order,
-              sl.published_at, sl.updated_at,
+              sl.is_hidden, sl.published_at, sl.updated_at,
               u.name AS owner_name,
-              (SELECT COUNT(*) FROM shared_items si WHERE si.shared_list_id = sl.id) AS item_count
+              (SELECT COUNT(*) FROM shared_items si WHERE si.shared_list_id = sl.id) AS item_count,
+              lc.n AS like_count,
+              EXISTS (
+                SELECT 1 FROM shared_list_likes l
+                 WHERE l.shared_list_id = sl.id AND l.user_id = ${meParam}
+              ) AS liked_by_me
          FROM shared_lists sl
          LEFT JOIN "user" u ON u.id = sl.owner_user_id
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS n FROM shared_list_likes l WHERE l.shared_list_id = sl.id
+         ) lc ON TRUE
          WHERE ${where.join(' AND ')}
-         ORDER BY sl.sort_order DESC, sl.published_at DESC`,
+         ORDER BY ${orderBy}`,
       params
     )
     res.json({ lists: result.rows.map(shapeListMeta) })
@@ -119,13 +180,22 @@ router.get('/lists/:slug', async (req, res) => {
     const meta = await query<SharedListRow>(
       `SELECT sl.id, sl.slug, sl.name, sl.description, sl.icon, sl.category,
               sl.owner_user_id, sl.original_list_name, sl.sort_order,
-              sl.published_at, sl.updated_at,
+              sl.is_hidden, sl.published_at, sl.updated_at,
               u.name AS owner_name,
-              (SELECT COUNT(*) FROM shared_items si WHERE si.shared_list_id = sl.id) AS item_count
+              (SELECT COUNT(*) FROM shared_items si WHERE si.shared_list_id = sl.id) AS item_count,
+              lc.n AS like_count,
+              EXISTS (
+                SELECT 1 FROM shared_list_likes l
+                 WHERE l.shared_list_id = sl.id AND l.user_id = $2
+              ) AS liked_by_me
          FROM shared_lists sl
          LEFT JOIN "user" u ON u.id = sl.owner_user_id
-         WHERE sl.slug = $1 AND sl.is_published = TRUE`,
-      [req.params.slug]
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS n FROM shared_list_likes l WHERE l.shared_list_id = sl.id
+         ) lc ON TRUE
+         WHERE sl.slug = $1 AND sl.is_published = TRUE
+           AND (sl.is_hidden = FALSE OR sl.owner_user_id = $2)`,
+      [req.params.slug, req.userId]
     )
     if (meta.rowCount === 0) {
       res.status(404).json({ error: 'not_found' })
@@ -179,8 +249,9 @@ router.post('/lists/:slug/clone', async (req, res) => {
 
     const meta = await client.query<{ id: number; name: string; original_list_name: string }>(
       `SELECT id, name, original_list_name FROM shared_lists
-        WHERE slug = $1 AND is_published = TRUE`,
-      [req.params.slug]
+        WHERE slug = $1 AND is_published = TRUE
+          AND (is_hidden = FALSE OR owner_user_id = $2)`,
+      [req.params.slug, userId]
     )
     if (meta.rowCount === 0) {
       await client.query('ROLLBACK')
@@ -425,6 +496,123 @@ router.delete('/lists/:slug', async (req, res) => {
   } catch (err) {
     console.error('[shared/lists/:slug DELETE] failed:', err)
     res.status(500).json({ error: 'unpublish_failed' })
+  }
+})
+
+/**
+ * Resolves a slug to a visible list. Hidden and unpublished lists 404 exactly
+ * as unknown ones do — a reader who can't see a list shouldn't be able to
+ * confirm it exists, and a moderated list shouldn't be actionable.
+ */
+async function findVisibleList(slug: string) {
+  const { rows } = await query<{ id: number; owner_user_id: string }>(
+    `SELECT id, owner_user_id FROM shared_lists
+      WHERE slug = $1 AND is_published = TRUE AND is_hidden = FALSE`,
+    [slug]
+  )
+  return rows[0] ?? null
+}
+
+// POST /api/shared/lists/:slug/report — flag a list for moderator attention
+router.post('/lists/:slug/report', async (req, res) => {
+  if (!ensurePro(req, res)) return
+  const userId = req.userId!
+
+  // Demo visitors browse Discover (tier='pro') but mustn't file reports: their
+  // accounts are swept after 24h, so the reports would be noise from nobody.
+  // Note demoNoop already fakes a 200 for the `demo-user` template, so this
+  // only ever fires for the ephemeral demo-<uuid> users.
+  if (isReservedUser(userId)) {
+    res.status(403).json({ error: 'demo_cannot_report' })
+    return
+  }
+
+  const reason = req.body?.reason
+  if (!isReportReason(reason)) {
+    res.status(400).json({ error: 'invalid_reason', allowed: REPORT_REASONS })
+    return
+  }
+  const detail = String(req.body?.detail ?? '').trim().slice(0, MAX_REPORT_DETAIL)
+
+  try {
+    const list = await findVisibleList(req.params.slug)
+    if (!list) {
+      res.status(404).json({ error: 'not_found' })
+      return
+    }
+    if (list.owner_user_id === userId) {
+      res.status(400).json({ error: 'cannot_report_own_list' })
+      return
+    }
+
+    // ON CONFLICT on (shared_list_id, reporter_user_id): a second report from
+    // the same person is a no-op, and the response is identical either way so
+    // it never leaks whether one already existed.
+    await query(
+      `INSERT INTO shared_list_reports (shared_list_id, reporter_user_id, reason, detail)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (shared_list_id, reporter_user_id) DO NOTHING`,
+      [list.id, userId, reason, detail]
+    )
+    res.status(201).json({ ok: true })
+  } catch (err) {
+    console.error('[shared/report] failed:', err)
+    res.status(500).json({ error: 'report_failed' })
+  }
+})
+
+// POST /api/shared/lists/:slug/like — toggle the caller's like
+router.post('/lists/:slug/like', async (req, res) => {
+  if (!ensurePro(req, res)) return
+  const userId = req.userId!
+
+  // A like is a ranking signal, so it has to come from an account that will
+  // still exist tomorrow.
+  if (isReservedUser(userId)) {
+    res.status(403).json({ error: 'demo_cannot_like' })
+    return
+  }
+
+  try {
+    const list = await findVisibleList(req.params.slug)
+    if (!list) {
+      res.status(404).json({ error: 'not_found' })
+      return
+    }
+    // Publishers voting for themselves is the first thing anyone tries.
+    if (list.owner_user_id === userId) {
+      res.status(400).json({ error: 'cannot_like_own_list' })
+      return
+    }
+
+    // Toggle, same shape as POST /api/blog/:slug/react: delete first, and if
+    // nothing was there, insert.
+    const removed = await query(
+      `DELETE FROM shared_list_likes WHERE shared_list_id = $1 AND user_id = $2`,
+      [list.id, userId]
+    )
+    if (removed.rowCount === 0) {
+      await query(
+        `INSERT INTO shared_list_likes (shared_list_id, user_id)
+         VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [list.id, userId]
+      )
+    }
+
+    // Return the settled state so the client never has to guess at it.
+    const { rows } = await query<{ n: string; mine: boolean }>(
+      `SELECT COUNT(*) AS n,
+              BOOL_OR(user_id = $2) AS mine
+         FROM shared_list_likes WHERE shared_list_id = $1`,
+      [list.id, userId]
+    )
+    res.json({
+      like_count: Number(rows[0]?.n ?? 0),
+      liked_by_me: !!rows[0]?.mine,
+    })
+  } catch (err) {
+    console.error('[shared/like] failed:', err)
+    res.status(500).json({ error: 'like_failed' })
   }
 })
 

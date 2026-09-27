@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { apiFetch } from '../lib/api'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 interface Stats {
   total: number
@@ -324,6 +325,150 @@ async function deletePost(post: BlogPost) {
   }
 }
 
+// ---- Discover moderation ----
+interface DiscoverList {
+  id: number
+  slug: string
+  name: string
+  category: string
+  owner_user_id: string
+  owner_name: string | null
+  owner_email: string | null
+  owner_is_system: boolean
+  is_hidden: boolean
+  published_at: string
+  itemCount: number
+  likeCount: number
+  openReports: number
+}
+
+interface DiscoverReport {
+  id: number
+  shared_list_id: number
+  slug: string
+  list_name: string
+  is_hidden: boolean
+  reason: string
+  detail: string
+  created_at: string
+  resolved_at: string | null
+  reporter_name: string | null
+  reporter_email: string | null
+}
+
+const REASON_LABELS: Record<string, string> = {
+  spam: 'Spam',
+  offensive: 'Offensive',
+  broken: 'Broken links',
+  other: 'Other',
+}
+
+const discoverLists = ref<DiscoverList[]>([])
+const discoverReports = ref<DiscoverReport[]>([])
+const discoverError = ref('')
+const discoverLoading = ref(false)
+const discoverBusyId = ref<number | null>(null)
+const reportBusyId = ref<number | null>(null)
+// 'community' hides the 37 curated lists, which would otherwise bury the
+// submissions that actually need moderating.
+const discoverScope = ref<'community' | 'reported' | 'all'>('community')
+const pendingDelete = ref<DiscoverList | null>(null)
+
+async function loadDiscover() {
+  discoverLoading.value = true
+  discoverError.value = ''
+  try {
+    const scope = discoverScope.value === 'community' ? '' : `?scope=${discoverScope.value}`
+    const [listsRes, reportsRes] = await Promise.all([
+      apiFetch(`/api/admin/discover${scope}`),
+      apiFetch('/api/admin/discover/reports'),
+    ])
+    if (listsRes.status === 403 || reportsRes.status === 403) {
+      accessDenied.value = true
+      return
+    }
+    if (!listsRes.ok || !reportsRes.ok) {
+      discoverError.value = `Discover list failed (HTTP ${listsRes.status}/${reportsRes.status}).`
+      return
+    }
+    discoverLists.value = ((await listsRes.json()) as { lists: DiscoverList[] }).lists
+    discoverReports.value = ((await reportsRes.json()) as { reports: DiscoverReport[] }).reports
+  } catch (e) {
+    discoverError.value = String(e)
+  } finally {
+    discoverLoading.value = false
+  }
+}
+
+watch(discoverScope, () => void loadDiscover())
+
+async function toggleHidden(list: DiscoverList) {
+  discoverBusyId.value = list.id
+  discoverError.value = ''
+  try {
+    const res = await apiFetch(`/api/admin/discover/${list.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_hidden: !list.is_hidden }),
+    })
+    if (!res.ok) {
+      discoverError.value = `Hide toggle failed (HTTP ${res.status}).`
+      return
+    }
+    const updated = ((await res.json()) as { list: { is_hidden: boolean } }).list
+    list.is_hidden = updated.is_hidden
+  } catch (e) {
+    discoverError.value = String(e)
+  } finally {
+    discoverBusyId.value = null
+  }
+}
+
+async function confirmDeleteList() {
+  const list = pendingDelete.value
+  pendingDelete.value = null
+  if (!list) return
+  discoverBusyId.value = list.id
+  discoverError.value = ''
+  try {
+    const res = await apiFetch(`/api/admin/discover/${list.id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string }
+      discoverError.value = body.message ?? `Delete failed (HTTP ${res.status}).`
+      return
+    }
+    discoverLists.value = discoverLists.value.filter((l) => l.id !== list.id)
+    discoverReports.value = discoverReports.value.filter((r) => r.shared_list_id !== list.id)
+  } catch (e) {
+    discoverError.value = String(e)
+  } finally {
+    discoverBusyId.value = null
+  }
+}
+
+async function resolveReport(report: DiscoverReport) {
+  reportBusyId.value = report.id
+  discoverError.value = ''
+  try {
+    const res = await apiFetch(`/api/admin/discover/reports/${report.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resolved: true }),
+    })
+    if (!res.ok) {
+      discoverError.value = `Resolve failed (HTTP ${res.status}).`
+      return
+    }
+    discoverReports.value = discoverReports.value.filter((r) => r.id !== report.id)
+    const row = discoverLists.value.find((l) => l.id === report.shared_list_id)
+    if (row && row.openReports > 0) row.openReports -= 1
+  } catch (e) {
+    discoverError.value = String(e)
+  } finally {
+    reportBusyId.value = null
+  }
+}
+
 function backToApp() {
   window.location.href = '/'
 }
@@ -339,6 +484,7 @@ onMounted(() => {
   loadStats()
   loadUsers()
   loadBlog()
+  loadDiscover()
 })
 </script>
 
@@ -622,6 +768,133 @@ onMounted(() => {
             </table>
           </div>
         </div>
+
+        <!-- Discover moderation -->
+        <div class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 dark:inset-ring dark:inset-ring-white/5">
+          <div class="flex flex-wrap items-center gap-3 mb-4">
+            <h2 class="text-base font-semibold mr-auto">Discover</h2>
+            <span
+              v-if="discoverReports.length"
+              class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-danger-bg text-danger-fg"
+            >{{ discoverReports.length }} open report{{ discoverReports.length === 1 ? '' : 's' }}</span>
+            <select
+              v-model="discoverScope"
+              class="rounded-lg bg-bg px-2.5 py-1 text-xs text-text ring-1 ring-ring"
+            >
+              <option value="community">Community lists</option>
+              <option value="reported">Reported only</option>
+              <option value="all">All, incl. curated</option>
+            </select>
+            <button
+              type="button"
+              class="rounded-lg bg-bg px-2.5 py-1 text-xs font-medium text-text ring-1 ring-ring hover:bg-surface-hover disabled:opacity-50"
+              :disabled="discoverLoading"
+              @click="loadDiscover()"
+            >
+              {{ discoverLoading ? '…' : 'Refresh' }}
+            </button>
+          </div>
+
+          <div v-if="discoverError" class="mb-3 rounded-lg bg-danger-bg ring-1 ring-danger/60 px-3 py-2 text-sm text-danger-fg">
+            {{ discoverError }}
+          </div>
+
+          <!-- Open reports first: these are what needs a decision. -->
+          <div v-if="discoverReports.length" class="mb-5">
+            <h3 class="text-xs uppercase tracking-wide text-muted font-medium mb-2">Open reports</h3>
+            <ul class="space-y-2">
+              <li
+                v-for="r in discoverReports"
+                :key="r.id"
+                class="rounded-lg bg-bg ring-1 ring-ring px-3 py-2 text-sm"
+              >
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-danger-bg text-danger-fg">
+                    {{ REASON_LABELS[r.reason] ?? r.reason }}
+                  </span>
+                  <span class="font-medium text-text">{{ r.list_name }}</span>
+                  <span v-if="r.is_hidden" class="text-[10px] uppercase tracking-wide text-muted">hidden</span>
+                  <span class="text-xs text-muted">
+                    by {{ r.reporter_email ?? 'a deleted account' }} · {{ fmtDateTime(r.created_at) }}
+                  </span>
+                  <button
+                    type="button"
+                    class="ml-auto rounded-lg bg-bg px-2.5 py-1 text-xs font-medium text-text ring-1 ring-ring hover:bg-surface-hover disabled:opacity-50"
+                    :disabled="reportBusyId === r.id"
+                    @click="resolveReport(r)"
+                  >
+                    {{ reportBusyId === r.id ? '…' : 'Resolve' }}
+                  </button>
+                </div>
+                <p v-if="r.detail" class="mt-1 text-muted">{{ r.detail }}</p>
+              </li>
+            </ul>
+          </div>
+
+          <div class="overflow-x-auto -mx-2">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-xs uppercase tracking-wide text-muted">
+                  <th class="font-medium px-2 py-2">List</th>
+                  <th class="font-medium px-2 py-2">Publisher</th>
+                  <th class="font-medium px-2 py-2">Items</th>
+                  <th class="font-medium px-2 py-2">Likes</th>
+                  <th class="font-medium px-2 py-2">Reports</th>
+                  <th class="font-medium px-2 py-2">Published</th>
+                  <th class="font-medium px-2 py-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="discoverLoading">
+                  <td colspan="7" class="px-2 py-6 text-center text-muted">Loading…</td>
+                </tr>
+                <tr v-else-if="discoverLists.length === 0">
+                  <td colspan="7" class="px-2 py-6 text-center text-muted">No lists match.</td>
+                </tr>
+                <tr v-for="l in discoverLists" :key="l.id" class="border-t border-border/60">
+                  <td class="px-2 py-2">
+                    <span class="font-medium text-text">{{ l.name }}</span>
+                    <span
+                      v-if="l.is_hidden"
+                      class="ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-muted/15 text-muted"
+                    >hidden</span>
+                    <span
+                      v-if="l.owner_is_system"
+                      class="ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-accent/15 text-accent"
+                    >curated</span>
+                    <div class="text-xs text-muted">{{ l.category }} · /{{ l.slug }}</div>
+                  </td>
+                  <td class="px-2 py-2 text-muted">{{ l.owner_email ?? l.owner_name ?? '—' }}</td>
+                  <td class="px-2 py-2 tabular-nums">{{ l.itemCount }}</td>
+                  <td class="px-2 py-2 tabular-nums">{{ l.likeCount }}</td>
+                  <td class="px-2 py-2 tabular-nums">
+                    <span :class="l.openReports ? 'text-danger-fg font-medium' : 'text-muted'">{{ l.openReports }}</span>
+                  </td>
+                  <td class="px-2 py-2 text-muted whitespace-nowrap">{{ fmtDate(l.published_at) }}</td>
+                  <td class="px-2 py-2 text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      class="rounded-lg bg-bg px-2.5 py-1 text-xs font-medium text-text ring-1 ring-ring hover:bg-surface-hover disabled:opacity-50 mr-1"
+                      :disabled="discoverBusyId === l.id"
+                      @click="toggleHidden(l)"
+                    >
+                      {{ discoverBusyId === l.id ? '…' : l.is_hidden ? 'Restore' : 'Hide' }}
+                    </button>
+                    <button
+                      type="button"
+                      :title="l.owner_is_system ? 'Curated lists can only be hidden' : 'Remove from the catalogue'"
+                      class="rounded-lg bg-bg px-2.5 py-1 text-xs font-medium text-danger-fg ring-1 ring-danger/40 hover:bg-danger-bg disabled:opacity-50"
+                      :disabled="discoverBusyId === l.id || l.owner_is_system"
+                      @click="pendingDelete = l"
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </template>
     </div>
 
@@ -748,4 +1021,12 @@ onMounted(() => {
       </div>
     </div>
   </div>
+
+  <ConfirmDialog
+    v-if="pendingDelete"
+    :message="`Remove “${pendingDelete.name}” from the community catalogue? The publisher keeps their own copy. Existing clones are unaffected.`"
+    confirm-label="Remove"
+    @confirm="confirmDeleteList"
+    @cancel="pendingDelete = null"
+  />
 </template>
