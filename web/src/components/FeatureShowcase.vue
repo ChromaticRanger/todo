@@ -18,7 +18,7 @@
  * Only the active slide mounts its <video>, so the page never holds more than
  * one decoding clip however many slides there are.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 interface ShowcaseSlide {
   /** Stable key, and the id stem wiring each tab to its panel. */
@@ -118,16 +118,39 @@ function go(i: number, focusTab = false) {
 }
 
 /**
+ * Every control on the component routes through here rather than go(), because
+ * picking a slide by hand is a statement of intent: the visitor is reading
+ * this one, so stop moving it under them. They can restart the cycle with the
+ * play button if they want it back.
+ */
+function pick(i: number, focusTab = false) {
+  playing.value = false
+  go(i, focusTab)
+  announce()
+}
+
+/**
+ * The live region deliberately stays silent while the carousel is cycling on
+ * its own. A polite announcement every AUTO_MS would turn a decorative
+ * marketing widget into a screen reader talking over the rest of the page.
+ * Only moves the visitor actually asked for are announced.
+ */
+const liveMessage = ref('')
+function announce() {
+  liveMessage.value = `Slide ${active.value + 1} of ${slides.length}: ${current.value.label}`
+}
+
+/**
  * WAI-ARIA tabs with automatic activation: arrows move selection and focus
  * together. Right call here — switching is instant and there is nothing to
  * lose by previewing as you arrow along.
  */
 function onTabKeydown(e: KeyboardEvent) {
   switch (e.key) {
-    case 'ArrowRight': go(active.value + 1, true); break
-    case 'ArrowLeft': go(active.value - 1, true); break
-    case 'Home': go(0, true); break
-    case 'End': go(slides.length - 1, true); break
+    case 'ArrowRight': pick(active.value + 1, true); break
+    case 'ArrowLeft': pick(active.value - 1, true); break
+    case 'Home': pick(0, true); break
+    case 'End': pick(slides.length - 1, true); break
     default: return
   }
   e.preventDefault()
@@ -160,7 +183,59 @@ function onPointerUp(e: PointerEvent) {
   if (!s || s.axis !== 'x') return
   const dx = e.clientX - s.x
   if (Math.abs(dx) < SWIPE_MIN) return
-  go(active.value + (dx < 0 ? 1 : -1))
+  pick(active.value + (dx < 0 ? 1 : -1))
+}
+
+// ── Autoplay ─────────────────────────────────────────────────────────────
+// Long enough to read a caption and take in a screenshot without feeling
+// hurried; short enough that a visitor who stops to look sees more than one.
+const AUTO_MS = 7000
+
+/** The visitor's intent: true until they pick a slide or hit pause. */
+const playing = ref(true)
+// Two independent reasons to hold the cycle, kept as separate flags on
+// purpose: sharing one would let a return from a background tab clear a hover
+// hold that is still in force.
+/** Pointer is over the carousel, or focus is inside it. */
+const pointerHold = ref(false)
+/** The document is in a background tab. */
+const docHidden = ref(false)
+/** Only cycle while the section is actually on screen. */
+const inView = ref(false)
+
+/**
+ * Autoplay runs only when all of these agree. prefers-reduced-motion is one of
+ * them: WCAG 2.2.2 wants moving content stoppable, and a visitor who has asked
+ * the OS for less motion should never have to find the pause button.
+ */
+const cycling = computed(
+  () =>
+    playing.value &&
+    !pointerHold.value &&
+    !docHidden.value &&
+    inView.value &&
+    !reduceMotion.value
+)
+
+let timer: ReturnType<typeof setInterval> | null = null
+function stopTimer() {
+  if (timer !== null) {
+    clearInterval(timer)
+    timer = null
+  }
+}
+watch(cycling, (on) => {
+  stopTimer()
+  if (on) timer = setInterval(() => go(active.value + 1), AUTO_MS)
+}, { immediate: true })
+
+const suspend = () => { pointerHold.value = true }
+const resume = () => { pointerHold.value = false }
+
+// A background tab shouldn't burn through the slides unseen — the visitor
+// would come back to an arbitrary one.
+function onVisibility() {
+  docHidden.value = document.hidden
 }
 
 /**
@@ -183,31 +258,48 @@ onMounted(() => {
   onMq(mq)
   mq.addEventListener('change', onMq)
 
+  document.addEventListener('visibilitychange', onVisibility)
+
   if (root.value && 'IntersectionObserver' in window) {
+    let warmed = false
+    // Kept connected for the component's lifetime: it drives `inView`, which
+    // gates autoplay. The warming side of it still only fires once.
     io = new IntersectionObserver(
       (entries) => {
-        if (entries.some((en) => en.isIntersecting)) {
+        const on = entries.some((en) => en.isIntersecting)
+        inView.value = on
+        if (on && !warmed) {
+          warmed = true
           warmAll()
-          io?.disconnect()
-          io = null
         }
       },
       { rootMargin: '200px' }
     )
     io.observe(root.value)
   } else {
+    inView.value = true
     warmAll()
   }
 })
 
 onBeforeUnmount(() => {
   mq?.removeEventListener('change', onMq)
+  document.removeEventListener('visibilitychange', onVisibility)
   io?.disconnect()
+  stopTimer()
 })
 </script>
 
 <template>
-  <div ref="root">
+  <!-- Hover and focus only suspend the cycle; they never clear `playing`, so
+       the carousel picks up again when the pointer leaves. -->
+  <div
+    ref="root"
+    @mouseenter="suspend"
+    @mouseleave="resume"
+    @focusin="suspend"
+    @focusout="resume"
+  >
     <!-- Tabs — same pill idiom as the in-app ViewSwitcher. -->
     <div
       ref="tabsEl"
@@ -229,7 +321,7 @@ onBeforeUnmount(() => {
         :class="i === active
           ? 'bg-accent text-accent-fg font-medium'
           : 'text-muted hover:text-text hover:bg-surface-hover'"
-        @click="go(i)"
+        @click="pick(i)"
       >
         {{ s.label }}
       </button>
@@ -314,7 +406,7 @@ onBeforeUnmount(() => {
         class="absolute top-1/2 z-10 -translate-y-1/2 rounded-full bg-surface/80 p-2 text-text ring-1 ring-border-strong backdrop-blur-sm opacity-0 transition hover:bg-surface-hover focus-visible:opacity-100 group-hover:opacity-100 touch:opacity-100"
         :class="dir === -1 ? 'left-2 md:left-4' : 'right-2 md:right-4'"
         :aria-label="dir === -1 ? 'Previous screenshot' : 'Next screenshot'"
-        @click="go(active + dir)"
+        @click="pick(active + dir)"
       >
         <svg class="size-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path
@@ -331,21 +423,40 @@ onBeforeUnmount(() => {
       {{ current.caption }}
     </p>
 
-    <!-- Dots duplicate the tabs, so they're decoration only. -->
-    <div class="mt-1 flex justify-center gap-3" aria-hidden="true">
+    <div class="mt-1 flex items-center justify-center gap-3">
+      <!-- Dots duplicate the tabs, so they're decoration only. -->
+      <div class="flex items-center gap-3" aria-hidden="true">
+        <button
+          v-for="(s, i) in slides"
+          :key="s.id"
+          type="button"
+          tabindex="-1"
+          class="size-2.5 rounded-full bg-accent transition-opacity duration-300"
+          :class="i === active ? 'opacity-100' : 'opacity-40 hover:opacity-70'"
+          @click="pick(i)"
+        />
+      </div>
+
+      <!-- The stop mechanism WCAG 2.2.2 asks for, and the only way back to
+           cycling once a visitor has picked a slide by hand. Hidden under
+           reduced motion, where nothing moves and a pause button would just
+           be a puzzle. -->
       <button
-        v-for="(s, i) in slides"
-        :key="s.id"
+        v-if="!reduceMotion"
         type="button"
-        tabindex="-1"
-        class="size-2.5 rounded-full bg-accent transition-opacity duration-300"
-        :class="i === active ? 'opacity-100' : 'opacity-40 hover:opacity-70'"
-        @click="go(i)"
-      />
+        class="ml-1 grid size-6 place-items-center rounded-full text-muted transition-colors hover:text-text hover:bg-surface-hover"
+        :aria-label="playing ? 'Pause the slideshow' : 'Play the slideshow'"
+        @click="playing = !playing"
+      >
+        <svg v-if="playing" viewBox="0 0 16 16" fill="currentColor" class="size-3" aria-hidden="true">
+          <path d="M5 3h2v10H5zM9 3h2v10H9z" />
+        </svg>
+        <svg v-else viewBox="0 0 16 16" fill="currentColor" class="size-3" aria-hidden="true">
+          <path d="M5 3l8 5-8 5z" />
+        </svg>
+      </button>
     </div>
 
-    <p class="sr-only" aria-live="polite">
-      Slide {{ active + 1 }} of {{ slides.length }}: {{ current.label }}
-    </p>
+    <p class="sr-only" aria-live="polite">{{ liveMessage }}</p>
   </div>
 </template>
