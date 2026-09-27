@@ -2,11 +2,11 @@
 
 Outstanding work first captured 2026-05-17; revised 2026-09-27. Phases are suggested ordering, not hard commitments. Re-order freely as priorities shift.
 
-**One genuine blocker remains: Discover moderation (items 15 and 16).** Everything else below is either shipped or optional polish.
+**Nothing is blocking launch.** The last blocker — Discover moderation — shipped 2026-09-27. One item of real work remains (the Welcome Tour, item 7); everything else is optional polish or deliberately deferred.
 
 ## In flight
 
-- **Retiring the GitHub Actions digest cron.** The app now schedules the digest itself (`server/lib/scheduler.ts`); the `retire-digest-cron` branch removes the `schedule:` block from the workflow, leaving it manual-only. Held back until a digest is observed sending from the in-process timer, then merge and drop `DIGEST_SEND_WINDOW_HOURS` back to 5 on DigitalOcean.
+- **Retiring the GitHub Actions digest cron.** The app now schedules the digest itself (`server/lib/scheduler.ts`); PR #79 removes the `schedule:` block from the workflow, leaving it manual-only. Held back until a digest is observed sending from the in-process timer — look for `sent: 1` in a `[scheduler] daily digest:` block — then merge and drop `DIGEST_SEND_WINDOW_HOURS` back to 5 on DigitalOcean.
 
 ## Phase 1 — Pre-launch must-do
 
@@ -29,7 +29,7 @@ Needed to actually acquire and convert users.
 
 After first users arrive.
 
-7. **Welcome Tour updates** — `src/lib/tourSteps.ts` still has the original 11 steps and makes **no mention of shared lists at all**, which is now the product's headline Pro feature. Also worth revisiting: the Bookmarks step predates using a list as a launcher, and nothing points at the browser extension. Onboarding completion correlates strongly with retention.
+7. **Welcome Tour updates** — *the only remaining item of real work.* `src/lib/tourSteps.ts` still has the original 11 steps (Welcome, Lists, Add anything, Filter views, Layout, Categories, Todos, Bookmarks, Notes, Overall Schedule, Theme) and makes **no mention of shared lists, Discover, global search, bookmark import or the browser extension**, which is now the product's headline Pro feature. Also worth revisiting: the Bookmarks step predates using a list as a launcher, and nothing points at the browser extension. Onboarding completion correlates strongly with retention.
 8. ~~**Admin Console**~~ — **Done.** Admin Dashboard shipped with user list, signup counts, and Pro/comp breakdown. Revisit later if MRR or richer analytics are needed.
 13. ~~**More signposting todos in the demo Home/Welcome category**~~ — **Done (landed in the welcome note instead).** The demo's `Home / Welcome` note (now Markdown — see #14) carries a "What to try" bullet list covering right-click event creation, Month/Week toggle, Discover clone, global search, and category drag-reorder. Reads better as a single welcoming note than as multiple checkbox todos. Publish-to-Discover wasn't included because demo users are blocked from publishing.
 
@@ -44,9 +44,9 @@ After first users arrive.
 
    **Action**: this item is essentially done. The privacy policy has been updated to disclose what's protected. Only revisit if a real customer asks for application-level encryption — and then push back, because they probably don't realise the trade-offs.
 
-15. **Admin moderation for Discover lists** — currently any Pro user can publish anything to Discover, with no review queue and no admin-side way to take a submitted list down. Add an `is_hidden BOOLEAN DEFAULT FALSE` column on `shared_lists`; the public browse query filters `is_hidden = FALSE`. Extend the Admin Dashboard with a "Recent Discover submissions" panel — sortable, with hide/restore/delete actions per row. ~1 day. Covers ~90% of real moderation needs at current scale. **Pre-launch must-do**: open the doors with at least the ability to take a published list down. Pair with #16.
+15. ~~**Admin moderation for Discover lists**~~ — **Done 2026-09-27.** Shipped as `is_hidden` (a new column, not a reuse of the vestigial `is_published`) plus hide/restore/remove and a report queue in the Admin Dashboard. Note hiding is the *stronger* takedown: it survives a republish, whereas removing does not stop one. Original plan follows. — currently any Pro user can publish anything to Discover, with no review queue and no admin-side way to take a submitted list down. Add an `is_hidden BOOLEAN DEFAULT FALSE` column on `shared_lists`; the public browse query filters `is_hidden = FALSE`. Extend the Admin Dashboard with a "Recent Discover submissions" panel — sortable, with hide/restore/delete actions per row. ~1 day. Covers ~90% of real moderation needs at current scale. **Pre-launch must-do**: open the doors with at least the ability to take a published list down. Pair with #16.
 
-16. **User-facing report button on Discover** — on each Discover list card and detail view, a small "Report" link that opens a one-field dialog (optional reason). Submission creates a row in a new `shared_list_reports` table: `(id, shared_list_id, reporter_user_id, reason, created_at, resolved_at, resolved_by)`. Admin Dashboard surfaces a "Open reports" badge + panel that lets the admin resolve (hide the list via #15, or dismiss the report). Lets the community do the spotting so the admin only spends time on flagged content. ~half a day on top of #15.
+16. ~~**User-facing report button on Discover**~~ — **Done 2026-09-27.** Preset reason + optional detail, one report per person per list, surfaced in the Admin Dashboard's open-report queue. Original plan follows. — on each Discover list card and detail view, a small "Report" link that opens a one-field dialog (optional reason). Submission creates a row in a new `shared_list_reports` table: `(id, shared_list_id, reporter_user_id, reason, created_at, resolved_at, resolved_by)`. Admin Dashboard surfaces a "Open reports" badge + panel that lets the admin resolve (hide the list via #15, or dismiss the report). Lets the community do the spotting so the admin only spends time on flagged content. ~half a day on top of #15.
 
 ## Phase 5 — Growth
 
@@ -67,13 +67,12 @@ After first users arrive.
 
 What is actually left, shortest path first:
 
-1. **Discover moderation** — admin hide/delete (item 15) + user report button (item 16). The one genuine blocker: the doors shouldn't open without the ability to take a submission down.
-2. — *Launch publicly* —
-3. **Welcome Tour update** (item 7) — it has never mentioned shared lists.
-4. More Discovery content (item 11) — ongoing, cheap.
-5. New item types (item 12) — only the ones users actually ask for.
+1. — *Launch publicly* — nothing is blocking it.
+2. **Welcome Tour update** (item 7) — the only remaining item with a real argument behind it. See below.
+3. More Discovery content (item 11) — ongoing, cheap.
+4. New item types (item 12) — only the ones users actually ask for.
 
-Everything before that is shipped: database backups (DO defaults), account deletion, welcome email, landing page, pricing, help centre, admin dashboard, encryption posture, Markdown notes, blog, browser extension, shared lists.
+Everything else is shipped: database backups (DO defaults), account deletion, welcome email, landing page, pricing, help centre, admin dashboard, encryption posture, Markdown notes, blog, browser extension, shared lists, Discover moderation and likes.
 
 ## Things worth discussing before starting any of them
 
