@@ -25,6 +25,18 @@ const SEND_WINDOW_HOURS = (() => {
   return Number.isInteger(w) && w >= 1 && w <= 12 ? w : 5
 })()
 
+/**
+ * The values actually in force, for the startup log.
+ *
+ * Both overrides fall back silently when the env var is missing or malformed,
+ * so a typo in DIGEST_SEND_WINDOW_HOURS looks exactly like not setting it —
+ * and the symptom (some timezones quietly miss a day) is invisible from the
+ * outside. Printing them at boot makes the config checkable at a glance.
+ */
+export function digestConfig(): { sendHour: number; windowHours: number } {
+  return { sendHour: SEND_HOUR, windowHours: SEND_WINDOW_HOURS }
+}
+
 // ── Timezone helpers (no dependencies — Node 22 ships full ICU) ──────────────
 
 function isValidTz(tz: string): boolean {
