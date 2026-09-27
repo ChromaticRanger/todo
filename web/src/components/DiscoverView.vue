@@ -7,6 +7,8 @@ import { useTodoStore } from '../stores/todoStore'
 import { LIST_CATEGORIES } from '../shared/listCategories'
 import SharedItemTile from './SharedItemTile.vue'
 import ConfirmDialog from './ConfirmDialog.vue'
+import ReportListModal from './ReportListModal.vue'
+import type { ReportReason, SharedListMeta } from '../stores/discoverStore'
 
 const emit = defineEmits<{ 'cloned-to-list': [name: string] }>()
 
@@ -18,6 +20,45 @@ const todoStore = useTodoStore()
 const cloning = ref(false)
 const cloneError = ref('')
 const showUnpublishConfirm = ref(false)
+
+// ---- Likes & reporting ----
+const reportTarget = ref<SharedListMeta | null>(null)
+const reportSubmitting = ref(false)
+const reportedName = ref('')
+
+/**
+ * Curated lists have no one to report, you can't report your own, and a demo
+ * account is swept within 24h so its reports would be from nobody.
+ */
+function canReport(list: SharedListMeta): boolean {
+  return (
+    !list.owner_is_system &&
+    list.owner_user_id !== authStore.user?.id &&
+    !authStore.isDemo
+  )
+}
+
+/** Liking is open to everyone except demo visitors and the list's own owner. */
+function canLike(list: SharedListMeta): boolean {
+  return list.owner_user_id !== authStore.user?.id && !authStore.isDemo
+}
+
+function openReport(list: SharedListMeta) {
+  discover.reportError = null
+  reportTarget.value = list
+}
+
+async function submitReport(reason: ReportReason, detail: string) {
+  const list = reportTarget.value
+  if (!list) return
+  reportSubmitting.value = true
+  const ok = await discover.report(list.slug, reason, detail)
+  reportSubmitting.value = false
+  if (ok) {
+    reportedName.value = list.name
+    reportTarget.value = null
+  }
+}
 
 onMounted(() => {
   void discover.fetchLists()
@@ -42,7 +83,7 @@ watch(publisherInput, (val) => {
 })
 
 watch(
-  [() => discover.filterCategory, () => discover.filterPublisher],
+  [() => discover.filterCategory, () => discover.filterPublisher, () => discover.sort],
   () => {
     if (!discover.selectedSlug) void discover.fetchLists()
   }
@@ -150,6 +191,16 @@ function formatDate(iso: string): string {
               <option v-for="c in LIST_CATEGORIES" :key="c" :value="c">{{ c }}</option>
             </select>
           </label>
+          <label class="shrink-0">
+            <span class="sr-only">Sort</span>
+            <select
+              v-model="discover.sort"
+              class="w-full bg-surface border border-border-strong rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-accent"
+            >
+              <option value="recent">Newest first</option>
+              <option value="likes">Most liked</option>
+            </select>
+          </label>
           <label class="sm:flex-1 min-w-0">
             <span class="sr-only">Publisher</span>
             <input
@@ -250,6 +301,50 @@ function formatDate(iso: string): string {
                 @keydown.enter.stop
                 @keydown.space.stop
               >{{ list.category }}</button>
+
+              <!-- The card is itself a role="button" with enter/space handlers,
+                   so every nested control has to stop propagation or it also
+                   navigates into the list. -->
+              <span class="ml-auto flex items-center gap-1">
+                <button
+                  type="button"
+                  :disabled="!canLike(list)"
+                  :aria-pressed="list.liked_by_me"
+                  :title="canLike(list) ? (list.liked_by_me ? 'Remove your like' : 'Like this list') : 'You can’t like your own list'"
+                  class="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 transition-colors hover:bg-surface-hover disabled:cursor-default disabled:hover:bg-transparent"
+                  :class="list.liked_by_me ? 'text-danger' : 'text-muted hover:text-text'"
+                  @click.stop="discover.toggleLike(list.slug)"
+                  @keydown.enter.stop
+                  @keydown.space.stop
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    class="size-4"
+                    :fill="list.liked_by_me ? 'currentColor' : 'none'"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    aria-hidden="true"
+                  >
+                    <path d="M12 20.25s-7.5-4.6-7.5-9.44A4.31 4.31 0 0 1 12 8.06a4.31 4.31 0 0 1 7.5 2.75c0 4.84-7.5 9.44-7.5 9.44Z" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span class="tabular-nums">{{ list.like_count }}</span>
+                  <span class="sr-only">{{ list.like_count === 1 ? 'like' : 'likes' }}</span>
+                </button>
+                <button
+                  v-if="canReport(list)"
+                  type="button"
+                  title="Report this list"
+                  class="rounded-lg px-1.5 py-1 text-muted transition-colors hover:text-danger hover:bg-surface-hover"
+                  @click.stop="openReport(list)"
+                  @keydown.enter.stop
+                  @keydown.space.stop
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-4" aria-hidden="true">
+                    <path d="M3 3v18M3 4h13l-2 4 2 4H3" stroke-linecap="round" stroke-linejoin="round" />
+                  </svg>
+                  <span class="sr-only">Report</span>
+                </button>
+              </span>
             </div>
           </div>
         </div>
@@ -305,6 +400,36 @@ function formatDate(iso: string): string {
             </div>
             <div class="shrink-0 flex items-center gap-2">
               <button
+                type="button"
+                :disabled="!canLike(discover.detail.list)"
+                :aria-pressed="discover.detail.list.liked_by_me"
+                :title="canLike(discover.detail.list) ? (discover.detail.list.liked_by_me ? 'Remove your like' : 'Like this list') : 'You can’t like your own list'"
+                class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-surface-hover disabled:cursor-default disabled:hover:bg-transparent"
+                :class="discover.detail.list.liked_by_me ? 'text-danger' : 'text-muted hover:text-text'"
+                @click="discover.toggleLike(discover.detail.list.slug)"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  class="size-4"
+                  :fill="discover.detail.list.liked_by_me ? 'currentColor' : 'none'"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  aria-hidden="true"
+                >
+                  <path d="M12 20.25s-7.5-4.6-7.5-9.44A4.31 4.31 0 0 1 12 8.06a4.31 4.31 0 0 1 7.5 2.75c0 4.84-7.5 9.44-7.5 9.44Z" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span class="tabular-nums">{{ discover.detail.list.like_count }}</span>
+                <span class="sr-only">{{ discover.detail.list.like_count === 1 ? 'like' : 'likes' }}</span>
+              </button>
+              <button
+                v-if="canReport(discover.detail.list)"
+                type="button"
+                class="px-3 py-2 rounded-lg text-sm text-muted hover:text-danger hover:bg-surface-hover transition-colors"
+                @click="openReport(discover.detail.list)"
+              >
+                Report
+              </button>
+              <button
                 v-if="isOwner"
                 type="button"
                 class="px-3 py-2 rounded-lg text-sm text-muted hover:text-danger hover:bg-surface-hover transition-colors"
@@ -359,5 +484,30 @@ function formatDate(iso: string): string {
       @confirm="confirmUnpublish"
       @cancel="showUnpublishConfirm = false"
     />
+
+    <ReportListModal
+      v-if="reportTarget"
+      :list-name="reportTarget.name"
+      :submitting="reportSubmitting"
+      :error="discover.reportError"
+      @submit="submitReport"
+      @close="reportTarget = null"
+    />
+
+    <!-- DiscoverView has no toast host and App.vue's toasts are driven by store
+         error refs, so the acknowledgement is an inline banner like cloneError. -->
+    <div
+      v-if="reportedName"
+      role="status"
+      class="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-surface border border-border-strong text-text px-4 py-3 text-sm shadow-xl dark:shadow-none flex items-center gap-3"
+    >
+      <span>Thanks — we’ll take a look at “{{ reportedName }}”.</span>
+      <button
+        type="button"
+        class="text-muted hover:text-text transition-colors"
+        aria-label="Dismiss"
+        @click="reportedName = ''"
+      >✕</button>
+    </div>
   </div>
 </template>

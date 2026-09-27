@@ -133,6 +133,34 @@ export async function addMember(
   return Number(rows[0].id)
 }
 
+/**
+ * A published Discover list owned by `ownerId`, with `itemCount` items.
+ * Cascades away with the owner, so suites only need dropUsers().
+ */
+export async function createSharedList(
+  ownerId: string,
+  slug: string,
+  opts: { itemCount?: number; hidden?: boolean; sortOrder?: number } = {}
+): Promise<number> {
+  const { rows } = await query<{ id: number }>(
+    `INSERT INTO shared_lists
+       (slug, name, description, icon, owner_user_id, original_list_name,
+        category, sort_order, is_hidden)
+     VALUES ($1, $1, '', '', $2, $1, 'Other', $3, $4)
+     RETURNING id`,
+    [slug, ownerId, opts.sortOrder ?? 0, opts.hidden ?? false]
+  )
+  const id = Number(rows[0].id)
+  for (let i = 0; i < (opts.itemCount ?? 1); i++) {
+    await query(
+      `INSERT INTO shared_items (shared_list_id, category, type, title, sort_order)
+       VALUES ($1, 'General', 'todo', $2, $3)`,
+      [id, `Item ${i + 1}`, i]
+    )
+  }
+  return id
+}
+
 /** Deletes the users and lets the cascades clear shares, members and invites. */
 export async function dropUsers(ids: string[]): Promise<void> {
   await query(`DELETE FROM "user" WHERE id = ANY($1)`, [ids])

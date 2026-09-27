@@ -14,9 +14,24 @@ export interface SharedListMeta {
   owner_name: string
   owner_is_system: boolean
   item_count: number
+  like_count: number
+  liked_by_me: boolean
   published_at: string
   updated_at: string
 }
+
+/** Catalogue ordering. `recent` is the historical default. */
+export type DiscoverSort = 'recent' | 'likes'
+
+/** Mirrors REPORT_REASONS in server/routes/shared.ts. */
+export const REPORT_REASONS = [
+  { value: 'spam', label: 'Spam or advertising' },
+  { value: 'offensive', label: 'Offensive or harmful' },
+  { value: 'broken', label: 'Broken or misleading links' },
+  { value: 'other', label: 'Something else' },
+] as const
+
+export type ReportReason = (typeof REPORT_REASONS)[number]['value']
 
 export interface SharedItem {
   id: number
@@ -56,6 +71,10 @@ export const useDiscoverStore = defineStore('discover', () => {
 
   const filterCategory = ref<ListCategory | null>(null)
   const filterPublisher = ref('')
+  const sort = ref<DiscoverSort>('recent')
+  // Reporting keeps its own error: `error` is shared by load/clone/publish and
+  // surfacing a failed report there would blank the catalogue's banner.
+  const reportError = ref<string | null>(null)
 
   // Map of the caller's own listName → publication summary (only their published lists)
   const publications = ref<Record<string, PublicationSummary>>({})
@@ -101,6 +120,7 @@ export const useDiscoverStore = defineStore('discover', () => {
       if (filterCategory.value) params.set('category', filterCategory.value)
       const pub = filterPublisher.value.trim()
       if (pub) params.set('publisher', pub)
+      if (sort.value !== 'recent') params.set('sort', sort.value)
       const qs = params.toString()
       const res = await apiFetch(`/api/shared/lists${qs ? `?${qs}` : ''}`)
       if (!res.ok) {
@@ -211,11 +231,62 @@ export const useDiscoverStore = defineStore('discover', () => {
     }
   }
 
+  /**
+   * Toggle the caller's like. The server returns the settled count and state,
+   * so patch the row in place rather than refetching the whole catalogue —
+   * a refetch under the `likes` sort would also make the card jump.
+   */
+  async function toggleLike(slug: string) {
+    try {
+      const res = await apiFetch(`/api/shared/lists/${encodeURIComponent(slug)}/like`, {
+        method: 'POST',
+      })
+      if (!res.ok) return
+      const data = (await res.json()) as { like_count: number; liked_by_me: boolean }
+      const row = lists.value.find((l) => l.slug === slug)
+      if (row) {
+        row.like_count = data.like_count
+        row.liked_by_me = data.liked_by_me
+      }
+      if (detail.value?.list.slug === slug) {
+        detail.value.list.like_count = data.like_count
+        detail.value.list.liked_by_me = data.liked_by_me
+      }
+    } catch {
+      // A failed like is not worth interrupting the page for.
+    }
+  }
+
+  /** Returns true when the report was accepted. */
+  async function report(slug: string, reason: ReportReason, detailText: string) {
+    reportError.value = null
+    try {
+      const res = await apiFetch(`/api/shared/lists/${encodeURIComponent(slug)}/report`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason, detail: detailText }),
+      })
+      if (!res.ok) {
+        reportError.value =
+          res.status === 403
+            ? 'Reporting is not available on a demo account.'
+            : `Could not send the report (${res.status})`
+        return false
+      }
+      return true
+    } catch (e) {
+      reportError.value = String(e)
+      return false
+    }
+  }
+
   function reset() {
     lists.value = []
     detail.value = null
     selectedSlug.value = null
     error.value = null
+    reportError.value = null
+    sort.value = 'recent'
     publications.value = {}
   }
 
@@ -227,6 +298,8 @@ export const useDiscoverStore = defineStore('discover', () => {
     error,
     filterCategory,
     filterPublisher,
+    sort,
+    reportError,
     publications,
     fetchLists,
     fetchDetail,
@@ -238,6 +311,8 @@ export const useDiscoverStore = defineStore('discover', () => {
     renamePublication,
     clearPublication,
     selectSlug,
+    toggleLike,
+    report,
     reset,
   }
 })
