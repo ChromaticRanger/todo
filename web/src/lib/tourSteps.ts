@@ -10,8 +10,17 @@ export interface TourStep {
   /** For item-example steps — picks the first matching `[data-item-type="..."]`. */
   targetKind?: TourTargetKind
   placement?: TourPlacement
-  /** If set, the step is only included for users on this tier. */
-  requiresTier?: 'pro'
+  /**
+   * Restricts the step to one tier. Omit it and everyone sees the step.
+   *
+   * This exists because the Pro controls are `v-if`'d out of the DOM entirely
+   * for free accounts (see AppHeader.vue), so a free user's version of a Pro
+   * step would have nothing to anchor to and would float in the middle of the
+   * screen. Instead the two tiers get different steps in the same slot: Pro
+   * users get one step per feature, anchored on the real control; free users
+   * get a single honest summary anchored on the Upgrade button.
+   */
+  tier?: 'free' | 'pro'
 }
 
 export const TOUR_STEPS: TourStep[] = [
@@ -63,54 +72,84 @@ export const TOUR_STEPS: TourStep[] = [
     placement: 'left',
   },
   {
-    id: 'category',
-    title: 'Categories',
+    // One step rather than four. Categories, todos, bookmarks and notes used to
+    // get a step each, which meant four consecutive popovers about the same
+    // screen before anyone reached the features they'd actually pay for.
+    id: 'items',
+    title: 'What goes in a list',
     body:
-      "Categories group related items inside a list. Drag the header to " +
-      "reorder, or right-click empty space to add a new one.",
+      "A list holds three kinds of thing, side by side: todos to tick off, " +
+      "bookmarks that fetch their own favicon, and notes for longer text. " +
+      "Categories group them — drag a header to reorder, or right-click " +
+      "empty space to add one.",
     targetKind: 'category',
     placement: 'auto',
   },
-  {
-    id: 'todo',
-    title: 'Todos',
-    body:
-      "Todos are the things to do. Click the checkbox to complete one, " +
-      "click the title to edit, or set a due date to make it appear in " +
-      "Today / Week / Overdue views.",
-    targetKind: 'todo',
-    placement: 'auto',
-  },
-  {
-    id: 'bookmark',
-    title: 'Bookmarks',
-    body:
-      "Bookmarks store links you want to come back to. The favicon is " +
-      "fetched automatically. Click the tile to open the URL in a new tab.",
-    targetKind: 'bookmark',
-    placement: 'auto',
-  },
-  {
-    id: 'note',
-    title: 'Notes',
-    body:
-      "Notes hold longer text — meeting jottings, recipes, anything that " +
-      "isn't a task or a link. They sit alongside todos and bookmarks in " +
-      "the same categories.",
-    targetKind: 'note',
-    placement: 'auto',
-  },
+
+  // ── Pro: one step per feature, anchored on the control itself ─────────────
   {
     id: 'schedule',
     title: 'Overall Schedule',
     body:
-      "Pro accounts get a calendar view that pulls every dated todo from " +
-      "every list into one place — handy for spotting clashes and planning " +
-      "your week.",
+      "Every dated item from every list, on one calendar. Switch between " +
+      "month and week, drag to move something, or right-click a slot to " +
+      "create an event there.",
     target: '[data-tour="schedule"]',
     placement: 'bottom',
-    requiresTier: 'pro',
+    tier: 'pro',
   },
+  {
+    id: 'search',
+    title: 'Search everything',
+    body:
+      "Ctrl/⌘K searches every list at once — titles, descriptions and URLs " +
+      "across todos, bookmarks, notes and events. Pick a result to jump " +
+      "straight to it.",
+    target: '[data-tour="search"]',
+    placement: 'bottom',
+    tier: 'pro',
+  },
+  {
+    id: 'discover',
+    title: 'Discover',
+    body:
+      "Browse lists published by other people — packing lists, reading " +
+      "lists, project checklists — and clone any of them into your own " +
+      "account in a click. Like the ones you find useful so others spot " +
+      "them too.",
+    target: '[data-tour="discover"]',
+    placement: 'bottom',
+    tier: 'pro',
+  },
+  {
+    // Anchored on the tab strip rather than the share icon itself: that icon
+    // is opacity-0 until you hover the tab, so highlighting it would spotlight
+    // something invisible.
+    id: 'sharing',
+    title: 'Share a list',
+    body:
+      "Hover a list tab and you'll find icons to share it or publish it. " +
+      "Sharing invites someone by email to the same live list — they can " +
+      "view it, or add and edit items alongside you.",
+    target: '[data-tour="list-tabs"]',
+    placement: 'bottom',
+    tier: 'pro',
+  },
+
+  // ── Free: the same slot, one honest summary ───────────────────────────────
+  {
+    id: 'pro-preview',
+    title: "What's in Pro",
+    body:
+      "You're on the free plan, which covers 3 lists and 50 items. Pro " +
+      "removes both caps and adds the Overall Schedule calendar, search " +
+      "across every list, Discover for cloning other people's lists, " +
+      "sharing a list with someone, and bookmark import from your browser.",
+    target: '[data-tour="upgrade"]',
+    placement: 'bottom',
+    tier: 'free',
+  },
+
   {
     id: 'theme',
     title: 'Theme',

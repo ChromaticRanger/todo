@@ -199,6 +199,7 @@ function openAdd(type: ItemType) {
       <!-- Discover (Pro only) -->
       <button
         v-if="authStore.tier === 'pro'"
+        data-tour="discover"
         type="button"
         class="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition-colors"
         :class="props.discoverActive
@@ -333,6 +334,7 @@ function openAdd(type: ItemType) {
            billing from the phone header too. -->
       <a
         v-if="showUpgrade"
+        data-tour="upgrade"
         href="/account#billing"
         class="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-accent ring-1 ring-accent/30 hover:bg-accent/10 transition-colors"
         title="Upgrade to Pro"
