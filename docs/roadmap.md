@@ -1,8 +1,8 @@
 # Stash Squirrel — roadmap
 
-Outstanding work first captured 2026-05-17; revised 2026-09-27. Phases are suggested ordering, not hard commitments. Re-order freely as priorities shift.
+Outstanding work first captured 2026-05-17; revised 2026-09-28. Phases are suggested ordering, not hard commitments. Re-order freely as priorities shift.
 
-**Nothing is blocking launch.** The last blocker — Discover moderation — shipped 2026-09-27. One item of real work remains (the Welcome Tour, item 7); everything else is optional polish or deliberately deferred.
+**Nothing is blocking launch, and nothing is outstanding.** The last blocker — Discover moderation — shipped 2026-09-27, and the Welcome Tour followed on 2026-09-28. What's left below is ongoing content work and deliberately deferred ideas, not a backlog.
 
 ## In flight
 
@@ -29,7 +29,11 @@ Needed to actually acquire and convert users.
 
 After first users arrive.
 
-7. **Welcome Tour updates** — *the only remaining item of real work.* `src/lib/tourSteps.ts` still has the original 11 steps (Welcome, Lists, Add anything, Filter views, Layout, Categories, Todos, Bookmarks, Notes, Overall Schedule, Theme) and makes **no mention of shared lists, Discover, global search, bookmark import or the browser extension**, which is now the product's headline Pro feature. Also worth revisiting: the Bookmarks step predates using a list as a launcher, and nothing points at the browser extension. Onboarding completion correlates strongly with retention.
+7. ~~**Welcome Tour updates**~~ — **Done 2026-09-28.** The tour had gone untouched since before shared lists, Discover, global search and bookmark import existed, so of the five things Pro buys it mentioned one — and that one was gated `requiresTier: 'pro'` while its copy read "Pro accounts get a calendar view…", meaning the only upsell in the tour was shown exclusively to people who had already bought.
+
+    The tiers now get different steps in the same slot rather than shared copy, because every Pro control is `v-if`'d out of the DOM for free accounts (`AppHeader.vue`) and a free-tier version of each Pro step would have nothing to anchor to. Free: 9 steps ending in one honest "What's in Pro" signpost anchored on the Upgrade button. Pro: 12 steps, one per feature, each anchored on the real control. `requiresTier` became `tier: 'free' | 'pro'` to allow it. Categories/Todos/Bookmarks/Notes merged into a single step — they were four consecutive popovers about the same screen.
+
+    Bookmark import deliberately has no step of its own: a one-time action would be dead weight on every replay, so it's named in the free summary instead.
 8. ~~**Admin Console**~~ — **Done.** Admin Dashboard shipped with user list, signup counts, and Pro/comp breakdown. Revisit later if MRR or richer analytics are needed.
 13. ~~**More signposting todos in the demo Home/Welcome category**~~ — **Done (landed in the welcome note instead).** The demo's `Home / Welcome` note (now Markdown — see #14) carries a "What to try" bullet list covering right-click event creation, Month/Week toggle, Discover clone, global search, and category drag-reorder. Reads better as a single welcoming note than as multiple checkbox todos. Publish-to-Discover wasn't included because demo users are blocked from publishing.
 
@@ -68,11 +72,10 @@ After first users arrive.
 What is actually left, shortest path first:
 
 1. — *Launch publicly* — nothing is blocking it.
-2. **Welcome Tour update** (item 7) — the only remaining item with a real argument behind it. See below.
-3. More Discovery content (item 11) — ongoing, cheap.
-4. New item types (item 12) — only the ones users actually ask for.
+2. More Discovery content (item 11) — ongoing, cheap.
+3. New item types (item 12) — only the ones users actually ask for.
 
-Everything else is shipped: database backups (DO defaults), account deletion, welcome email, landing page, pricing, help centre, admin dashboard, encryption posture, Markdown notes, blog, browser extension, shared lists, Discover moderation and likes.
+Everything else is shipped: database backups (DO defaults), account deletion, welcome email, landing page, pricing, help centre, admin dashboard, encryption posture, Markdown notes, blog, browser extension, shared lists, Discover moderation and likes, and the welcome tour.
 
 ## Things worth discussing before starting any of them
 
