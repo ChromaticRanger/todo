@@ -9,7 +9,9 @@ import { useAuthStore } from '../stores/authStore'
 const authStore = useAuthStore()
 
 const steps = computed<TourStep[]>(() =>
-  TOUR_STEPS.filter((s) => !s.requiresTier || s.requiresTier === authStore.tier)
+  // A step with no `tier` is for everyone; one with a tier only shows to that
+  // tier. Demo visitors carry tier='pro', so they get the Pro walkthrough.
+  TOUR_STEPS.filter((s) => !s.tier || s.tier === authStore.tier)
 )
 
 const emit = defineEmits<{
