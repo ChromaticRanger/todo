@@ -1,24 +1,27 @@
 name: Daily digest
 
-# Rings the bell every hour: posts to the deployed app's cron endpoint, which
-# does the actual work. The job sends only to opted-in users for whom it's
-# currently ~7am in THEIR timezone — that's why this runs hourly rather than
-# once a day. No code runs here beyond a curl; production credentials stay on
-# the server.
+# MANUAL ONLY. The digest is driven by the app itself — an hourly timer in
+# server/lib/scheduler.ts — and this workflow is kept purely as a way to fire
+# a run by hand (a support request, or testing a copy change) without shelling
+# into the server. It posts to the app's cron endpoint; no code runs here
+# beyond a curl, and production credentials stay on the server.
+#
+# It used to run on an hourly `schedule:`, and that is why it no longer does:
+# over one 18-day sample GitHub delivered 100 of 428 scheduled runs (23%),
+# with gaps reaching 7.8 hours. Because the digest only sends to users whose
+# local time is inside the send window, a dropped run is not a late email —
+# it is no email. Users on UTC+1 were missing 29% of days. Every run reported
+# success, because the failures were runs that never happened. On top of that,
+# GitHub disables scheduled workflows after 60 days of repository inactivity,
+# which is a poor dependency for user-facing mail.
+#
+# Re-running is always safe: the digest_log table dedupes per user per local
+# day, so a manual run alongside the app's own timer cannot double-send.
 #
 # Setup: add a repository secret CRON_SECRET (Settings → Secrets and variables
 # → Actions) matching the CRON_SECRET env var on the DigitalOcean app.
-#
-# Note: GitHub may delay scheduled runs by a few minutes under load, and
-# pauses schedules after 60 days with no repo activity. The digest_log table
-# makes re-runs (scheduled, manual, or catch-up) safe — nobody is emailed twice
-# per local day.
 
 on:
-  schedule:
-    # Hourly, on the hour (UTC). Each run sends to users whose local time is
-    # the send hour (07:00 by default; set DIGEST_SEND_HOUR on the server).
-    - cron: '0 * * * *'
   workflow_dispatch:
     inputs:
       force:
