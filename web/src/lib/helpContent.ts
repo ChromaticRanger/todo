@@ -28,6 +28,7 @@ const SECTION_META: { slug: string; title: string; blurb: string }[] = [
   { slug: 'lists-categories', title: 'Lists & Categories', blurb: 'Organising your items and moving things around.' },
   { slug: 'views-layouts', title: 'Views & Layouts', blurb: 'Time-windowed views, grid vs kanban, drag & drop.' },
   { slug: 'calendar-events', title: 'Calendar & Events', blurb: 'The Overall Schedule and time-blocked events.' },
+  { slug: 'sharing', title: 'Sharing & Collaboration', blurb: 'Inviting someone to a list and working on it together.' },
   { slug: 'search-discover', title: 'Search & Discover', blurb: 'Finding anything fast and sharing lists with the community.' },
   { slug: 'import-extension', title: 'Import & Browser Extension', blurb: 'Bringing bookmarks in from your browser.' },
   { slug: 'account-billing', title: 'Account, Plans & Billing', blurb: 'Your profile, upgrading, invoices and account deletion.' },
