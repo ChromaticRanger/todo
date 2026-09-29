@@ -32,7 +32,8 @@
     "ext:dev": "npm --prefix extension run dev",
     "ext:build": "npm --prefix extension run build",
     "help:shots": "tsx scripts/help-screenshots.ts",
-    "showcase:images": "bash scripts/showcase-images.sh"
+    "showcase:images": "bash scripts/showcase-images.sh",
+    "og:image": "bash scripts/og-image.sh"
   },
   "dependencies": {
     "@better-auth/stripe": "^1.6.5",

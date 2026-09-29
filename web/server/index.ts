@@ -2,6 +2,7 @@ import 'dotenv/config'
 import express from 'express'
 import cors from 'cors'
 import path from 'path'
+import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { toNodeHandler } from 'better-auth/node'
 import { auth } from './auth.js'
@@ -29,6 +30,7 @@ import { demoNoop } from './middleware/demoNoop.js'
 import { initDb } from './db.js'
 import { startRealtime, isRealtimeHealthy } from './lib/realtime.js'
 import { startScheduler } from './lib/scheduler.js'
+import { resolvePageMeta, injectMeta, buildSitemap } from './lib/pageMeta.js'
 
 const app = express()
 
@@ -136,16 +138,38 @@ if (isProd) {
     maxAge: '1y',
   }))
 
+  // Ahead of express.static: the old checked-in public/sitemap.xml is gone,
+  // but this must also win over anything else that lands in dist.
+  app.get('/sitemap.xml', async (_req, res) => {
+    try {
+      res.type('application/xml').send(await buildSitemap())
+    } catch (err) {
+      console.error('[sitemap] failed:', err)
+      res.status(500).end()
+    }
+  })
+
   app.use(express.static(distPath))
 
   app.get('/privacy', (_req, res) => {
     res.sendFile(path.join(distPath, 'privacy.html'))
   })
 
-  app.get(/.*/, (req, res) => {
+  // The SPA shell, read once. Every route below rewrites its <head> before
+  // sending — see lib/pageMeta.ts for why.
+  const shell = readFileSync(path.join(distPath, 'index.html'), 'utf8')
+
+  app.get(/.*/, async (req, res) => {
     if (path.extname(req.path)) return res.status(404).end()
     res.setHeader('Cache-Control', 'no-cache')
-    res.sendFile(path.join(distPath, 'index.html'))
+    try {
+      const meta = await resolvePageMeta(req.path)
+      res.type('html').send(injectMeta(shell, meta))
+    } catch (err) {
+      // Never let metadata break page delivery.
+      console.error('[shell] meta injection failed:', err)
+      res.type('html').send(shell)
+    }
   })
 }
 
