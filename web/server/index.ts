@@ -24,6 +24,7 @@ import cronRouter from './routes/cron.js'
 import eventsRouter from './routes/events.js'
 import { authMiddleware } from './middleware/auth.js'
 import { requirePlan } from './middleware/requirePlan.js'
+import exportRouter from './routes/exportData.js'
 import { rateLimit } from './middleware/rateLimit.js'
 import { rateLimit as rateLimiter, ipKeyGenerator } from 'express-rate-limit'
 import { demoNoop } from './middleware/demoNoop.js'
@@ -102,6 +103,11 @@ app.use('/api/extension', extensionRouter)
 // Account routes (profile read, account delete) also bypass requirePlan so a
 // user mid-signup can still delete their account if they change their mind.
 app.use('/api/account', accountRouter)
+
+// Data export sits beside account for the same reason: getting your data out
+// is a right, not a plan feature, so it must not sit behind requirePlan. A
+// user whose subscription lapsed still gets to take their notes with them.
+app.use('/api/export', exportRouter)
 
 // Admin Dashboard routes — gated by ADMIN_EMAILS, not by tier, so we mount
 // before requirePlan.
