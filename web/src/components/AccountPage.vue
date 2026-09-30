@@ -148,6 +148,37 @@ async function loadProfile() {
   }
 }
 
+const exporting = ref(false)
+const exportError = ref('')
+
+async function exportData() {
+  exporting.value = true
+  exportError.value = ''
+  try {
+    const res = await apiFetch('/api/export')
+    if (!res.ok) {
+      exportError.value = `Export failed (HTTP ${res.status}). Please try again.`
+      return
+    }
+    // Blob + object URL rather than pointing the browser at the endpoint:
+    // keeps it a credentialed fetch and lets a failure surface on the page
+    // instead of as a blank tab.
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `stash-squirrel-export-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    exportError.value = String(e)
+  } finally {
+    exporting.value = false
+  }
+}
+
 function openDelete() {
   confirmText.value = ''
   deleteError.value = ''
@@ -432,6 +463,24 @@ onMounted(async () => {
             {{ pwBusy ? 'Updating…' : 'Update password' }}
           </button>
         </form>
+      </div>
+
+      <div class="rounded-2xl bg-surface ring-1 ring-ring p-6 mb-6 dark:inset-ring dark:inset-ring-white/5">
+        <h2 class="text-base font-semibold mb-1">Your data</h2>
+        <p class="text-sm text-muted mb-4">
+          Download everything in your account as a JSON file — every list, todo,
+          bookmark, note and event, plus your settings. It's yours, and you can
+          take it whenever you like.
+        </p>
+        <button
+          type="button"
+          class="rounded-lg bg-bg px-3 py-2 text-sm font-medium text-text ring-1 ring-ring hover:bg-surface-hover disabled:opacity-50"
+          :disabled="exporting"
+          @click="exportData"
+        >
+          {{ exporting ? 'Preparing…' : 'Download my data' }}
+        </button>
+        <p v-if="exportError" class="mt-3 text-sm text-danger-fg">{{ exportError }}</p>
       </div>
 
       <div class="rounded-2xl bg-surface ring-1 ring-danger/30 p-6 dark:inset-ring dark:inset-ring-white/5">
