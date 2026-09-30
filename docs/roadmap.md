@@ -2,7 +2,7 @@
 
 Outstanding work first captured 2026-05-17; revised 2026-09-28. Phases are suggested ordering, not hard commitments. Re-order freely as priorities shift.
 
-**Nothing is blocking launch, and nothing is outstanding.** The last blocker — Discover moderation — shipped 2026-09-27, and the Welcome Tour followed on 2026-09-28. What's left below is ongoing content work and deliberately deferred ideas, not a backlog.
+**Nothing is blocking launch.** The last blocker — Discover moderation — shipped 2026-09-27, and the Welcome Tour followed on 2026-09-28. What's left below is ongoing content work, one decided-but-unscheduled improvement (item 18), and deliberately deferred ideas — not a backlog.
 
 ## In flight
 
@@ -60,6 +60,34 @@ After first users arrive.
 ## Phase 6 — Existing-feature polish
 
 14. ~~**Markdown support for notes**~~ — **Done.** `markdown-it` with `html:false` renders note bodies in display mode; the edit textarea in `TodoForm.vue` stays as raw source. Headings, lists, bold/italic, links (auto-targeted `_blank` with `noopener nofollow`), inline code, code blocks, blockquotes. Styles live in `style.css` under `@layer components .note-markdown` keyed to existing theme tokens (works in light + dark). Same rendering applies to imported notes on Discover via `SharedItemTile.vue`. Demo welcome note rewritten in Markdown to showcase the feature on first run.
+
+## Phase 8 — Post-launch, decided but not scheduled
+
+18. **Todos and notes from the browser extension.** The extension saves bookmarks only —
+    `extension/src/lib/api.ts` hardcodes `type: 'bookmark'`. That quietly contradicts the
+    product's own pitch: the landing page sells "todos, bookmarks and notes together in one
+    list" and the extension does a third of it. Someone who installs it after reading that
+    finds a bookmark saver.
+
+    Small: the popup already collects title, list, category and description, which is
+    everything a todo or note needs. The work is a type selector, making the URL field
+    conditional, and passing the type through.
+
+    One decision it forces — a URL stored on a todo is invisible in the app
+    (`TodoItem.vue:155` only opens `todo.url` for bookmarks), so a todo captured from a page
+    should put the page URL in its description, unless the app learns to surface URLs on
+    todos.
+
+    **Events deliberately excluded**: they need date, time and duration in a 360px popup,
+    they are Pro-only so the popup would need plan awareness and an upsell path, and you
+    rarely create a calendar event *because of* the page you are on.
+
+    Deferred past launch on purpose. Every extension change needs a Chrome Web Store review
+    of several days that cannot be hotfixed, and having one in flight during launch week is
+    the wrong risk. Worth its own blog post and announcement when it ships — it is a real
+    feature, not a patch.
+
+---
 
 ## Phase 7 — Speculative features
 
